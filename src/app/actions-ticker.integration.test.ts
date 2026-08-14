@@ -36,7 +36,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { createPost, resolveTickers } from "./actions";
+import { createPost, getTickerPath, resolveTickers } from "./actions";
 
 async function post(content: string, parentId?: number) {
   const key = PrivateKey.fromRandom();
@@ -69,16 +69,19 @@ describe("claiming", () => {
     expect(await resolveTickers(["NEWIDEA"])).toEqual({ NEWIDEA: { root_id: id, post_id: id } });
   });
 
-  it("points at the THREAD, not just the post", async () => {
-    // A ticker claimed in a reply resolves to the thread it belongs to — that is
-    // what makes the link navigate somewhere readable.
+  it("points at ITS OWN thread, not the one it was named in", async () => {
+    // Superseded an earlier assertion that a ticker inherits the enclosing
+    // thread's root. That was the bug: clicking the new ticker re-opened its
+    // parent instead of the new idea. A claim re-roots its post, so the ticker
+    // names a thread of its own.
     await post("root of the thread");
     const rootId = lastId();
     await post("and I name it $Branch", rootId);
     const replyId = lastId();
 
     const resolved = await resolveTickers(["BRANCH"]);
-    expect(resolved.BRANCH).toEqual({ root_id: rootId, post_id: replyId });
+    expect(resolved.BRANCH).toEqual({ root_id: replyId, post_id: replyId });
+    expect(resolved.BRANCH.root_id).not.toBe(rootId);
   });
 
   it("registers several distinct tickers from one post", async () => {
@@ -151,5 +154,68 @@ describe("a failed post claims nothing", () => {
 
     expect((await createPost(fd)).ok).toBe(false);
     expect(await resolveTickers(["SQUATTED"])).toEqual({});
+  });
+});
+
+describe("a new ticker starts its OWN thread", () => {
+  it("does NOT point back at the thread it was named in", async () => {
+    // The bug this pins: a ticker claimed inside a thread used to inherit that
+    // thread's root, so clicking it re-opened the parent instead of opening the
+    // new idea.
+    await post("root of $Alpha");
+    const alphaRoot = lastId();
+    await post("branching into $Bravo here", alphaRoot);
+    const bravoPost = lastId();
+
+    const r = await resolveTickers(["ALPHA", "BRAVO"]);
+    expect(r.ALPHA.root_id).toBe(alphaRoot);
+    expect(r.BRAVO.root_id).toBe(bravoPost); // its own thread, not alphaRoot
+    expect(r.BRAVO.root_id).not.toBe(alphaRoot);
+  });
+
+  it("re-roots the claiming post so thread reads separate the two", async () => {
+    await post("root of $Charlie");
+    const charlieRoot = lastId();
+    await post("and now $Delta", charlieRoot);
+    const deltaPost = lastId();
+
+    const row = db.prepare("SELECT parent_id, root_id FROM posts WHERE id = ?").get(deltaPost) as {
+      parent_id: number;
+      root_id: number;
+    };
+    // Lineage preserved, thread membership moved.
+    expect(row.parent_id).toBe(charlieRoot);
+    expect(row.root_id).toBe(deltaPost);
+  });
+
+  it("does NOT re-root when the ticker was already claimed", async () => {
+    await post("first claim of $Echo");
+    await post("plain root");
+    const otherRoot = lastId();
+    await post("citing $Echo again", otherRoot);
+    const citingPost = lastId();
+
+    const row = db.prepare("SELECT root_id FROM posts WHERE id = ?").get(citingPost) as {
+      root_id: number;
+    };
+    expect(row.root_id).toBe(otherRoot); // a citation is not a claim
+  });
+});
+
+describe("the tree is the right way round", () => {
+  it("builds $OpenBook/$Parent/$Child, not the reverse", async () => {
+    // The reported bug was `$branch/$test` — the tree upside down — because the
+    // parent was inferred without requiring it to have been claimed EARLIER.
+    await post("starting $Foxtrot");
+    const foxRoot = lastId();
+    await post("inside it, $Golf", foxRoot);
+
+    expect(await getTickerPath("GOLF")).toEqual(["OPENBOOK", "FOXTROT", "GOLF"]);
+    expect(await getTickerPath("FOXTROT")).toEqual(["OPENBOOK", "FOXTROT"]);
+  });
+
+  it("parents a top-level claim to the root token", async () => {
+    await post("just $Hotel on its own");
+    expect(await getTickerPath("HOTEL")).toEqual(["OPENBOOK", "HOTEL"]);
   });
 });

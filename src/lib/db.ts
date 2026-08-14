@@ -134,28 +134,83 @@ export function applyTickerMigration(database: Db): void {
   addColumnIfMissing(database, "tickers", "parent_symbol", "parent_symbol TEXT");
   database.exec("CREATE INDEX IF NOT EXISTS idx_tickers_parent ON tickers(parent_symbol)");
 
-  // Backfill: tickers claimed BEFORE this column existed have no parent, so their
-  // path renders as a bare `$Test` instead of `$OpenBook/$Test`. Mirrors the
-  // runtime rule in `registerTickers` — the parent is the ticker of the thread the
-  // claim was made in, or the root when the claim was made in the main feed.
-  //
-  // Run unconditionally rather than only when the column was just added: a crash
-  // between the ADD COLUMN and this UPDATE would otherwise leave rows permanently
-  // parentless, and the `IS NULL` predicate makes a repeat run a no-op. Same
-  // reasoning as the threading backfill above.
-  database.exec(`
-    UPDATE tickers
-    SET parent_symbol = COALESCE(
-      (SELECT t2.symbol FROM tickers t2
-        WHERE t2.root_id = tickers.root_id AND t2.symbol <> tickers.symbol
-        ORDER BY t2.post_id ASC LIMIT 1),
-      'OPENBOOK'
-    )
-    WHERE parent_symbol IS NULL AND symbol <> 'OPENBOOK'
-  `);
   // Reverse lookup: "which tickers does this thread carry?" — used to show a
   // thread's own symbol, and by any future allocation that keys on the thread.
   database.exec("CREATE INDEX IF NOT EXISTS idx_tickers_root_id ON tickers(root_id)");
+
+  repairTickerParents(database);
+}
+
+/**
+ * Recompute every ticker's parent from the POST PARENT CHAIN.
+ *
+ * ⚠ DERIVED FROM `parent_id`, NEVER FROM `root_id`. An earlier version of this
+ * inferred the parent as "another ticker sharing my root_id" and produced
+ * `$branch/$test` — the tree upside down — because it never required the parent
+ * to have been claimed EARLIER. It is also unusable after a ticker claim re-roots
+ * its post (see `registerTickers`), since each ticker then owns its own root and
+ * no two tickers share one. The post parent chain survives both: it records who
+ * was replying to whom, which is exactly what "branches from" means.
+ *
+ * Recomputed in full on every boot rather than patched. It is a handful of rows,
+ * it is deterministic, and it self-heals a bad parent written by any earlier
+ * version instead of leaving it stuck (a `WHERE parent_symbol IS NULL` guard
+ * cannot repair a row that is wrong rather than missing).
+ */
+function repairTickerParents(database: Db): void {
+  try {
+    const tickers = database
+      .prepare("SELECT symbol, post_id, parent_symbol FROM tickers")
+      .all() as { symbol: string; post_id: number; parent_symbol: string | null }[];
+    if (!tickers.length) return;
+
+    const bySymbol = new Map(tickers.map((t) => [t.symbol, t]));
+    const claimedAtPost = new Map<number, string>();
+    for (const t of tickers) {
+      // If two tickers were claimed by the same post, the earlier symbol wins as
+      // that post's identity — arbitrary but stable.
+      const existing = claimedAtPost.get(t.post_id);
+      if (!existing || t.symbol < existing) claimedAtPost.set(t.post_id, t.symbol);
+    }
+
+    const parentOf = database.prepare("SELECT parent_id FROM posts WHERE id = ?");
+    const update = database.prepare("UPDATE tickers SET parent_symbol = ? WHERE symbol = ?");
+
+    const run = database.transaction(() => {
+      for (const t of tickers) {
+        if (t.symbol === "OPENBOOK") {
+          if (t.parent_symbol !== null) update.run(null, t.symbol);
+          continue;
+        }
+        // Walk up the reply chain until a post that claimed a different ticker.
+        let cursor: number | null =
+          (parentOf.get(t.post_id) as { parent_id: number | null } | undefined)?.parent_id ?? null;
+        let found: string | null = null;
+        for (let depth = 0; depth < 64 && cursor !== null; depth++) {
+          const owner = claimedAtPost.get(cursor);
+          if (owner && owner !== t.symbol) {
+            found = owner;
+            break;
+          }
+          cursor =
+            (parentOf.get(cursor) as { parent_id: number | null } | undefined)?.parent_id ?? null;
+        }
+        // Nothing above it carries a ticker → it hangs off the root token, so the
+        // whole board stays one tree.
+        const parent = found ?? "OPENBOOK";
+        if (bySymbol.has(parent) || parent === "OPENBOOK") {
+          if (t.parent_symbol !== parent) update.run(parent, t.symbol);
+        }
+      }
+    });
+    run();
+  } catch (err) {
+    // Never block startup over a display-only tree. A wrong path is cosmetic; a
+    // server that will not boot is not.
+    console.error(
+      `OpenBook: ticker parent repair skipped — ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
 }
 
 export function applyLinkPreviewMigration(database: Db): void {

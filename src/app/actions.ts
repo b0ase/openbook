@@ -186,7 +186,7 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   // the on-chain log and the unfurl: those are caches of work that can be redone,
   // whereas a claim decides who owns a name and a race would hand it to whoever
   // the event loop happened to favour.
-  registerTickers(postId, rootId ?? postId, content.trim(), pubkey);
+  registerTickers(postId, rootId ?? postId, parentId, content.trim(), pubkey);
 
   // Fire-and-forget: log on-chain, update tx_id if successful
   const trimmedContent = content.trim();
@@ -238,29 +238,54 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
 function registerTickers(
   postId: number,
   rootId: number,
+  parentPostId: number | null,
   content: string,
   pubkey: FormDataEntryValue | null
 ): void {
   try {
     const symbols = distinctTickers(content);
     if (!symbols.length) return;
-    // The parent is the ticker of the thread this claim was made IN — that is what
-    // makes the tree real. A claim made in the main feed (a thread carrying no
-    // ticker) parents to the root, so every token hangs off $OPENBOOK and the whole
-    // board is one tree rather than a scattering of unrelated names.
+
+    // The parent ticker is the one owned by the thread this claim was made IN,
+    // resolved BEFORE any re-rooting below — afterwards this post owns its own
+    // root and the enclosing thread is no longer reachable from it.
     const enclosing = db
       .prepare("SELECT symbol FROM tickers WHERE root_id = ? ORDER BY post_id ASC LIMIT 1")
       .get(rootId) as { symbol: string } | undefined;
     const parent = enclosing?.symbol ?? ROOT_TICKER;
 
-    const stmt = db.prepare(
+    const insert = db.prepare(
       "INSERT OR IGNORE INTO tickers (symbol, post_id, root_id, pubkey, parent_symbol) VALUES (?, ?, ?, ?, ?)"
     );
     const pk = typeof pubkey === "string" ? pubkey : null;
+
     const claimAll = db.transaction(() => {
+      // ⚠ A NEW TICKER STARTS A NEW THREAD. Naming an unclaimed ticker inside an
+      // existing thread must not point back at the thread it was named in — the
+      // ticker is a NEW idea branching off, and clicking it has to open that idea
+      // rather than re-open its parent. So the claiming post is RE-ROOTED to
+      // itself and becomes the root of a child thread.
+      //
+      // `parent_id` is untouched, so the reply lineage still records where the
+      // branch came from; `root_id` answers the different question of which
+      // thread — which token — a post belongs to. That split is what keeps
+      // `WHERE root_id = ?` one indexed scan on the allocation path.
+      let claimedAny = false;
       for (const symbol of symbols) {
-        // The root token is its own top — it must never parent to itself.
-        stmt.run(symbol, postId, rootId, pk, symbol === ROOT_TICKER ? null : parent);
+        const res = insert.run(
+          symbol,
+          postId,
+          postId, // this post roots its own thread — see the note above
+          pk,
+          symbol === ROOT_TICKER ? null : parent
+        );
+        if (res.changes > 0) claimedAny = true;
+      }
+      // Only re-root when a claim actually landed AND this post is a reply. A
+      // ticker that was already claimed changes nothing, and a root post is
+      // already its own root.
+      if (claimedAny && parentPostId !== null) {
+        db.prepare("UPDATE posts SET root_id = id WHERE id = ?").run(postId);
       }
     });
     claimAll();
@@ -279,7 +304,7 @@ function registerTickers(
 export async function resolveTickers(
   symbols: string[]
 ): Promise<Record<string, { root_id: number; post_id: number }>> {
-  const wanted = symbols.filter(isValidTicker);
+  const wanted = symbols.map(canonicalTicker).filter(isValidTicker);
   if (!wanted.length) return {};
   const placeholders = wanted.map(() => "?").join(",");
   const rows = db
@@ -290,13 +315,6 @@ export async function resolveTickers(
   );
 }
 
-/**
- * The ticker a thread carries, if any — so a thread can be headlined by the name
- * it was claimed under rather than the generic word "Thread".
- *
- * A thread can in principle hold several (one post naming two symbols), so this
- * returns the FIRST claimed, which is the one that founded it.
- */
 /**
  * A ticker's ancestry, root-first: `["OPENBOOK","TEST"]` for `$OpenBook/$Test`.
  *
