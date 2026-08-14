@@ -109,6 +109,16 @@ second proxy in front and the app stops seeing real client IPs, so the caps stop
 users. Those caps are what stand between the server wallet and a drain, so a rewrite is a
 security regression dressed as a cosmetic improvement. See CLAUDE.md "Deployment Notes".
 
+**Two rules, and they must stay two.** The bare root needs its own entry: `/:path*` is
+zero-or-more so it reads as though it covers `/`, and it does not — the symptom is deep links
+forwarding correctly while the homepage keeps serving a stale ISR page from the edge.
+
+**No comments inside a redirect object.** `vercel.json` is schema-validated *before* the
+build is provisioned, and a redirect accepts only `source`, `destination`, `permanent`,
+`statusCode`, `has`, `missing`. A `"//"` comment key — which is harmless in `package.json` —
+fails the whole deployment with **no build logs at all**, because it never reaches the build
+step. If a Vercel deploy shows `ERROR` with an empty log, suspect the config, not the code.
+
 **Why 307 and not 308.** The destination is an auto-generated Railway subdomain that gets
 replaced the moment a real domain is attached. A permanent redirect is cached by browsers
 indefinitely, so a 308 would pin every visitor to a URL intended to be thrown away, with no
