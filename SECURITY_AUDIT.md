@@ -289,3 +289,25 @@ LAG (UI showed 7,071 vs 7,172 on chain/DB) caused by a stale read before the las
 free-boot payout row landed; the row exists (payout id 6347) and the figure
 self-corrects on the next poll — NOT an open bug, same poll-staleness class as the
 balance display fixed above.
+
+## CSP `script-src` — `'unsafe-eval'` is DEVELOPMENT-ONLY (2026-08-14)
+
+**Not a weakening of the production control.** The production `script-src` is unchanged
+(`'self' 'unsafe-inline'`); `'unsafe-eval'` is appended only when
+`process.env.NODE_ENV !== "production"`, i.e. under `next dev`.
+
+**Why it was needed.** The CSP was applied unconditionally, so development got the production
+`script-src`. React's dev build requires `eval()`, so **every dev page load threw** and pinned
+the Next.js error overlay open. That is a security-relevant problem in itself: a permanent,
+always-ignored overlay masks real errors during development, which is exactly when they are
+cheapest to catch.
+
+**Why `'unsafe-eval'` in production would matter.** It lets injected strings become executable
+code, turning a content-injection bug into script execution — on a page that holds a BSV
+private key in localStorage. That is why the split is enforced by a test rather than a
+comment: `src/lib/next-config.test.ts` asserts `'unsafe-eval'` can never appear in a
+production header, and that the rest of the production CSP (`default-src`, the deliberate
+`img-src https:` relaxation for link previews, the ARC/WoC `connect-src` hosts,
+`frame-ancestors 'none'`) is intact.
+
+**DO NOT** make the flag unconditional, and do not gate it on anything other than `NODE_ENV`.

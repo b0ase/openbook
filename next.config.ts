@@ -1,5 +1,25 @@
 import type { NextConfig } from "next";
 
+/**
+ * ⚠ DEVELOPMENT ONLY — never true under `next build` / `next start`.
+ *
+ * React's DEVELOPMENT build requires `eval()` (callstack reconstruction across
+ * environments, Fast Refresh). With the production `script-src` applied in dev,
+ * every page load threw
+ *
+ *   "eval() is not supported in this environment. If this page was served with
+ *    a Content-Security-Policy header, make sure that 'unsafe-eval' is included."
+ *
+ * and raised the Next.js error overlay. That is not cosmetic: a permanent
+ * overlay MASKS REAL ERRORS while developing — anything genuinely broken hides
+ * behind an error that is always there and always ignored.
+ *
+ * The production CSP is unchanged, byte for byte. `next-config.test.ts` asserts
+ * that `'unsafe-eval'` can never appear in a production header, so this cannot
+ * silently leak into a deploy.
+ */
+const IS_DEV = process.env.NODE_ENV !== "production";
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
   turbopack: {
@@ -34,7 +54,10 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",
+              // Production: 'self' 'unsafe-inline' — unchanged. `'unsafe-eval'`
+              // is appended in DEV ONLY; see IS_DEV above for why, and
+              // next-config.test.ts for the guard that keeps it out of prod.
+              `script-src 'self' 'unsafe-inline'${IS_DEV ? " 'unsafe-eval'" : ""}`,
               "style-src 'self' 'unsafe-inline'",
               // ⚠ DELIBERATE RELAXATION, ADDED WITH LINK PREVIEWS. `https:` admits
               // images from any origin, which is what an og:image is by nature —
