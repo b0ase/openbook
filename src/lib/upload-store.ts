@@ -64,10 +64,15 @@ export async function storeUpload(
   const hash = createHash("sha256").update(bytes).digest("hex");
   const name = `${hash}.${ext}`;
   const dir = uploadDir();
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(/* turbopackIgnore: true */ dir, { recursive: true });
   const target = pathFor(name);
   try {
-    statSync(target);
+    // ⚠ `turbopackIgnore` on every fs call in this file, and it is unambiguously
+    // correct here: these paths point at a MOUNTED VOLUME outside the project
+    // (`/data/uploads`), named by a runtime content hash. Nothing here is a
+    // bundle-able asset, so without the hint Turbopack traces the whole project
+    // into the server output for a path it could never have resolved anyway.
+    statSync(/* turbopackIgnore: true */ target);
     return { name, deduped: true };
   } catch {
     // Not stored yet — fall through and write it.
@@ -76,15 +81,15 @@ export async function storeUpload(
   // crashed write leaves an obviously-orphaned file rather than something that
   // looks like a real upload.
   const tmp = `${target}.${process.pid}.part`;
-  await writeFile(tmp, bytes);
-  await rename(tmp, target);
+  await writeFile(/* turbopackIgnore: true */ tmp, bytes);
+  await rename(/* turbopackIgnore: true */ tmp, target);
   return { name, deduped: false };
 }
 
 /** Stored bytes, or null if nothing is stored under that name. */
 export async function readUpload(name: string): Promise<Buffer | null> {
   try {
-    return await readFile(pathFor(name));
+    return await readFile(/* turbopackIgnore: true */ pathFor(name));
   } catch {
     return null;
   }

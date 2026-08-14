@@ -70,10 +70,23 @@ const MD_ROUTES: Array<{ pattern: RegExp; files: string[] }> = [
 
 /**
  * Read an MD file from the project root. Returns empty string if not found.
+ *
+ * ⚠ `turbopackIgnore` is REQUIRED here, and it is safe. Without it Turbopack
+ * sees a dynamic `process.cwd()` path, gives up on static analysis, and traces
+ * the ENTIRE project into the server bundle — every source file and the whole
+ * public folder — which bloats the image and eventually trips size limits.
+ *
+ * It is safe because the deployment does not rely on tracing to deliver these
+ * files: the Dockerfile does `COPY . .`, so the repo (and therefore CLAUDE.md,
+ * TOKENS.md and the rest) is present at `/app` and `process.cwd()` resolves to
+ * it at runtime. If the Dockerfile ever stops copying the repo wholesale, this
+ * read starts silently returning "" and the agent loses its context WITHOUT an
+ * error — `loadMd` swallows the failure by design. Check here first if the agent
+ * ever starts answering as if it has never seen the project.
  */
 function loadMd(filename: string): string {
   try {
-    return readFileSync(join(process.cwd(), filename), "utf-8");
+    return readFileSync(join(/* turbopackIgnore: true */ process.cwd(), filename), "utf-8");
   } catch {
     return "";
   }
