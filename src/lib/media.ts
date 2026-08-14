@@ -54,3 +54,26 @@ export function firstMedia(urls: string[]): { url: string; kind: MediaKind } | n
   }
   return null;
 }
+
+/**
+ * Whether a URL is media THIS platform hosts, rather than a stranger's file.
+ *
+ * ⚠ THE DISTINCTION IS LOAD-BEARING FOR `preload`. `MediaEmbed` uses
+ * `preload="none"` so that scrolling a feed does not fire a burst of requests at
+ * other people's servers and run up their bandwidth bill. That reasoning does
+ * not apply to our own uploads: we are the host, we already serve the bytes, and
+ * the cost of a first frame is ours to spend. Without the split, our own videos
+ * render as a black rectangle with no poster frame — technically an embed, but
+ * indistinguishable from nothing.
+ *
+ * Matched on the stored-upload SHAPE (`/m/<64 hex>.<ext>`), not on the current
+ * origin: `window` is unavailable during server rendering, and a host comparison
+ * that resolved differently on each side would be a hydration mismatch.
+ */
+export function isSelfHostedMedia(rawUrl: string): boolean {
+  try {
+    return /^\/m\/[a-f0-9]{64}\.[a-z0-9]+$/i.test(new URL(rawUrl).pathname);
+  } catch {
+    return false;
+  }
+}

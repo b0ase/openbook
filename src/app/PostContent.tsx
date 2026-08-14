@@ -34,6 +34,12 @@ export function PostContent({
   tickerSupply?: Record<string, number>;
 }) {
   const media = firstMedia(findUrls(post.content).map((u) => u.url));
+  // ⚠ When the post is NOTHING BUT the media link, the URL is not content — it
+  // is plumbing, and printing a 100-character hash above the player is the
+  // reason an uploaded video reads as "not surfaced". The text is suppressed
+  // only in that exact case: any caption around the link is still the author's
+  // writing and must survive.
+  const isBareMedia = media !== null && post.content.trim() === media.url;
 
   return (
     <>
@@ -83,9 +89,15 @@ export function PostContent({
           </a>
         )}
       </div>
-      <p className="mt-1.5 text-[15px] leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">
-        <PostText content={post.content} onOpenTicker={onOpenTicker} tickerSupply={tickerSupply} />
-      </p>
+      {!isBareMedia && (
+        <p className="mt-1.5 text-[15px] leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">
+          <PostText
+            content={post.content}
+            onOpenTicker={onOpenTicker}
+            tickerSupply={tickerSupply}
+          />
+        </p>
+      )}
       {/* A direct media link is SHOWN; anything else falls through to the unfurl
           card. Both never render for the same post — a media file is not HTML, so
           the unfurl records `not_html` and the card declines to draw. */}

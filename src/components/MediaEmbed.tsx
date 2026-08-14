@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { MediaKind } from "@/lib/media";
+import { isSelfHostedMedia, type MediaKind } from "@/lib/media";
 
 /**
  * Inline player for a post that links directly at an image, video or audio file.
@@ -21,6 +21,9 @@ import type { MediaKind } from "@/lib/media";
  */
 export function MediaEmbed({ url, kind }: { url: string; kind: MediaKind }) {
   const [failed, setFailed] = useState(false);
+  // Our own uploads may fetch a first frame — see `isSelfHostedMedia`. A
+  // stranger's file still gets `preload="none"`.
+  const preload = isSelfHostedMedia(url) ? "metadata" : "none";
 
   if (failed) {
     return (
@@ -67,7 +70,7 @@ export function MediaEmbed({ url, kind }: { url: string; kind: MediaKind }) {
       <video
         src={url}
         controls
-        preload="none"
+        preload={preload}
         playsInline
         onError={() => setFailed(true)}
         className="mt-2 max-h-[420px] w-full rounded-lg border border-zinc-800 bg-black"
@@ -80,7 +83,7 @@ export function MediaEmbed({ url, kind }: { url: string; kind: MediaKind }) {
     <audio
       src={url}
       controls
-      preload="none"
+      preload={preload}
       onError={() => setFailed(true)}
       className="mt-2 w-full"
     />
