@@ -38,7 +38,17 @@ export interface ContributorWeight {
 export interface WeightSource {
   /** Stable identifier, for logging and diagnostics. */
   readonly name: string;
-  calculate(db: import("better-sqlite3").Database, launchTs: string): ContributorWeight[];
+  /**
+   * May be sync or async. The default post-activity source is synchronous (local
+   * SQLite), but any source backed by a network — a token indexer, a Postgres
+   * register, an on-chain balance read — is necessarily async, and an interface
+   * that cannot express that cannot accept the sources this seam exists for.
+   * Returning a plain array is still valid; `calculateWeights` awaits either.
+   */
+  calculate(
+    db: import("better-sqlite3").Database,
+    launchTs: string
+  ): ContributorWeight[] | Promise<ContributorWeight[]>;
   /** Drop any memoized state. Called on source swap and by tests. */
   clearCache(): void;
 }
@@ -174,12 +184,16 @@ export function resetWeightSource(): void {
 /**
  * Calculate contribution weights for all active contributors.
  * Delegates to the registered `WeightSource` — post activity by default.
+ *
+ * Async because a source may be: the default one resolves without ever yielding,
+ * so this costs a microtask on the existing path and nothing else. Both callers
+ * (`executeBoot`, `GET /api/boot-shares`) were already async.
  */
-export function calculateWeights(
+export async function calculateWeights(
   db: import("better-sqlite3").Database,
   launchTs: string = FAIRNESS_CONFIG.launchTs
-): ContributorWeight[] {
-  return _activeSource.calculate(db, launchTs);
+): Promise<ContributorWeight[]> {
+  return await _activeSource.calculate(db, launchTs);
 }
 
 /** Clear the active source's cache. Exported for tests only. */

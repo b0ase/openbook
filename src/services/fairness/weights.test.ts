@@ -88,19 +88,19 @@ describe("calculateWeights", () => {
     db = createTestDb();
   });
 
-  it("returns empty array for empty DB", () => {
-    expect(calculateWeights(db, PAST)).toHaveLength(0);
+  it("returns empty array for empty DB", async () => {
+    expect(await calculateWeights(db, PAST)).toHaveLength(0);
   });
 
-  it("returns empty for unsigned posts only", () => {
+  it("returns empty for unsigned posts only", async () => {
     db.prepare("INSERT INTO posts (content, author_name) VALUES (?, ?)").run("unsigned", "anon");
-    expect(calculateWeights(db, PAST)).toHaveLength(0);
+    expect(await calculateWeights(db, PAST)).toHaveLength(0);
   });
 
-  it("returns one contributor for a single signed post", () => {
+  it("returns one contributor for a single signed post", async () => {
     const key = makeKey();
     addPost(db, key.pubkey);
-    const weights = calculateWeights(db, PAST);
+    const weights = await calculateWeights(db, PAST);
 
     expect(weights).toHaveLength(1);
     expect(weights[0].pubkey).toBe(key.pubkey);
@@ -110,11 +110,11 @@ describe("calculateWeights", () => {
     expect(weights[0].totalBoots).toBe(0);
   });
 
-  it("aggregates multiple posts from same contributor", () => {
+  it("aggregates multiple posts from same contributor", async () => {
     const key = makeKey();
     addPost(db, key.pubkey, 0);
     addPost(db, key.pubkey, 5);
-    const weights = calculateWeights(db, PAST);
+    const weights = await calculateWeights(db, PAST);
 
     expect(weights).toHaveLength(1);
     expect(weights[0].postCount).toBe(2);
@@ -122,12 +122,12 @@ describe("calculateWeights", () => {
     expect(weights[0].weight).toBeGreaterThan(1);
   });
 
-  it("separates different contributors", () => {
+  it("separates different contributors", async () => {
     const keyA = makeKey();
     const keyB = makeKey();
     addPost(db, keyA.pubkey, 0);
     addPost(db, keyB.pubkey, 0);
-    const weights = calculateWeights(db, PAST);
+    const weights = await calculateWeights(db, PAST);
 
     expect(weights).toHaveLength(2);
     const pubkeys = weights.map((w) => w.pubkey);
@@ -135,14 +135,14 @@ describe("calculateWeights", () => {
     expect(pubkeys).toContain(keyB.pubkey);
   });
 
-  it("boots increase weight via engagement multiplier", () => {
+  it("boots increase weight via engagement multiplier", async () => {
     const key = makeKey();
     addPost(db, key.pubkey, 0);
     const postId = (
       db.prepare("SELECT id FROM posts ORDER BY id DESC LIMIT 1").get() as { id: number }
     ).id;
 
-    const weightBefore = calculateWeights(db, PAST)[0].weight;
+    const weightBefore = (await calculateWeights(db, PAST))[0].weight;
 
     // Add 3 boots and clear cache to force recalc
     addBoot(db, postId);
@@ -150,18 +150,18 @@ describe("calculateWeights", () => {
     addBoot(db, postId);
     _clearWeightsCache();
 
-    const weightsAfter = calculateWeights(db, PAST);
+    const weightsAfter = await calculateWeights(db, PAST);
     expect(weightsAfter[0].weight).toBeGreaterThan(weightBefore);
     expect(weightsAfter[0].totalBoots).toBe(3);
   });
 
-  it("older posts have lower weight (time decay)", () => {
+  it("older posts have lower weight (time decay)", async () => {
     const key = makeKey();
     // One recent post and one 30-day old post from the same contributor
     addPost(db, key.pubkey, 0); // recent — high decay
     addPost(db, key.pubkey, 30 * 24 * 60); // 30 days — half-life decay
 
-    const weights = calculateWeights(db, PAST);
+    const weights = await calculateWeights(db, PAST);
     expect(weights).toHaveLength(1);
     // With half-life = 30 days, recent post contributes ~1.0, old post ~0.5
     // Total should be ~1.5, proving the old post decayed (not equal to recent)
@@ -169,14 +169,14 @@ describe("calculateWeights", () => {
     expect(weights[0].weight).toBeLessThan(2); // would be 2 if no decay
   });
 
-  it("does not produce NaN from SQLite datetime format", () => {
+  it("does not produce NaN from SQLite datetime format", async () => {
     const key = makeKey();
     // Insert with SQLite's native datetime() which produces space-separated format
     db.prepare(
       "INSERT INTO posts (content, author_name, pubkey, created_at) VALUES (?, ?, ?, datetime('now'))"
     ).run("test", "anon", key.pubkey);
 
-    const weights = calculateWeights(db, PAST);
+    const weights = await calculateWeights(db, PAST);
     expect(weights).toHaveLength(1);
     expect(weights[0].weight).toBeGreaterThan(0);
     expect(Number.isNaN(weights[0].weight)).toBe(false);
@@ -184,33 +184,33 @@ describe("calculateWeights", () => {
 
   // --- launchTs pool cutoff: pre-launch history is excluded from the 80% pool ---
 
-  it("excludes pre-launch posts from the pool (launchTs cutoff)", () => {
+  it("excludes pre-launch posts from the pool (launchTs cutoff)", async () => {
     const key = makeKey();
     addPostAt(db, key.pubkey, "2026-05-01 12:00:00"); // before the cutoff
     // A post entirely before launch contributes zero pool weight.
-    expect(calculateWeights(db, "2026-06-01 00:00:00")).toHaveLength(0);
+    expect(await calculateWeights(db, "2026-06-01 00:00:00")).toHaveLength(0);
   });
 
-  it("includes post-launch posts (launchTs cutoff)", () => {
+  it("includes post-launch posts (launchTs cutoff)", async () => {
     const key = makeKey();
     addPostAt(db, key.pubkey, "2026-07-01 12:00:00"); // after the cutoff
-    const weights = calculateWeights(db, "2026-06-01 00:00:00");
+    const weights = await calculateWeights(db, "2026-06-01 00:00:00");
     expect(weights).toHaveLength(1);
     expect(weights[0].pubkey).toBe(key.pubkey);
     expect(weights[0].weight).toBeGreaterThan(0);
   });
 
-  it("a post exactly at the launch instant counts as post-launch (>=)", () => {
+  it("a post exactly at the launch instant counts as post-launch (>=)", async () => {
     const key = makeKey();
     addPostAt(db, key.pubkey, "2026-06-01 00:00:00"); // exactly at the cutoff
-    expect(calculateWeights(db, "2026-06-01 00:00:00")).toHaveLength(1);
+    expect(await calculateWeights(db, "2026-06-01 00:00:00")).toHaveLength(1);
   });
 
-  it("a pubkey posting before AND after launch only counts its post-launch post", () => {
+  it("a pubkey posting before AND after launch only counts its post-launch post", async () => {
     const key = makeKey();
     addPostAt(db, key.pubkey, "2026-05-01 12:00:00"); // pre-launch — excluded
     addPostAt(db, key.pubkey, "2026-07-01 12:00:00"); // post-launch — counted
-    const weights = calculateWeights(db, "2026-06-01 00:00:00");
+    const weights = await calculateWeights(db, "2026-06-01 00:00:00");
     expect(weights).toHaveLength(1);
     expect(weights[0].pubkey).toBe(key.pubkey);
     expect(weights[0].postCount).toBe(1); // only the post-launch post
@@ -255,12 +255,12 @@ describe("WeightSource registry", () => {
     };
   }
 
-  it("defaults to the post-activity source", () => {
+  it("defaults to the post-activity source", async () => {
     expect(getWeightSource()).toBe(postActivityWeightSource);
     expect(getWeightSource().name).toBe("post-activity");
   });
 
-  it("routes calculateWeights through the registered source", () => {
+  it("routes calculateWeights through the registered source", async () => {
     const key = makeKey();
     const stubRow: ContributorWeight = {
       pubkey: key.pubkey,
@@ -275,30 +275,30 @@ describe("WeightSource registry", () => {
     // The DB has a real post, but the stub source ignores it entirely —
     // proving the weight vector comes from the source, not the posts table.
     addPost(db, makeKey().pubkey);
-    expect(calculateWeights(db, PAST)).toEqual([stubRow]);
+    expect(await calculateWeights(db, PAST)).toEqual([stubRow]);
   });
 
-  it("passes launchTs through to the source", () => {
+  it("passes launchTs through to the source", async () => {
     const stub = makeStubSource();
     setWeightSource(stub.source);
 
-    calculateWeights(db, "2026-06-01 00:00:00");
+    await calculateWeights(db, "2026-06-01 00:00:00");
     expect(stub.calls).toEqual(["2026-06-01 00:00:00"]);
   });
 
-  it("defaults launchTs to the configured launch epoch", () => {
+  it("defaults launchTs to the configured launch epoch", async () => {
     const stub = makeStubSource();
     setWeightSource(stub.source);
 
-    calculateWeights(db);
+    await calculateWeights(db);
     expect(stub.calls).toEqual([FAIRNESS_CONFIG.launchTs]);
   });
 
-  it("clears both sources' caches on swap, so no stale cross-strategy weights", () => {
+  it("clears both sources' caches on swap, so no stale cross-strategy weights", async () => {
     const key = makeKey();
     addPost(db, key.pubkey);
     // Warm the default source's cache.
-    expect(calculateWeights(db, PAST)).toHaveLength(1);
+    expect(await calculateWeights(db, PAST)).toHaveLength(1);
 
     const stub = makeStubSource();
     setWeightSource(stub.source);
@@ -307,10 +307,10 @@ describe("WeightSource registry", () => {
 
     // Swapping back must not serve the stub's results, nor the default's stale cache.
     resetWeightSource();
-    expect(calculateWeights(db, PAST)).toHaveLength(1);
+    expect(await calculateWeights(db, PAST)).toHaveLength(1);
   });
 
-  it("is a no-op when setting the already-active source", () => {
+  it("is a no-op when setting the already-active source", async () => {
     const stub = makeStubSource();
     setWeightSource(stub.source);
     expect(stub.clearedCount()).toBe(1);
@@ -319,7 +319,7 @@ describe("WeightSource registry", () => {
     expect(stub.clearedCount()).toBe(1); // unchanged — no redundant clear
   });
 
-  it("_clearWeightsCache targets the active source", () => {
+  it("_clearWeightsCache targets the active source", async () => {
     const stub = makeStubSource();
     setWeightSource(stub.source);
     const before = stub.clearedCount();
@@ -328,13 +328,52 @@ describe("WeightSource registry", () => {
     expect(stub.clearedCount()).toBe(before + 1);
   });
 
-  it("resetWeightSource restores post-activity behaviour", () => {
+  it("accepts an ASYNC source — the reason this seam is awaited", async () => {
+    // The default source is synchronous (local SQLite), but every source this
+    // interface exists to accept — a token indexer, a Postgres register, an
+    // on-chain balance read — is necessarily async.
+    //
+    // ⚠ WHAT ACTUALLY GUARDS THIS IS THE TYPE, NOT AN ASSERTION BELOW. Verified by
+    // mutation: dropping the `await` inside `calculateWeights` does NOT fail this
+    // test, because returning a Promise from an `async` function auto-flattens —
+    // that `await` is a readability nicety, not load-bearing. Narrowing
+    // `WeightSource.calculate` back to `ContributorWeight[]` DOES fail, at tsc:
+    //   "Type '() => Promise<ContributorWeight[]>' is not assignable to
+    //    type '(db, launchTs) => ContributorWeight[]'".
+    // So this case exists to make that type contract load-bearing (an async source
+    // must remain assignable) and to prove the rows survive the round trip. If you
+    // are tempted to re-narrow the union, tsc will stop you here.
+    const key = makeKey();
+    const row: ContributorWeight = {
+      pubkey: key.pubkey,
+      address: key.address,
+      weight: 250,
+      postCount: 0,
+      totalBoots: 0,
+    };
+    const asyncSource: WeightSource = {
+      name: "async-stub",
+      calculate: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return [row];
+      },
+      clearCache: () => {},
+    };
+    setWeightSource(asyncSource);
+
+    const weights = await calculateWeights(db, PAST);
+    expect(Array.isArray(weights)).toBe(true);
+    expect(weights).toEqual([row]);
+    expect(weights[0].weight).toBe(250);
+  });
+
+  it("resetWeightSource restores post-activity behaviour", async () => {
     setWeightSource(makeStubSource().source);
     resetWeightSource();
 
     const key = makeKey();
     addPost(db, key.pubkey);
-    const weights = calculateWeights(db, PAST);
+    const weights = await calculateWeights(db, PAST);
     expect(getWeightSource()).toBe(postActivityWeightSource);
     expect(weights).toHaveLength(1);
     expect(weights[0].pubkey).toBe(key.pubkey);

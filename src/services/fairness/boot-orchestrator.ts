@@ -100,7 +100,7 @@ export async function executeBoot(
   }
 
   // 4. Calculate contribution weights
-  const weights = calculateWeights(db);
+  const weights = await calculateWeights(db);
 
   // 5. Derive boosted post creator's address from their pubkey
   let creatorAddress: string;

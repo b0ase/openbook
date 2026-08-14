@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
   // The actual sats that will flow (free boots still cost the server the dynamic price)
   const effectivePrice = isFree ? basePrice : price;
 
-  const weights = calculateWeights(db);
+  const weights = await calculateWeights(db);
 
   // Derive the boosted post creator's BSV address
   let creatorAddress: string;
