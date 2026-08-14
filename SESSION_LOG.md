@@ -2,6 +2,63 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-14 (rename + domain) — $OpenBooks, the run-up hidden, openbooks.space live
+
+- **Category: brand, feed rule, infrastructure.** Continues the session below.
+- **THE DOMAIN IS LIVE.** `openbooks.space` and `www.openbooks.space` both serve the app with
+  valid Let's Encrypt certs. **The blocker was ONE DNS RECORD AT THE WRONG NAME:** Railway wants
+  the verify TXT at `_railway-verify`, not at the apex. Its dashboard shows the value in a panel
+  whose "Name" column is ambiguous, so it sat at *"Waiting for DNS update"* indefinitely while
+  `dig` returned a byte-correct TXT — right value, wrong name. Railway's edge then answered with
+  its `*.up.railway.app` WILDCARD cert and a 404, because it routes by Host header and won't
+  claim a hostname it never verified.
+- **I was wrong about the cause, in a way worth recording.** My leading theory was that the apex
+  can't hold a literal CNAME (Vercel serves an ALIAS flattened to an A record) and Railway's
+  verifier couldn't find one. It fit every symptom and was false — the apex verified within a
+  minute once the TXT moved. Had the owner only taken my `www` workaround, they'd have come away
+  believing apex-on-Railway was impossible. **`railway domain <host>` prints the exact
+  type/name/value triples; one command would have replaced the whole afternoon.** Also ruled out
+  with evidence: CAA was already correct. Both recorded in DEPLOY.md as do-not-re-investigate.
+- **Every social card was pointing at `http://localhost:8080`.** No `metadataBase`, so Next built
+  absolute URLs from the REQUEST HOST — which behind Railway's proxy is the internal port. Pages
+  rendered, tags validated, nothing errored, and every shared link fell back to a cached card.
+  `lib/site-origin.ts` is now the one resolver (SITE_ORIGIN → RAILWAY_PUBLIC_DOMAIN → localhost);
+  uploads use it too, since an upload URL is anchored on-chain and can't be corrected after.
+- **The app icon still said "OC" — OpenCook.** Favicon, PWA install icon and iOS home-screen icon
+  were all the inherited mark, so anyone who installed the app got the project it forked FROM on
+  their home screen. Two marks now, deliberately: `$` + book for the home screen, `$` alone for
+  the 16px tab, because the combined mark measured out at ~7px of glyph and rendered as mush. I
+  checked at 32px rather than assuming it would scale.
+- **The OpenCook run-up is hidden, not deleted.** Posts up to the fork were written by other
+  people on another board; showing them inline presented them as things said here. They stay in
+  the database — a fork you can't check is just a claim — behind a toggle on the fork marker,
+  with an "OpenCook" chip that outranks every other badge a row could show. Three non-obvious
+  consequences: every integration test was posting into the hidden range (fresh DB starts at id
+  1); the marker had no row to attach to on an empty board, so the toggle vanished; and the
+  toggle first routed through the SCROLL loader, which is gated on a landing that never happens
+  on an empty feed — it flipped its label and loaded nothing, silently.
+- **$OpenBook → $OpenBooks and Bootboard → Boost Board.** The root-ticker rename was cheap
+  because a ticker URL resolves by its LAST segment only, so every shared link keeps working and
+  only the breadcrumb changes. No migration script: `repairTickerParents` already recomputes
+  parents on every boot, so pointing its fallback at ROOT_TICKER re-parents idempotently.
+  Verified `$OPENBOOKS` was unclaimed in production FIRST — first-claim-wins means taking it
+  would otherwise have stolen a real user's name. Boot → Boost is UI copy only; the schema, API
+  routes and identifiers still say `boot` (a migration with real risk and no user benefit).
+- **A latent bug the owner's instinct found:** `/$openbooks` was hard-coded to mean "show the
+  feed", which is safe only while nobody has claimed it. Once minted, `handleOpenTicker` pushes
+  that URL for a thread the URL handler would refuse to reopen — you'd see a thread, copy its
+  address, and send someone the feed. Special case removed: `/` is the feed, `/$whatever` is a
+  thread, and an unclaimed name falls through to the feed anyway.
+- **⚠ Owner correction carried into the docs:** CLAUDE.md still said "A platform that builds
+  itself" / "Agentic Fairness". That file is read into the USER-FACING agent on every question,
+  so a stale line there isn't an internal inaccuracy — the agent says it to people. Fixed with a
+  warning attached explaining why it matters.
+- **Tests: 393 unit + 131 integration.** Three tests were pinning things they weren't about (a
+  literal root name, the root's name as a case-folding fixture, and the agent's old "there is no
+  token" claim) and now test the shape rather than the wording.
+- **Still open:** `$OpenBooks` is NOT minted; `ANTHROPIC_API_KEY`/`GROQ_API_KEY` absent in
+  production; the remaining docs still say OpenBook in places.
+
 ## 2026-08-14 (ownership made visible) — a post is a token; wallet, uploads, DNS
 
 - **Category: feature + direction correction.** Four asks: percentages weren't showing against
