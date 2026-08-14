@@ -35,11 +35,11 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "OpenCook — A platform that builds itself",
+  title: "OpenBook — A platform that builds itself",
   description:
     "Post ideas, boot the best ones to the top, earn value through contribution. Agentic fairness on BSV.",
   openGraph: {
-    title: "OpenCook — A platform that builds itself",
+    title: "OpenBook — A platform that builds itself",
     description:
       "Post ideas, boot the best ones to the top, earn value through contribution. Agentic fairness on BSV.",
   },
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "OpenCook",
+    title: "OpenBook",
   },
   other: {
     "mobile-web-app-capable": "yes",

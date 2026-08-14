@@ -1,6 +1,6 @@
 {
-  "name": "OpenCook",
-  "short_name": "OpenCook",
+  "name": "OpenBook",
+  "short_name": "OpenBook",
   "description": "A platform that builds itself. Agentic Fairness on BSV.",
   "start_url": "/",
   "display": "standalone",

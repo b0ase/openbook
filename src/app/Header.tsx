@@ -17,7 +17,7 @@ export function Header({
 }: HeaderProps) {
   return (
     <header className="shrink-0 border-b border-zinc-800 bg-black">
-      {/* pt = safe-area-inset-top + 12px so the "OpenCook" logo and anon chip
+      {/* pt = safe-area-inset-top + 12px so the "OpenBook" logo and anon chip
           aren't covered by the PWA status bar (where statusBarStyle is
           black-translucent — content extends behind the status bar). In
           Safari the env value resolves to 0 so the original 12px is
@@ -25,7 +25,7 @@ export function Header({
       <div className="relative mx-auto flex max-w-2xl items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight leading-none">
-            <span className="text-amber-400">Open</span>Cook
+            <span className="text-amber-400">Open</span>Book
           </h1>
           <button
             type="button"
