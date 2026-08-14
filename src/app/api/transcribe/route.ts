@@ -122,14 +122,14 @@ export async function POST(req: Request) {
 
     if (!res.ok) {
       const err = await res.text();
-      console.error("OpenCook: Groq transcription error", res.status, err);
+      console.error("OpenBook: Groq transcription error", res.status, err);
       return Response.json({ error: "Couldn't transcribe that — try again." }, { status: 502 });
     }
 
     const data = (await res.json()) as { text?: string };
     return Response.json({ text: (data.text ?? "").trim() });
   } catch (e) {
-    console.error("OpenCook: transcription request failed", e);
+    console.error("OpenBook: transcription request failed", e);
     return Response.json({ error: "Couldn't reach transcription right now." }, { status: 502 });
   } finally {
     _activeRequests--;

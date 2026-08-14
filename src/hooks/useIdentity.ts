@@ -106,7 +106,7 @@ export function useIdentity(): UseIdentityReturn {
           }
         }
       } catch (err) {
-        console.error("OpenCook: failed to load identity (BSV SDK may not have loaded)", err);
+        console.error("OpenBook: failed to load identity (BSV SDK may not have loaded)", err);
         if (!cancelled) setState({ kind: "loading" });
       }
     }

@@ -81,7 +81,7 @@ export function InAppPromptModal(): React.JSX.Element | null {
             <p className="text-sm leading-relaxed text-zinc-300">
               This works best in your real browser. You&apos;re viewing inside an in-app browser —
               it can&apos;t keep your account between sessions, and any earnings won&apos;t travel
-              with you. Open OpenCook in your browser and your account is yours to keep.
+              with you. Open OpenBook in your browser and your account is yours to keep.
             </p>
             <InAppBrowserCta os={os} />
             <button

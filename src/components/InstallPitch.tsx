@@ -161,7 +161,7 @@ export function InstallPitch({ variant }: InstallPitchProps): React.JSX.Element 
       <button
         type="button"
         onClick={isOneTap ? handleInstallTap : openSheetFromBookmark}
-        aria-label={isOneTap ? "Install OpenCook" : "Open install prompt"}
+        aria-label={isOneTap ? "Install OpenBook" : "Open install prompt"}
         className="w-full text-left px-3 py-2.5 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-3 hover:bg-amber-500/15 active:bg-amber-500/20 transition-colors"
       >
         <svg
@@ -230,7 +230,7 @@ export function InstallPitch({ variant }: InstallPitchProps): React.JSX.Element 
           className={`w-full max-w-lg rounded-t-2xl border-t border-x border-amber-400/20 shadow-[0_-8px_40px_rgba(0,0,0,0.7)] overflow-hidden pointer-events-auto bg-zinc-900 ${sheetAnimation}`}
           role="dialog"
           aria-modal="true"
-          aria-label="Install OpenCook"
+          aria-label="Install OpenBook"
         >
           {/* Gold top stripe — same as SignInModal / FundAddress */}
           <div className="h-px bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
@@ -263,7 +263,7 @@ export function InstallPitch({ variant }: InstallPitchProps): React.JSX.Element 
 
           {/* Body */}
           <div className="px-6 pb-6 pt-1 text-center">
-            {/* 64px OpenCook app icon — the actual home-screen preview, with
+            {/* 64px OpenBook app icon — the actual home-screen preview, with
                 amber glow shadow so it reads as "premium" without shouting.
                 Static (the prior floatBob animation was removed per project
                 owner — implied false affordance on a non-interactive element).
@@ -417,7 +417,7 @@ function renderSheetCTA(
   if (installType === "open-in-safari") {
     return (
       <p className="text-[13px] text-zinc-400 leading-relaxed">
-        Open OpenCook in <span className="text-zinc-200">Safari</span> to add it to your home
+        Open OpenBook in <span className="text-zinc-200">Safari</span> to add it to your home
         screen.
       </p>
     );
@@ -528,7 +528,7 @@ function renderStripContent(
     return (
       <div className="space-y-1">
         <span className="text-[12px] text-amber-400 font-medium block">Get the APP experience</span>
-        <span className="text-[11px] text-zinc-400 block">Open OpenCook in Safari to install.</span>
+        <span className="text-[11px] text-zinc-400 block">Open OpenBook in Safari to install.</span>
       </div>
     );
   }

@@ -63,7 +63,7 @@ export async function logPostOnChain(postData: PostData): Promise<string | null>
     const retry = await attempt();
     return retry.status === "success" ? retry.txid : null;
   } catch (e) {
-    console.error("OpenCook: on-chain logging failed", e);
+    console.error("OpenBook: on-chain logging failed", e);
     return null;
   }
 }

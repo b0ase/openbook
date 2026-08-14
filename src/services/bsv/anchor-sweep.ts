@@ -88,7 +88,7 @@ export async function sweepOrphans(db: DB = defaultDb): Promise<void> {
       break;
     }
   } catch (e) {
-    console.error("OpenCook: orphan anchor sweep failed", e);
+    console.error("OpenBook: orphan anchor sweep failed", e);
   } finally {
     sweepInFlight = false;
   }

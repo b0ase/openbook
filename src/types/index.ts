@@ -1,4 +1,4 @@
-// Shared domain types for OpenCook.
+// Shared domain types for OpenBook.
 
 export interface Identity {
   name: string;

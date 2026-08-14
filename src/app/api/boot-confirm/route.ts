@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
     if (broadcast.status !== "success" && !bcAlreadyKnown) {
       if (bcCode === "258" || bcDesc.includes("conflict") || bcDesc.includes("missing inputs")) {
         console.warn(
-          `[OpenCook] boot-confirm: TX_CONFLICT for ${txid.slice(0, 16)}… — ${bcDesc || bcCode}`
+          `[OpenBook] boot-confirm: TX_CONFLICT for ${txid.slice(0, 16)}… — ${bcDesc || bcCode}`
         );
         return NextResponse.json(
           {
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
         );
       }
       console.warn(
-        `[OpenCook] boot-confirm: ARC_UNAVAILABLE for ${txid.slice(0, 16)}… — ${bcDesc || bcCode}`
+        `[OpenBook] boot-confirm: ARC_UNAVAILABLE for ${txid.slice(0, 16)}… — ${bcDesc || bcCode}`
       );
       return NextResponse.json(
         { error: "Could not confirm broadcast, please retry", code: "ARC_UNAVAILABLE" },
@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
       return { sats, address };
     });
   } catch (err) {
-    console.error("[OpenCook] boot-confirm: rawTx parse failed", err);
+    console.error("[OpenBook] boot-confirm: rawTx parse failed", err);
     return NextResponse.json({ error: "Could not parse rawTx" }, { status: 400 });
   }
 
@@ -251,7 +251,7 @@ export async function POST(req: NextRequest) {
   const platformPaid = onChainByAddr.get(platformAddress) ?? 0;
   if (platformPaid < minPlatform) {
     console.warn(
-      `[OpenCook] boot-confirm: platform underpaid — got ${platformPaid}, min ${minPlatform}, txid ${txid.slice(0, 16)}…`
+      `[OpenBook] boot-confirm: platform underpaid — got ${platformPaid}, min ${minPlatform}, txid ${txid.slice(0, 16)}…`
     );
     return NextResponse.json(
       { error: "Transaction does not meet the minimum boot payout", code: "BOOT_UNDERPAID" },

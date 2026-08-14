@@ -48,7 +48,7 @@ export function parseDenylist(raw: string | undefined): Pattern[] {
           return { kind: "regex", re: new RegExp(line.slice(1, -1), "i") };
         } catch {
           // Malformed regex → skip it rather than brick the whole filter.
-          console.warn(`[OpenCook] CONTENT_DENYLIST: skipping malformed regex pattern: ${line}`);
+          console.warn(`[OpenBook] CONTENT_DENYLIST: skipping malformed regex pattern: ${line}`);
           return null;
         }
       }
@@ -74,7 +74,7 @@ export function screenContent(
     if (!_warnedUnconfigured) {
       _warnedUnconfigured = true;
       console.warn(
-        "[OpenCook] CONTENT_DENYLIST is not configured — the pre-publish content screen is a no-op. Set it before public launch (illegal-floor patterns)."
+        "[OpenBook] CONTENT_DENYLIST is not configured — the pre-publish content screen is a no-op. Set it before public launch (illegal-floor patterns)."
       );
     }
     return { ok: true };

@@ -32,7 +32,7 @@ export function AgentChat({ highlight }: { highlight?: boolean }) {
       setMessages([
         {
           from: "agent",
-          text: "Hey! I can help you understand OpenCook, brainstorm ideas for posts, or answer any questions. What are you curious about?",
+          text: "Hey! I can help you understand OpenBook, brainstorm ideas for posts, or answer any questions. What are you curious about?",
         },
       ]);
     }
@@ -221,7 +221,7 @@ export function AgentChat({ highlight }: { highlight?: boolean }) {
           className="w-full sm:max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden pointer-events-auto animate-[slideUp_0.3s_ease-out_backwards] shadow-2xl flex flex-col max-h-[calc(100svh-env(safe-area-inset-top)-0.5rem)] sm:max-h-[calc(100dvh-2rem)]"
           role="dialog"
           aria-modal="true"
-          aria-label="OpenCook Agent"
+          aria-label="OpenBook Agent"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
@@ -235,7 +235,7 @@ export function AgentChat({ highlight }: { highlight?: boolean }) {
           <div className="shrink-0 flex items-center justify-between px-4 pt-3 pb-3 border-b border-zinc-800">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
-              <span className="text-sm font-medium text-zinc-300">OpenCook Agent</span>
+              <span className="text-sm font-medium text-zinc-300">OpenBook Agent</span>
             </div>
             <button
               type="button"
@@ -362,7 +362,7 @@ export function AgentChat({ highlight }: { highlight?: boolean }) {
               sit on the iOS home indicator on bottom-sheet display. */}
           <div className="shrink-0 border-t border-zinc-800/50 px-4 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] sm:pb-3.5 flex flex-col items-center gap-1.5">
             <a
-              href="https://github.com/Challotes/opencook"
+              href="https://github.com/b0ase/openbook"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-xs text-zinc-300 hover:text-zinc-100 transition-colors"

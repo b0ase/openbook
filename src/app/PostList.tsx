@@ -293,7 +293,7 @@ export function PostList({
                     {i === 0 && (mode === "origin" || (mode === "live" && !liveHasMore)) && (
                       <span
                         className="text-[9px] font-semibold uppercase tracking-wider text-amber-400/80 border border-amber-500/30 rounded px-1 py-px shrink-0"
-                        title="The first post — where OpenCook began"
+                        title="The first post — where OpenBook began"
                       >
                         Genesis
                       </span>

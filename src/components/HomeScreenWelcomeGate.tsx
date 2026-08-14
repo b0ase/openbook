@@ -83,7 +83,7 @@ export function HomeScreenWelcomeGate({
           result.error === "unsupported_version"
             ? "This recovery file is from an older version and can't be restored. Use a file you saved recently."
             : result.error === "parse_failed"
-              ? "Could not read this file — make sure it's an OpenCook recovery file (.html or .json)"
+              ? "Could not read this file — make sure it's an OpenBook recovery file (.html or .json)"
               : "File does not contain a valid recovery key"
         );
         return;

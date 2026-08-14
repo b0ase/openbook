@@ -1,10 +1,10 @@
 /**
  * backup-template.ts
- * Generates a self-contained HTML recovery file for OpenCook identities.
+ * Generates a self-contained HTML recovery file for OpenBook identities.
  * The generated file works entirely offline — no network calls, no external scripts.
  */
 
-// The OpenCook icon SVG, embedded as a base64 favicon.
+// The OpenBook icon SVG, embedded as a base64 favicon.
 // Source: public/icon.svg
 const ICON_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">' +
@@ -77,7 +77,7 @@ function formatSavedDate(createdAt: string): string {
 /**
  * Builds the filename for a backup download.
  *
- * Pattern: opencook-<pathType>-<anon_name>-<addr6>-<YYYY-MM-DD-HHmm>.html
+ * Pattern: openbook-<pathType>-<anon_name>-<addr6>-<YYYY-MM-DD-HHmm>.html
  *
  * addr6 = address.slice(1, 7)  (skip leading '1' of P2PKH, take next 6 chars)
  */
@@ -95,7 +95,7 @@ function buildFilename(data: BackupData): string {
   // Sanitise anon name: keep alphanumeric + underscore, replace others with hyphen
   const safeName = data.name.replace(/[^a-zA-Z0-9_]/g, "-");
 
-  return `opencook-${data.pathType}-${safeName}-${addrPart}-${datePart}.html`;
+  return `openbook-${data.pathType}-${safeName}-${addrPart}-${datePart}.html`;
 }
 
 /**
@@ -115,7 +115,7 @@ export function generateBackupHtml(data: BackupData): string {
   // caller built the BackupData (spread-then-override guarantees the stamp wins).
   const dataJson = JSON.stringify({ ...data, fileVersion: RECOVERY_FILE_VERSION });
 
-  const title = `OpenCook Recovery — ${data.name}`;
+  const title = `OpenBook Recovery — ${data.name}`;
 
   // Resolved at template-build time so iOS Files Quick Look (which blocks
   // inline JS in local HTML previews) renders these values without needing
@@ -132,7 +132,7 @@ export function generateBackupHtml(data: BackupData): string {
       case "restore-pre":
         return "This is a snapshot of the account that was on this device before you restored. If you need to go back, this file is your way in.";
       default:
-        return "This file lets you recover your OpenCook account on any device. Your posts and earnings are tied to the address above.";
+        return "This file lets you recover your OpenBook account on any device. Your posts and earnings are tied to the address above.";
     }
   }
 
@@ -173,7 +173,7 @@ export function generateBackupHtml(data: BackupData): string {
     "      <p><strong>To unlock it:</strong></p>",
     "      <ul>",
     "        <li><strong>Open it on a computer</strong> &mdash; open this file in any browser (Chrome, Safari, Firefox, Edge) on a Mac or PC and enter your passphrase.</li>",
-    "        <li><strong>Or restore it in OpenCook</strong> &mdash; open the You menu and tap <em>Restore</em>; decryption happens inside the app.</li>",
+    "        <li><strong>Or restore it in OpenBook</strong> &mdash; open the You menu and tap <em>Restore</em>; decryption happens inside the app.</li>",
     "      </ul>",
     "    </div>",
     "    <script>document.getElementById('quicklook-notice').style.display='none';</script>",

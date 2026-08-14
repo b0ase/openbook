@@ -117,11 +117,11 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
         db.prepare("UPDATE posts SET tx_id = ? WHERE id = ?").run(txid, postId);
         recordDailySpend(POST_LOG_COST_SATS);
       } else {
-        console.error(`OpenCook: on-chain logging returned null for post ${postId}`);
+        console.error(`OpenBook: on-chain logging returned null for post ${postId}`);
       }
     })
     .catch((e) => {
-      console.error(`OpenCook: on-chain logging failed for post ${postId}`, e);
+      console.error(`OpenBook: on-chain logging failed for post ${postId}`, e);
     });
 
   // Durable guarantee: drain any older un-anchored post (this one is too fresh

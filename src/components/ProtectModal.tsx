@@ -156,7 +156,7 @@ export function ProtectModal({
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       setError(msg || "Something went wrong — try again");
-      console.error("OpenCook: protect (encrypt-in-place) failed", e);
+      console.error("OpenBook: protect (encrypt-in-place) failed", e);
       unblock();
     } finally {
       setWorking(false);

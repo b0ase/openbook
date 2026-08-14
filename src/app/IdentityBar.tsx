@@ -471,7 +471,7 @@ export function IdentityChip(): React.JSX.Element | null {
       });
       setJustDownloaded(true);
     } catch {
-      console.error("OpenCook: save encrypted failed");
+      console.error("OpenBook: save encrypted failed");
     } finally {
       setTimeout(() => setDownloading(false), 1000);
     }
