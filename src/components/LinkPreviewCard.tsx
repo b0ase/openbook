@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Post } from "@/types";
 
 /**
@@ -15,6 +16,13 @@ import type { Post } from "@/types";
  * rendering is a title.
  */
 export function LinkPreviewCard({ post }: { post: Post }) {
+  // ⚠ A THIRD-PARTY og:image THAT 404s MUST NOT RENDER A BROKEN IMAGE. Sites
+  // advertise images that do not exist (bitcoinchat.online does exactly this), and
+  // images rot long after a post is written — but the post is permanent, so the
+  // card has to survive the image outliving it. A broken-image icon reads as OUR
+  // failure, so the card degrades to text instead.
+  const [imageFailed, setImageFailed] = useState(false);
+
   if (post.preview_status !== "ok" || !post.preview_title || !post.preview_url) return null;
 
   let host = "";
@@ -33,7 +41,7 @@ export function LinkPreviewCard({ post }: { post: Post }) {
       rel="noopener noreferrer nofollow ugc"
       className="mt-2 flex overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/40 transition-colors hover:border-zinc-700 hover:bg-zinc-900/70"
     >
-      {post.preview_image && (
+      {post.preview_image && !imageFailed && (
         <div className="hidden h-[84px] w-[84px] shrink-0 bg-zinc-900 sm:block">
           {/* biome-ignore lint/performance/noImgElement: next/image is the WRONG
               tool here, not merely unnecessary. OG images come from arbitrary
@@ -48,6 +56,7 @@ export function LinkPreviewCard({ post }: { post: Post }) {
             loading="lazy"
             decoding="async"
             referrerPolicy="no-referrer"
+            onError={() => setImageFailed(true)}
             className="h-full w-full object-cover"
           />
         </div>
