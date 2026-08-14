@@ -84,6 +84,41 @@ describe("health route — integration", () => {
     expect(body.wallet.low).toBe(true);
   });
 
+  /**
+   * ⚠ REGRESSION GUARD (production misfire, 2026-08-14).
+   *
+   * `getBalance()` without `strict` degrades to an empty UTXO set on any
+   * WhatsOnChain failure and returns 0 WITHOUT throwing — so an unreadable
+   * wallet arrived here as a balance of zero and reported `wallet_low`
+   * (critical, 503, pages the operator) against a wallet holding ~667k sats
+   * that was anchoring posts normally. The dangerous half is the second-order
+   * effect: an operator taught to ignore this alarm ignores a real one too.
+   */
+  it("reports balance_read_failed as NON-critical (200) when the balance cannot be read", async () => {
+    const { GET } = await import("./route");
+    const walletMod = await import("@/services/bsv/wallet");
+    vi.mocked(walletMod.getBalance).mockRejectedValue(new Error("WhatsOnChain HTTP 429"));
+
+    const res = await GET(makeRequest(nextIp()));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.issues).toContain("balance_read_failed");
+    // The whole point: an unreadable wallet must NOT be reported as a low one.
+    expect(body.issues).not.toContain("wallet_low");
+    expect(body.wallet.low).toBe(false);
+  });
+
+  it("asks for a STRICT balance read, so a failed read cannot look like an empty wallet", async () => {
+    const { GET } = await import("./route");
+    const walletMod = await import("@/services/bsv/wallet");
+
+    await GET(makeRequest(nextIp()));
+
+    expect(walletMod.getBalance).toHaveBeenCalledWith({ strict: true });
+  });
+
   it("reports kill_switch_on and 503 when server spending is disabled", async () => {
     const { GET } = await import("./route");
     const walletMod = await import("@/services/bsv/wallet");

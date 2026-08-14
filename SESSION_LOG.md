@@ -14,9 +14,13 @@
   `1Bnds27…`). Cause: **`getUtxos()` swallows a failed or non-ok WhatsOnChain fetch and returns
   `[]` instead of throwing**, so `getBalance()` returns 0 and health's `balanceReadOk` stays
   `true` — reporting `wallet_low` where `balance_read_failed` was intended. **The read failure is
-  indistinguishable from an empty wallet and fails toward the alarming answer.** NOT FIXED —
-  offered, not yet taken. It would page the operator on transient blips via UptimeRobot, and a
-  genuinely empty wallet later would look like the same false alarm.
+  indistinguishable from an empty wallet and fails toward the alarming answer.**
+  - **FIXED.** `getUtxos`/`getBalance` take an opt-in `{ strict: true }` that throws
+    `BalanceUnavailableError` instead of degrading to an empty set; `/api/health` uses it. The
+    non-strict default is UNCHANGED and deliberate — `boot-orchestrator`'s free-boot precheck
+    should keep treating an unreadable wallet as empty, because refusing to spend is the safe
+    direction. Two regression tests: the non-critical 200 path, and one pinning that health
+    actually passes `{ strict: true }`.
   - Secondary: `getBalance` transiently double-counts a UTXO and the mempool output spending it
     (`1335613` = `667869 + 667744`) when the process has restarted and lost `_spent`.
   - **I asserted the wallet was empty and that anchoring was broken. It was not.** The owner
@@ -37,6 +41,17 @@
 - **Build order updated:** paid posting + inscription is step 4 (ONE milestone), tagging step 5.
 - Two docs open questions recorded: whether a tag edge is separately *ownable*, and whether
   `id`/`parent` stay in the envelope once outpoints are canonical.
+- **Three lint errors fixed — MINE, not pre-existing.** Checked rather than assumed:
+  `NymModal.tsx` was created in `c91cbce` (the `$Nym` feature, earlier this same session), and the
+  other two files were touched by that same work. They shipped because lint was verified through
+  `| tail -2`, which hides Biome's error list. **Do not label an error "pre-existing" without
+  running `git log` on the file — the claim is usually both unverifiable and wrong.** The errors:
+  import sort in `IdentityBar.tsx` and `actions-ticker.integration.test.ts`, plus
+  `noStaticElementInteractions` in `NymModal.tsx`. The last was a real a11y bug, not noise —
+  the modal backdrop was a click-only static `div`, so it was unreachable by keyboard, and its
+  Escape handler was bound to the container and therefore only fired once focus was already
+  inside. Rebuilt on the SignInModal pattern: a real `<button>` backdrop + a `document`-level
+  Escape listener.
 
 ## 2026-08-14 (rename + domain) — $OpenBooks, the run-up hidden, openbooks.space live
 

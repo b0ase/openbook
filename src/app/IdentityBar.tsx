@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatedBalance } from "@/components/AnimatedBalance";
 import { ChangePassphraseModal } from "@/components/ChangePassphraseModal";
-import { NymModal } from "@/components/NymModal";
 import { EarningsSparkline } from "@/components/EarningsSparkline";
 import { FirstEarningToast } from "@/components/FirstEarningToast";
 import { InstallPitch } from "@/components/InstallPitch";
+import { NymModal } from "@/components/NymModal";
 import { ProtectModal } from "@/components/ProtectModal";
 import { RestoreModal } from "@/components/RestoreModal";
 import { useIdentityContext } from "@/contexts/IdentityContext";

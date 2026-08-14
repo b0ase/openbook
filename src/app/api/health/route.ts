@@ -51,7 +51,16 @@ async function buildSnapshot(): Promise<HealthSnapshot> {
   let balanceSats = 0;
   let balanceReadOk = true;
   try {
-    balanceSats = await getBalance();
+    // ⚠ `strict` is load-bearing, not a nicety. Without it `getBalance()`
+    // degrades to an empty UTXO set on any WhatsOnChain failure and returns 0
+    // WITHOUT throwing — so a transient upstream blip arrives here as a
+    // balance of zero with `balanceReadOk` still true, and reports `wallet_low`
+    // (critical, pages the operator) instead of `balance_read_failed`
+    // (non-critical). That misfired in production on 2026-08-14 against a
+    // wallet holding ~667k sats and anchoring posts normally. The failure mode
+    // that matters is the second one: an operator taught to ignore this alarm
+    // will also ignore a genuinely empty wallet.
+    balanceSats = await getBalance({ strict: true });
   } catch {
     balanceReadOk = false; // transient WoC blip — surfaced as an issue, NOT critical
   }

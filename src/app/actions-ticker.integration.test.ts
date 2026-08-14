@@ -40,15 +40,15 @@ import { ROOT_TICKER } from "@/lib/ticker";
 import {
   claimNym,
   createPost,
-  getThread,
-  getTickerPath,
   getNym,
   getNyms,
+  getThread,
+  getTickerPath,
   getTickerSupply,
   isReservedTicker,
+  listTickers,
   releaseTickers,
   reserveTickers,
-  listTickers,
   resolveTickers,
   searchTickers,
 } from "./actions";

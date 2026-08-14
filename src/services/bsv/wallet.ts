@@ -140,8 +140,33 @@ function utxoKey(txHash: string, txPos: number): string {
   return `${txHash}:${txPos}`;
 }
 
-export async function getUtxos(neededSats?: number): Promise<UTXO[]> {
+/**
+ * Thrown ONLY when `strict` is requested and the UTXO set could not be read.
+ *
+ * ⚠ The distinction this exists to preserve: an unreadable wallet and an empty
+ * wallet are NOT the same fact, and the non-strict path cannot tell them apart
+ * (it degrades to `_pendingChange`, which is empty after a restart — so a WoC
+ * blip reads as a balance of 0). Spending callers WANT that degradation, since
+ * refusing to spend is the safe direction. Reporting callers must not have it:
+ * see `/api/health`, which would otherwise raise `wallet_low` — a critical,
+ * operator-paging alarm — every time WhatsOnChain hiccups.
+ */
+export class BalanceUnavailableError extends Error {
+  constructor(cause: string) {
+    super(`wallet balance unavailable: ${cause}`);
+    this.name = "BalanceUnavailableError";
+  }
+}
+
+/**
+ * @param opts.strict Throw `BalanceUnavailableError` instead of silently
+ * degrading to `_pendingChange` when WhatsOnChain cannot be read. Only for
+ * callers that REPORT the balance; never for callers that spend it.
+ */
+export async function getUtxos(neededSats?: number, opts?: { strict?: boolean }): Promise<UTXO[]> {
   const address = getServerAddress();
+  // Not a read failure — health reports `addressConfigured` separately, and a
+  // wallet with no key genuinely holds nothing.
   if (!address) return [];
 
   // If we have pending change UTXOs with enough value, skip the WoC fetch
@@ -160,7 +185,10 @@ export async function getUtxos(neededSats?: number): Promise<UTXO[]> {
       `https://api.whatsonchain.com/v1/bsv/main/address/${address}/unspent`,
       READ_TIMEOUT_MS
     );
-    if (!res.ok) return [..._pendingChange];
+    if (!res.ok) {
+      if (opts?.strict) throw new BalanceUnavailableError(`WhatsOnChain HTTP ${res.status}`);
+      return [..._pendingChange];
+    }
     const confirmed = (await res.json()) as UTXO[];
 
     // Deduplicate: pending change UTXOs take priority over WoC data
@@ -185,13 +213,25 @@ export async function getUtxos(neededSats?: number): Promise<UTXO[]> {
     const all = [..._pendingChange, ...deduped];
     all.sort((a, b) => b.value - a.value);
     return all;
-  } catch {
+  } catch (e) {
+    // Re-throw the strict signal AND any transport failure (timeout, DNS, bad
+    // JSON) — all of them mean "we do not know the balance".
+    if (opts?.strict) {
+      throw e instanceof BalanceUnavailableError
+        ? e
+        : new BalanceUnavailableError(e instanceof Error ? e.message : "read failed");
+    }
     return [..._pendingChange];
   }
 }
 
-export async function getBalance(): Promise<number> {
-  const utxos = await getUtxos();
+/**
+ * @param opts.strict Throw `BalanceUnavailableError` rather than returning 0
+ * when the balance could not be READ. Default (unset) keeps the spend-safe
+ * behaviour: an unreadable wallet looks empty, so callers refuse to spend.
+ */
+export async function getBalance(opts?: { strict?: boolean }): Promise<number> {
+  const utxos = await getUtxos(undefined, opts);
   return utxos
     .filter((u) => !_reserved.has(utxoKey(u.tx_hash, u.tx_pos)))
     .reduce((sum, u) => sum + u.value, 0);
