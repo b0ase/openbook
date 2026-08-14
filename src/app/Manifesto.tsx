@@ -4,15 +4,22 @@
  * The vision block at the top of the feed (ORIGIN mode, or LIVE once post #1 is
  * reached).
  *
- * ⚠ THE STATUS PARAGRAPH IS LOAD-BEARING — DO NOT QUIETLY DROP IT. This page is
- * read by people deciding whether to put work, and eventually money, into
- * OpenBook. Copy that describes the token layer as if it exists would be a
- * mis-sale, not just enthusiasm: TOKENS.md records it as a DIRECTION, NOT A
- * DECISION, and nothing of it is built. Everything stated in the present tense
- * here is shipped and verifiable; everything else is marked as ahead.
+ * ⚠ TENSE IS THE WHOLE SAFETY MECHANISM HERE. This page is read by people
+ * deciding whether to put work, and eventually money, into OpenBook. Everything
+ * in the PRESENT tense is shipped and verifiable today; everything else sits
+ * under "What we're building" or the status box and is explicitly marked as not
+ * built. TOKENS.md records the token layer as a DIRECTION with open questions —
+ * describing it as if it exists would be a mis-sale, not enthusiasm.
  *
- * When the token work lands, move it from the "next" paragraph into the body and
- * update the status line — in the same commit.
+ * Specifically, and these are the easy mistakes to make:
+ *  - Posting is FREE today. Paid posting is the model, not the current state.
+ *  - There is no token. Nothing is buyable, earnable, holdable or tradable.
+ *  - No "get in early" framing anywhere. The same rule the agent prompt
+ *    enforces in conversation applies harder on a page that cannot be
+ *    questioned back.
+ *
+ * When the token work lands, move it out of "What we're building" and update the
+ * status box — in the same commit.
  */
 
 interface ManifestoProps {
@@ -38,17 +45,9 @@ export function Manifesto({ onAskAgent }: ManifestoProps) {
       {/* Body */}
       <div className="space-y-3 text-sm text-zinc-100 leading-relaxed">
         <p>
-          Not a startup. Not a pitch deck. A different model entirely — one where the people who
-          build something are the people who own it.
-        </p>
-        <p className="text-zinc-400">
-          Here's how the old world works: your labour flows up. Value pools at the top. You get what
-          they decide.
-        </p>
-        <p>
-          Here's how this works: value flows directly to the people who created it. No intermediary,
-          no approval process, no promise to pay later. One transaction, every contributor paid in
-          it, on-chain and checkable by anyone.
+          A board for ideas where the record of who contributed what is public, permanent, and pays
+          out automatically. Not a startup, not a pitch deck — a different arrangement, where the
+          people who build something are the people who own it.
         </p>
 
         {/* Pull quote 1 */}
@@ -56,14 +55,32 @@ export function Manifesto({ onAskAgent }: ManifestoProps) {
           Post an idea. It's timestamped. Immutable. Yours.
         </p>
 
-        <p>
-          If someone builds on it — your rough sketch, your half-formed thought, your fragment of
-          something real — you get credited. Forever. Because the chain doesn't lie and it doesn't
-          forget.
+        {/* ── How it works — every line here is live today ─────────────────── */}
+        <p className="pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+          How it works
         </p>
         <p>
-          Experts of every field, working on what they actually care about. Not what a board
-          approves. What drives them.
+          <span className="font-semibold text-white">You post.</span> No signup, no wallet, no seed
+          phrase. A key is generated in your browser the first time you arrive, and it signs your
+          posts so authorship is provable rather than claimed.
+        </p>
+        <p>
+          <span className="font-semibold text-white">The post goes on-chain.</span> Every post is
+          written to the BSV blockchain with its signature — timestamped, permanent, and checkable
+          by anyone, including against us. That's the part that makes "who was first" a fact instead
+          of an argument.
+        </p>
+        <p>
+          <span className="font-semibold text-white">Anyone can boost a post.</span> A boost is a
+          payment, and it splits in a single transaction: to contributors by weight, to the post's
+          creator, and a cut that keeps the thing running. No balances are held, no IOUs are issued,
+          nothing is owed to you later. Every satoshi leaves in the same transaction it arrived in,
+          and you can read it on-chain.
+        </p>
+        <p>
+          <span className="font-semibold text-white">Your weight is computed, not granted.</span>{" "}
+          What you've posted and what got boosted decides your share. Nobody approves it, and there
+          is no application to fill in.
         </p>
 
         {/* Pull quote 2 */}
@@ -73,13 +90,42 @@ export function Manifesto({ onAskAgent }: ManifestoProps) {
 
         <p>
           An idea posted here isn't a comment that scrolls away. It's the first page of something
-          others can build on, argue with, and carry further.
+          others can build on, argue with, and carry further. And because contributions are counted
+          and paid automatically, working with strangers needs no company, no contract, and no one
+          taking it on trust. The split is arithmetic, in public.
+        </p>
+
+        {/* ── The fork ──────────────────────────────────────────────────────── */}
+        <p className="pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+          What we're building, and why we forked
         </p>
         <p>
-          And because every contribution is counted and paid automatically, working with strangers
-          needs no company, no contract, and no one taking it on trust. The split is arithmetic, in
-          public. That's the part that's new — not that you can't build alone, but that you can now
-          build with anyone without signing your work over to them.
+          OpenBook is a fork of <span className="text-zinc-300">OpenCook</span>, which built
+          everything above and built it well. The split works. The payments are real. We didn't fork
+          because something was broken.
+        </p>
+        <p>
+          We forked over one thing:{" "}
+          <span className="font-semibold text-white">
+            getting paid for a contribution isn't the same as owning a piece of it.
+          </span>{" "}
+          Today you're paid when a post is boosted, and then it's over. The thread you helped start
+          can run for years without you holding any part of what it becomes.
+        </p>
+        <p>
+          So the direction here is that a thread carries its own stake. You'd pay to post, and
+          receive that thread's tokens in return — a tradable receipt for having been there and
+          contributed. Each thread has a finite supply, so as it fills up the tokens get scarcer and
+          cost more, and when the supply is gone{" "}
+          <span className="text-zinc-300">the thread closes</span> — fixed forever, held by the
+          people who actually built it. The conversation carries on in a new thread that pays a
+          share back to the one it grew out of.
+        </p>
+        <p className="text-zinc-400">
+          It's a real trade, not a free upgrade. Posting is free today and wouldn't be under that
+          model, and a system where ideas cost money to join is a different thing from one where
+          they don't. We think owning the thing you helped build is worth it. We'd rather say that
+          plainly than discover it in the small print.
         </p>
 
         {/* Pull quote 3 */}
@@ -90,10 +136,13 @@ export function Manifesto({ onAskAgent }: ManifestoProps) {
         {/* ⚠ Honest status. See the file header before editing or removing. */}
         <p className="rounded-md border border-zinc-700/70 bg-zinc-950/40 px-3 py-2.5 text-[13px] text-zinc-400 leading-relaxed">
           <span className="font-semibold text-zinc-300">Where this is right now.</span> Live today:
-          posts anchored on-chain, and boosts that split payment straight to contributors in a
-          single transaction — no balances held, no IOUs. Being built next: threads that carry their
-          own stake, so a branch of an idea can hold value for the people who started it. That part
-          isn't finished, and this page will keep saying so until it is.
+          free posting, posts anchored on-chain, boosts that split payment straight to contributors
+          in one transaction, and threaded replies. Not built:{" "}
+          <span className="text-zinc-300">
+            the token, the mint, paid posting, and everything about supply
+          </span>{" "}
+          — there is nothing to buy, hold or trade, and no date for it. It's a direction with open
+          questions, written up in the open, and this page will keep saying so until it isn't.
         </p>
 
         {/* Closing line — handwritten style.
