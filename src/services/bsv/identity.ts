@@ -24,7 +24,7 @@ import type { Identity } from "@/types";
 export type { Identity };
 
 import { generateAnonName } from "@/lib/utils";
-import { decryptWif, encryptWif, isEncrypted } from "./crypto";
+import { decryptWif, encryptWif, isEncrypted, upgradeNeeded } from "./crypto";
 
 /**
  * Cached BSV SDK module promise — imported once, reused everywhere.
@@ -360,6 +360,29 @@ export async function unlockIdentity(passphrase: string): Promise<Identity | nul
 
   // Cache for session
   _sessionIdentity = { name: encData.name, address: encData.address, wif, pubkey };
+
+  // Opportunistic KDF upgrade. THIS IS THE ONLY MOMENT IT IS POSSIBLE: re-encrypting
+  // needs both the plaintext WIF and the passphrase, and they are only ever both in
+  // hand immediately after a successful unlock. Legacy blobs were written at 100k
+  // PBKDF2 iterations with the count hardcoded; the current envelope records it, so
+  // this silently moves an existing user up to the current cost the next time they
+  // sign in — no prompt, no re-download, same key and address.
+  //
+  // ⚠ WRITE-THEN-VERIFY, AND NEVER LET A FAILURE PROPAGATE. The unlock has already
+  // succeeded by this point; the caller is entitled to their identity whatever
+  // happens here. A re-encrypt that threw, or that wrote an unreadable blob, would
+  // turn a routine sign-in into a lost account — strictly worse than leaving the
+  // weaker-but-working envelope in place.
+  if (upgradeNeeded(encData.encrypted)) {
+    try {
+      const reEncrypted = await encryptWif(wif, passphrase);
+      if ((await decryptWif(reEncrypted, passphrase)) === wif) {
+        localStorage.setItem(ENCRYPTED_KEY, JSON.stringify({ ...encData, encrypted: reEncrypted }));
+      }
+    } catch {
+      // Keep the old envelope. It still works.
+    }
+  }
 
   return _sessionIdentity;
 }
