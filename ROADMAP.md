@@ -151,4 +151,4 @@ Compressed. Per-session detail is in SESSION_LOG.md; the reasoning is in DECISIO
 | **Rebrand** | BSVibes → OpenCook → **$OpenBooks**; `openbooks.space` live; OG cards, icons, manifesto rewritten |
 | **Genesis** | 1,908 backdated posts anchored on-chain (~40 batched txs); 2,006-post launch DB seeds a fresh volume on boot |
 | **Threading** | `parent_id` (lineage) + `root_id` (membership), thread overlay, replies target the root |
-| **Tokens** | `$Ticker` registry (first-claim-wins, PRIMARY KEY), ticker tree with parent lineage, reserved names, `$Nym` usernames, search + `/tickers` index, media uploads, `ticker_mentions` edge table, wallet holdings |
+| **Tokens** | Per-token holder leaderboard (`/leaderboard/$a/$b`), `$Ticker` registry (first-claim-wins, PRIMARY KEY), ticker tree with parent lineage, reserved names, `$Nym` usernames, search + `/tickers` index, media uploads, `ticker_mentions` edge table, wallet holdings |

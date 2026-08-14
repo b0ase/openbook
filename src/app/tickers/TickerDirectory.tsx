@@ -78,10 +78,14 @@ export function TickerDirectory({ initial }: { initial: TickerHit[] }) {
       ) : (
         <ul className="mt-5 divide-y divide-zinc-800/60">
           {hits.map((h) => (
-            <li key={h.symbol} className="py-3">
+            // Two sibling links, not one wrapping the row: the name opens the
+            // thread, the weight opens the holders it is made of. Nesting an
+            // anchor inside an anchor is invalid HTML and the browser would
+            // decide which one wins.
+            <li key={h.symbol} className="flex items-baseline justify-between gap-3 py-3">
               <a
                 href={`/${h.path.map((s) => `$${s.toLowerCase()}`).join("/")}`}
-                className="group flex items-baseline justify-between gap-3"
+                className="group flex min-w-0 flex-1 items-baseline justify-between gap-3"
               >
                 <span className="min-w-0">
                   <span className="text-sm font-medium">
@@ -101,15 +105,17 @@ export function TickerDirectory({ initial }: { initial: TickerHit[] }) {
                     </span>
                   )}
                 </span>
-                <span className="shrink-0 text-right">
-                  <span className="block font-mono text-sm tabular-nums text-white">
-                    {h.supply}
-                  </span>
-                  {/* One unit's share, the same figure the feed prints beside a
-                      ticker — so the index and the feed can never disagree. */}
-                  <span className="block font-mono text-[10px] tabular-nums text-zinc-600">
-                    {h.supply > 0 ? formatShare(1, h.supply) : "—"}
-                  </span>
+              </a>
+              <a
+                href={`/leaderboard/${h.path.map((s) => `$${s.toLowerCase()}`).join("/")}`}
+                title={`Who holds $${titleCaseTicker(h.symbol)}`}
+                className="shrink-0 text-right hover:text-amber-400 transition-colors"
+              >
+                <span className="block font-mono text-sm tabular-nums text-white">{h.supply}</span>
+                {/* One unit's share, the same figure the feed prints beside a
+                    ticker — so the index and the feed can never disagree. */}
+                <span className="block font-mono text-[10px] tabular-nums text-zinc-600">
+                  {h.supply > 0 ? formatShare(1, h.supply) : "—"}
                 </span>
               </a>
             </li>

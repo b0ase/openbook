@@ -825,6 +825,81 @@ export async function getThreadStats(rootId: number): Promise<{ tokens: number; 
   return { tokens, replies: Math.max(0, tokens - 1) };
 }
 
+export interface TickerHolder {
+  pubkey: string;
+  /** The holder's public name, or null if they have not claimed one. */
+  nym: string | null;
+  units: number;
+}
+
+export interface TickerLeaderboard {
+  symbol: string;
+  /** Ticker ancestry, root-first — the same path the index and wallet render. */
+  path: string[];
+  /** Every unit issued: the ticker's supply, and the split's denominator. */
+  total: number;
+  /** Units belonging to an identifiable holder. */
+  attributed: number;
+  /** Top holders, largest first. Capped — see the note on the cap below. */
+  holders: TickerHolder[];
+}
+
+/**
+ * Who holds a ticker, largest first.
+ *
+ * ⚠ THIS IS THE PAYOUT ROSTER, not a vanity chart. It is the same query the
+ * top-100 split will run when a payment is routed (DECISIONS.md, *The split pays
+ * the TOP 100 HOLDERS*), so publishing it makes the economics auditable BEFORE
+ * any money moves through them — and any disagreement between this page and a
+ * real payout is a bug in one of them rather than two independent guesses.
+ *
+ * ⚠ UNATTRIBUTED UNITS ARE REPORTED, NOT DROPPED. Genesis posts were
+ * operator-attested and carry no pubkey, so a ticker can hold units with no
+ * owner. Silently omitting them would make the listed shares fail to sum to
+ * 100% with no explanation visible to the reader — so `total` counts every unit
+ * and `attributed` counts the ones with a holder; the difference is the
+ * unowned remainder, and the page says so.
+ */
+export async function getTickerLeaderboard(
+  symbol: string,
+  limit = 100
+): Promise<TickerLeaderboard | null> {
+  const canonical = canonicalTicker(symbol);
+  if (!isValidTicker(canonical)) return null;
+
+  const totals = db
+    .prepare(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN pubkey IS NOT NULL AND pubkey <> '' THEN 1 ELSE 0 END) AS attributed
+         FROM ticker_mentions WHERE symbol = ?`
+    )
+    .get(canonical) as { total: number; attributed: number | null };
+  if (!totals || totals.total === 0) return null;
+
+  // The cap matches the split's 100. A leaderboard that listed more holders than
+  // a payment can reach would advertise a share nobody can be paid.
+  const capped = Math.min(Math.max(1, limit), 100);
+  const rows = db
+    .prepare(
+      `SELECT m.pubkey AS pubkey, COUNT(*) AS units, n.symbol AS nym
+         FROM ticker_mentions m
+         LEFT JOIN nyms n ON n.pubkey = m.pubkey
+        WHERE m.symbol = ? AND m.pubkey IS NOT NULL AND m.pubkey <> ''
+        GROUP BY m.pubkey
+        ORDER BY units DESC, m.pubkey ASC
+        LIMIT ?`
+    )
+    .all(canonical, capped) as { pubkey: string; units: number; nym: string | null }[];
+
+  return {
+    symbol: canonical,
+    path: await getTickerPath(canonical),
+    total: totals.total,
+    attributed: totals.attributed ?? 0,
+    holders: rows,
+  };
+}
+
 export interface Holding {
   /**
    * `"name"` — a `$Ticker` you hold units of, measured as a share of every post

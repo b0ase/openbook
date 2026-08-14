@@ -38,7 +38,13 @@ vi.mock("next/headers", () => ({
 
 import { db } from "@/lib/db";
 import { ROOT_TICKER } from "@/lib/ticker";
-import { createPost, getHoldings, getThreadShare, getTickerSupply } from "./actions";
+import {
+  createPost,
+  getHoldings,
+  getThreadShare,
+  getTickerLeaderboard,
+  getTickerSupply,
+} from "./actions";
 
 /** A stable author, so several posts attribute to the same holder. */
 function author(name: string) {
@@ -243,5 +249,66 @@ describe("getHoldings", () => {
     const alice = author("anon_alic");
     await alice.post("something");
     expect(await getHoldings("")).toEqual([]);
+  });
+});
+
+/**
+ * The leaderboard is the PAYOUT ROSTER — the same query a top-100 split will run
+ * (DECISIONS.md). These pin the parts that would silently misreport money:
+ * ordering, the denominator, and unattributed units.
+ */
+describe("getTickerLeaderboard", () => {
+  it("ranks holders by units, largest first, over the full supply", async () => {
+    const alice = author("anon_alic");
+    const bob = author("anon_bobb");
+
+    await alice.post("$Memeplex");
+    await alice.post("$Memeplex again");
+    await alice.post("$Memeplex once more");
+    await bob.post("$Memeplex from bob");
+
+    const board = await getTickerLeaderboard("MEMEPLEX");
+    expect(board).not.toBeNull();
+    expect(board?.total).toBe(4);
+    expect(board?.attributed).toBe(4);
+    expect(board?.holders.map((h) => h.units)).toEqual([3, 1]);
+    expect(board?.holders[0].pubkey).toBe(alice.pubkey);
+    // The denominator is the whole supply, so shares across holders sum to 100%.
+    expect(board?.holders.reduce((n, h) => n + h.units, 0)).toBe(board?.total);
+  });
+
+  it("REPORTS units that have no owner rather than dropping them", async () => {
+    const alice = author("anon_alic");
+    await alice.post("$Orphan");
+    // A genesis-style post: operator-attested, no pubkey. Its unit is real and
+    // counts toward supply, but there is nobody to credit it to. Dropping it
+    // would make the listed shares fail to reach 100% with no explanation.
+    const id = db
+      .prepare("INSERT INTO posts (content, author_name) VALUES ('$Orphan too', 'anon_gen1')")
+      .run().lastInsertRowid as number;
+    db.prepare(
+      "INSERT INTO ticker_mentions (symbol, post_id, target_type) VALUES ('ORPHAN', ?, 'none')"
+    ).run(id);
+
+    const board = await getTickerLeaderboard("ORPHAN");
+    expect(board?.total).toBe(2);
+    expect(board?.attributed).toBe(1);
+    expect(board?.holders).toHaveLength(1);
+  });
+
+  it("carries the ticker's ancestry so the page can link back to its thread", async () => {
+    const alice = author("anon_alic");
+    await alice.post("starting $Parent");
+    const parentRoot = lastId();
+    await alice.post("branching into $Child", parentRoot);
+
+    const board = await getTickerLeaderboard("CHILD");
+    expect(board?.path).toEqual([ROOT_TICKER, "PARENT", "CHILD"]);
+  });
+
+  it("returns null for a name nobody has written — not an empty board", async () => {
+    // The page 404s on null. An empty leaderboard would imply the token exists.
+    expect(await getTickerLeaderboard("NEVERWRITTEN")).toBeNull();
+    expect(await getTickerLeaderboard("not a ticker")).toBeNull();
   });
 });
