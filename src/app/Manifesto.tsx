@@ -8,17 +8,27 @@
  * deciding whether to put work, and eventually money, into OpenBook. Everything
  * in the PRESENT tense is shipped and verifiable today; everything else sits
  * under "What we're building" or the status box and is explicitly marked as not
- * built. TOKENS.md records the token layer as a DIRECTION with open questions —
- * describing it as if it exists would be a mis-sale, not enthusiasm.
+ * built. Describing an unbuilt thing as if it exists would be a mis-sale, not
+ * enthusiasm.
+ *
+ * ⚠ THE LINE TO HOLD IS **TOKEN vs MARKET**, NOT "no token". Posting IS the mint
+ * (TOKENS.md, "A post IS a token"): a user creates and owns a token when they
+ * post, that is live today, and the wallet shows it. An earlier version of this
+ * file said "there is no token — nothing is buyable, earnable, holdable or
+ * tradable", which the owner rejected as contradicting the model the product is
+ * built on. What does NOT exist is the MARKET: paid posting, depleting supply,
+ * and any way to trade. Hedge the market; never hedge the token.
  *
  * Specifically, and these are the easy mistakes to make:
  *  - Posting is FREE today. Paid posting is the model, not the current state.
- *  - There is no token. Nothing is buyable, earnable, holdable or tradable.
+ *  - Tokens are real and owned; there is nowhere to SELL them and no date for one.
+ *  - Citation-minting (a 1-of-1 becoming a 1-of-2 when invoked) is NOT built, and
+ *    is blocked on an unanswered question — see TOKENS.md. Do not describe it here.
  *  - No "get in early" framing anywhere. The same rule the agent prompt
  *    enforces in conversation applies harder on a page that cannot be
  *    questioned back.
  *
- * When the token work lands, move it out of "What we're building" and update the
+ * When the market lands, move it out of "What we're building" and update the
  * status box — in the same commit.
  */
 
@@ -136,13 +146,15 @@ export function Manifesto({ onAskAgent }: ManifestoProps) {
         {/* ⚠ Honest status. See the file header before editing or removing. */}
         <p className="rounded-md border border-zinc-700/70 bg-zinc-950/40 px-3 py-2.5 text-[13px] text-zinc-400 leading-relaxed">
           <span className="font-semibold text-zinc-300">Where this is right now.</span> Live today:
-          free posting, posts anchored on-chain, boosts that split payment straight to contributors
-          in one transaction, and threaded replies. Not built:{" "}
+          posting, posts anchored on-chain, boosts that split payment straight to contributors in
+          one transaction, threaded replies, and{" "}
           <span className="text-zinc-300">
-            the token, the mint, paid posting, and everything about supply
-          </span>{" "}
-          — there is nothing to buy, hold or trade, and no date for it. It's a direction with open
-          questions, written up in the open, and this page will keep saying so until it isn't.
+            one token to you for every post you make — yours, counted, visible in your wallet
+          </span>
+          . Not built yet: <span className="text-zinc-300">the market</span> — paid posting,
+          depleting supply, and any way to trade what you hold. So your tokens are real and they are
+          yours; there is nowhere to sell them, and no date for one. Open questions, written up in
+          the open, and this page will keep saying so until it isn't.
         </p>
 
         {/* Closing line — handwritten style.

@@ -643,35 +643,41 @@ operator wallet separate from the contributor identity is what stops "the platfo
 contributor's earnings" becoming indistinguishable — which is the asymmetry this fork exists to
 argue against.
 
-## Holdings are shown as the contribution record, not a balance (settled 2026-08-14)
+## A post is a token, and the wallet says so (settled by the owner 2026-08-14)
 
-The wallet panel ("Your threads") and the thread header now show a **percentage share of each
-thread**, computed as *your posts in the thread ÷ all posts in the thread* — `getHoldings` and
-`getThreadShare` in `actions.ts`, keyed on `pubkey` the same way `fairness/weights.ts` is.
+The You modal has a **Tokens** section and the thread header shows **"N% yours"** — computed as
+*your posts in a thread ÷ all posts in it* (`getHoldings` / `getThreadShare` in `actions.ts`,
+keyed on `pubkey` the same way `fairness/weights.ts` is).
 
-**Why posts stand in for tokens.** Nothing is minted (TOKENS.md: no mint, no fee, no supply)
-and the manifesto says so on the front page — *"there is nothing to buy, hold or trade"*. A
-panel headed "Tokens" with numbers in it would quietly contradict that. But under
-**one-token-per-contribution**, a holding and a post count are *the same number*, so the
-contribution record can be shown honestly today and becomes a read of the real ledger if
-minting ever ships. Every caller keeps working across that change.
+**These are tokens, not a preview of tokens.** Posting IS the mint: a user creates and owns a
+token the moment they post (TOKENS.md, "A post IS a token"). An earlier version of this panel
+hedged — "your threads", "not minted yet" — reasoning that no mint had shipped. **The owner
+rejected that framing outright:** it contradicts the model the product is built on. The
+distinction that actually holds is **token vs market**: the tokens are real and owned now; what
+does not exist is a market — paid posting, depleting supply, any way to trade. `Manifesto.tsx`
+was rewritten to say exactly that, replacing "there is nothing to buy, hold or trade".
 
-Consequences that are deliberate, not oversights:
+**Unnamed tokens are shown as truncated txids, deliberately.** Every token needs an identifier
+whether or not a human chose one, and the default is the thing that already identifies the post
+on-chain. Showing that unreadable string — rather than a friendly invented label like
+"Thread #24" — is what makes the value of claiming a `$Ticker` visible: a ticker buys a unique
+human-readable alias over an identifier nobody could say out loud.
 
-- **Labelled "Your threads", never "Balance"**, and carries the footnote *"One post, one token
-  — not minted yet."* The footnote is load-bearing; without it the panel reads as a wallet.
-- **This must never feed allocation.** Same rule as the ticker saturation gauge: posting is
-  free, and anything free that confers value destroys the anchor.
+Consequences that are deliberate:
+
+- **This must never feed allocation.** Same rule as the ticker saturation gauge: posting is free
+  today, and anything free that confers value destroys the anchor.
 - **`formatShare` (`lib/share.ts`) is the single formatter** for all three surfaces — compose
   hint, thread header, wallet. Three copies of "round it sensibly" would disagree by a digit on
   the same figure, and a reader who sees 0.3% in one panel and 0.25% in another stops trusting
-  both. It never prints `0%` for a holding that exists (`<0.01%` instead) — "0%" reads as *you
-  have nothing* when the truth is *you have a little*.
-- **The share is refreshed on the thread poll, not its own timer**, so it can never describe a
+  both. It never prints `0%` for a holding that exists (`<0.01%` instead).
+- **The share refreshes on the thread poll, not its own timer**, so it can never describe a
   different revision of the thread than the posts beside it.
-- **Holdings load on panel open, not on a poll.** A share only moves when someone posts, which
-  is far slower than the 30s earnings cadence, and this is a DB aggregate rather than a cached
-  summary.
+- **Holdings load on panel open, not on a poll** — a share moves only when someone posts.
+
+**Not built, and blocked on an unanswered question:** citation-minting (a post is a 1-of-1 that
+becomes a 1-of-2 when invoked). Who holds the newly minted unit — quoter, author, or both —
+decides the whole economics and is not reversible once units exist. See TOKENS.md.
 
 ## The identity chip belongs in the thread overlay too (settled 2026-08-14)
 

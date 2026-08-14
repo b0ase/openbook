@@ -407,11 +407,24 @@ export async function getThreadShare(
 
 export interface Holding {
   root_id: number;
-  /** Ticker ancestry, root-first. Empty when the thread was never named. */
+  /** Ticker ancestry, root-first. Empty when the token was never named. */
   path: string[];
-  /** Posts by this author in the thread — the tokens they would hold. */
+  /**
+   * The on-chain txid of the token's genesis post — its DEFAULT NAME.
+   *
+   * ⚠ EVERY TOKEN HAS A NAME; most are unreadable. A post is a token, so it
+   * needs an identifier whether or not anyone chose one, and the honest default
+   * is the thing that already identifies it on-chain. That is precisely what a
+   * `$Ticker` buys: a unique human-readable alias over an identifier nobody
+   * could say out loud. Showing the txid rather than a friendly invented label
+   * is what makes the value of naming visible.
+   *
+   * Null until the anchor lands (see `anchor-sweep`), where the row id stands in.
+   */
+  tx_id: string | null;
+  /** Tokens this author holds in it — one per post they made. */
   mine: number;
-  /** Posts in the thread by everyone — the tokens the thread would have issued. */
+  /** Tokens issued in it so far — one per post. */
   total: number;
 }
 
@@ -432,7 +445,8 @@ export async function getHoldings(pubkey: string): Promise<Holding[]> {
     .prepare(
       `SELECT p.root_id AS root_id,
               SUM(CASE WHEN p.pubkey = ? THEN 1 ELSE 0 END) AS mine,
-              COUNT(*) AS total
+              COUNT(*) AS total,
+              MAX(CASE WHEN p.id = p.root_id THEN p.tx_id END) AS tx_id
          FROM posts p
         WHERE p.root_id IN (
                 SELECT DISTINCT root_id FROM posts
@@ -442,7 +456,12 @@ export async function getHoldings(pubkey: string): Promise<Holding[]> {
         ORDER BY mine DESC, total DESC
         LIMIT 50`
     )
-    .all(pubkey, pubkey) as { root_id: number; mine: number; total: number }[];
+    .all(pubkey, pubkey) as {
+    root_id: number;
+    mine: number;
+    total: number;
+    tx_id: string | null;
+  }[];
   if (!rows.length) return [];
 
   // Names for the threads that have one, in a single lookup. A thread with no
@@ -487,6 +506,7 @@ export async function getHoldings(pubkey: string): Promise<Holding[]> {
     return {
       root_id: r.root_id,
       path: symbol ? pathFor(symbol) : [],
+      tx_id: r.tx_id,
       mine: r.mine,
       total: r.total,
     };

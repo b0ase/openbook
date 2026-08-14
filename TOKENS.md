@@ -600,6 +600,56 @@ domain was available, while the root token is `$OpenBook`. The owner has decided
 resolve or explain this. Recorded so it is not repeatedly rediscovered as a problem — it
 isn't one.
 
+## A post IS a token — 1-of-1, editioned by citation (SETTLED by the owner 2026-08-14)
+
+**This is the base layer of the model, not a feature on top of it.** Every post mints a token to
+its author at the moment of posting. No claim step, no opt-in, no "not yet": you write, you own.
+
+**The edition grows by invocation.** A post starts as a **1-of-1**. When it is quoted or invoked
+elsewhere, another unit is minted and it becomes a **1-of-2**, then a 1-of-3, and so on. The
+supply of a post-token is therefore `1 + times it was invoked` — which means **a token's size is
+a direct measure of how much the thing was actually used**, not of how loudly it was promoted.
+Citation is the mint. This is the mechanism that makes contribution measurable without anyone
+scoring it.
+
+**Consequence — every token has a name, and almost all of them are unreadable.** A token needs an
+identifier whether or not a human chose one, so the default name is the thing that already
+identifies the post on-chain: its **txid**. Long, meaningless, unsayable.
+
+**That is exactly what a `$Ticker` is for.** Claiming a ticker buys a unique, human-readable
+alias over an otherwise incomprehensible identifier. It reframes the whole ticker system: not
+decoration, not a tag, but the **naming layer over a universal token space** — and it explains
+why ticker uniqueness is consensus-critical (`src/lib/ticker.ts`), why case-folding matters, and
+why naming is a founding act worth paying for. The wallet deliberately shows unnamed tokens as
+truncated txids rather than friendly invented labels, so the value of naming is visible rather
+than argued.
+
+**What the earlier framing got wrong.** A previous version of the wallet panel called this "your
+threads" and footnoted it "not minted yet", on the reasoning that no mint had shipped so nothing
+could be owned. The owner rejected that: it *"flies directly in the face of the model we're
+building. Users create, and own, tokens when they post."* The distinction that actually holds is
+**token vs market** — the tokens are real and owned now; what does not exist is a market (paid
+posting, depleting supply, any way to trade). Only the market should be hedged in UI copy, and
+`Manifesto.tsx` now says exactly that.
+
+**Open — and load-bearing: who holds the unit that a citation mints?** Three readings, and the
+choice is the entire economics:
+
+1. **The quoter holds it.** Invoking someone spreads their token to you; the author is diluted
+   but distributed. Citation becomes acquisition.
+2. **The author holds it.** Being invoked increases the author's own holding. Citation becomes
+   reward, and the author's share never dilutes.
+3. **Both.** Supply rises by two; author and quoter each gain one.
+
+(1) makes tokens circulate and gives quoting a cost-free acquisition path — which collides with
+*anything free that confers value destroys the anchor*. (2) keeps the anchor intact but means a
+token never leaves its author except by sale. Undecided; **do not implement citation-minting
+until this is answered**, because it is not reversible once units exist.
+
+**Built today:** one token per post, held by the author, visible in the wallet with the holder's
+percentage of each thread (`getHoldings` / `getThreadShare` in `src/app/actions.ts`). **Not
+built:** citation-minting of additional units, and the market.
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,

@@ -1585,19 +1585,19 @@ export function IdentityChip(): React.JSX.Element | null {
               )}
             </div>
 
-            {/* ── Threads you hold a share of ──
-                ⚠ NOT LABELLED A BALANCE, DELIBERATELY. Nothing is minted yet
-                (TOKENS.md), and the manifesto says so in as many words: "there
-                is nothing to buy, hold or trade". A panel headed "Tokens" with
-                numbers in it would quietly contradict the front page. What is
-                shown is the contribution record those tokens would be issued
-                against, which is real today — and under
-                one-token-per-contribution it is the same number. The footnote is
-                load-bearing: without it this reads as a wallet. */}
+            {/* ── Tokens ──
+                ⚠ THESE ARE TOKENS, NOT A PREVIEW OF TOKENS. Posting IS the mint
+                (TOKENS.md, one token per contribution): a user creates and owns
+                a token the moment they post, and this is where they see what
+                they own. An earlier version of this panel hedged — "your
+                threads", "not minted yet" — which contradicted the model the
+                product is built on. What does NOT exist yet is the MARKET (paid
+                posting, depleting supply, any way to trade), and that is the
+                only thing the copy here should qualify. */}
             <div className="px-3 py-2.5 border-b border-amber-400/10 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">
-                  Your threads
+                  Tokens
                 </span>
                 {holdings.length > 3 && (
                   <button
@@ -1636,9 +1636,15 @@ export function IdentityChip(): React.JSX.Element | null {
                               </span>
                             ))
                           ) : (
-                            // An unnamed thread still holds a real share, so it
-                            // gets a row — identified by the id its URL uses.
-                            <span className="text-zinc-500">Thread #{h.root_id}</span>
+                            // An UNNAMED token, shown under the name it actually
+                            // has: its on-chain txid. Truncated because it is
+                            // unreadable by nature — that unreadability is the
+                            // point, and the argument for claiming a $Ticker.
+                            <span className="font-mono text-zinc-600" title={h.tx_id ?? undefined}>
+                              {h.tx_id
+                                ? `${h.tx_id.slice(0, 8)}…${h.tx_id.slice(-4)}`
+                                : `unanchored #${h.root_id}`}
+                            </span>
                           )}
                         </span>
                         <span className="flex shrink-0 items-center gap-2 font-mono tabular-nums">
@@ -1651,8 +1657,8 @@ export function IdentityChip(): React.JSX.Element | null {
                     ))}
                   </div>
                   <p className="text-[10px] leading-relaxed text-zinc-600">
-                    One post, one token &mdash; not minted yet. This is the record they&rsquo;d be
-                    issued against.
+                    One post, one token. Yours to keep &mdash; there&rsquo;s nowhere to trade them
+                    yet.
                   </p>
                 </>
               )}

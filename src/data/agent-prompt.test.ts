@@ -22,13 +22,27 @@ describe("buildAgentPrompt — base context", () => {
 
 describe("buildAgentPrompt — the token guardrails", () => {
   // ⚠ These are the safety-relevant assertions. An agent that tells someone they
-  // can buy or profit from a token that does not exist is a mis-sale in a
-  // conversational wrapper, which is worse than the same claim on a page.
+  // can buy or profit from something they cannot buy or profit from is a
+  // mis-sale in a conversational wrapper, which is worse than the same claim on
+  // a page.
+  //
+  // The line these pin is TOKEN vs MARKET. Tokens are real and owned — posting
+  // is the mint (TOKENS.md) — so an earlier assertion here, that the prompt must
+  // say "There's no token yet", was pinning a claim the owner rejected as
+  // contradicting the model. What must stay unsayable is the MARKET: buying,
+  // selling, profit, and "worth more later".
 
-  it("instructs the agent that there is no token", () => {
+  it("forbids describing tokens as buyable or profitable", () => {
     const p = buildAgentPrompt("how do tokens work?");
     expect(p).toContain("NEVER describe tokens as something anyone can buy");
-    expect(p).toContain("There's no token yet");
+    expect(p).toContain("There's nowhere to trade them yet");
+  });
+
+  it("forbids the agent from denying that tokens exist", () => {
+    // Posting mints one. Saying otherwise is wrong, not cautious.
+    const p = buildAgentPrompt("do I own anything?");
+    expect(p).toContain('Never say "there is no token"');
+    expect(p).toContain("posting mints a token to you");
   });
 
   it("forbids investment framing", () => {
