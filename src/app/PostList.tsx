@@ -5,6 +5,7 @@ import { BootIcon } from "@/components/icons/BootIcon";
 import { useBootContext } from "@/contexts/BootContext";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useBoot } from "@/hooks/useBoot";
+import { FORK_POINT_ID } from "@/lib/fork-point";
 import type { Post } from "@/types";
 import { Manifesto } from "./Manifesto";
 import { PostContent } from "./PostContent";
@@ -319,6 +320,22 @@ export function PostList({
       <div className="divide-y divide-zinc-800/60">
         {posts.map((post, i) => (
           <Fragment key={post.id}>
+            {/* Fork boundary — everything above came from OpenCook, everything
+                below is OpenBook's own. Rendered before the first post past the
+                fork point, and only when the previous row is on the other side,
+                so it appears exactly once and only when the window spans it. */}
+            {post.id > FORK_POINT_ID && (i === 0 || posts[i - 1].id <= FORK_POINT_ID) && (
+              <div className="flex items-center gap-3 py-3">
+                <div className="flex-1 h-px bg-amber-500/30" />
+                <span className="text-[10px] font-medium uppercase tracking-wider text-amber-500/80 text-center leading-tight">
+                  OpenBook forks here
+                  <span className="block text-[9px] normal-case tracking-normal text-zinc-500">
+                    above: inherited from OpenCook
+                  </span>
+                </span>
+                <div className="flex-1 h-px bg-amber-500/30" />
+              </div>
+            )}
             {mode === "live" && firstUnreadId != null && post.id === firstUnreadId && (
               <div className="flex items-center gap-3 py-2">
                 <div className="flex-1 h-px bg-amber-500/50" />
