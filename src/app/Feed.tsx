@@ -8,6 +8,7 @@ import { InstallPitch } from "@/components/InstallPitch";
 import { IosStorageToast } from "@/components/IosStorageToast";
 import { SignInModal } from "@/components/SignInModal";
 import { SupportAddress } from "@/components/SupportAddress";
+import { FORK_POINT_ID, isInheritedPost } from "@/lib/fork-point";
 import { BootProvider, useBootContext } from "@/contexts/BootContext";
 import { IdentityProvider, useIdentityContext } from "@/contexts/IdentityContext";
 import { InstallProvider } from "@/contexts/InstallContext";
@@ -114,6 +115,17 @@ function FeedContent({
   const [olderPosts, setOlderPosts] = useState<Post[]>([]);
   // fewer than a full initial window ⇒ post #1 is already loaded (no older remain).
   const [liveHasMore, setLiveHasMore] = useState(() => initialPosts.length >= 100);
+  /**
+   * Whether the inherited OpenCook run-up is included in the feed.
+   *
+   * ⚠ FALSE BY DEFAULT AND THAT IS THE POINT. Posts up to the fork were written
+   * on another board by other people; showing them inline presents them as this
+   * board's own, which they are not. The ref shadows the state because the
+   * loaders below run from callbacks and observers that would otherwise close
+   * over a stale value — the same reason `liveHasMore` carries one.
+   */
+  const [showInherited, setShowInherited] = useState(false);
+  const showInheritedRef = useRef(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const olderLoadingRef = useRef(false); // synchronous in-flight lock
   const liveHasMoreRef = useRef(liveHasMore);
@@ -196,6 +208,7 @@ function FeedContent({
 
   // Keep synchronous refs in step for the async loadOlder callback + mode-switch reset.
   liveHasMoreRef.current = liveHasMore;
+  showInheritedRef.current = showInherited;
   olderPostsRef.current = olderPosts;
   oldestServerIdRef.current = oldestServerId;
   serverPostsRef.current = serverPosts;
@@ -252,7 +265,7 @@ function FeedContent({
     fwdLoadingRef.current = true;
     setIsLoadingForward(true);
     try {
-      const page = await getForwardPosts(cursor); // ASC
+      const page = await getForwardPosts(cursor, showInheritedRef.current); // ASC
       setOriginPosts((prev) => {
         const seen = new Set(prev.map((p) => p.id));
         return [...prev, ...page.filter((p) => !seen.has(p.id))];
@@ -295,9 +308,15 @@ function FeedContent({
     if (modeRef.current !== "live" || !landedRef.current) return; // never in origin / pre-landing
     const el = scrollRef.current;
     if (!el) return;
-    const cursor = olderPostsRef.current.length
-      ? olderPostsRef.current[0].id
-      : oldestServerIdRef.current;
+    // Oldest row currently on screen. With the inherited run-up revealed on a
+    // board that has NO posts of its own yet, there is no such row and no server
+    // cursor either — so fall back to the fork boundary, which is exactly "older
+    // than OpenBook's first post". Without this the reveal silently loads
+    // nothing on a fresh board, which is the state a new deploy is in.
+    const cursor =
+      olderPostsRef.current.length > 0
+        ? olderPostsRef.current[0].id
+        : oldestServerIdRef.current || (showInheritedRef.current ? FORK_POINT_ID + 1 : 0);
     if (!cursor || cursor <= 1) {
       setLiveHasMore(false);
       return;
@@ -305,7 +324,7 @@ function FeedContent({
     olderLoadingRef.current = true; // sync lock BEFORE the await
     setIsLoadingOlder(true);
     try {
-      const page = await getOlderPosts(cursor); // DESC, id < cursor, LIMIT 100
+      const page = await getOlderPosts(cursor, showInheritedRef.current); // DESC, LIMIT 100
       // Capture height synchronously, immediately before ANY above-viewport
       // mutation (prepend AND/OR the Genesis reveal). No await below — nothing
       // can interleave.
@@ -328,6 +347,68 @@ function FeedContent({
   useEffect(() => {
     loadOlderRef.current = loadOlder;
   }, [loadOlder]);
+
+  /**
+   * Show or hide the inherited OpenCook run-up above the fork marker.
+   *
+   * Showing re-opens the upward scroll: `liveHasMore` was set false when the
+   * feed reached OpenBook's first post, so it has to be reset or the sentinel
+   * will never fire again. Hiding drops the inherited rows back out and closes
+   * it again, so the two directions are symmetric and the feed cannot end up
+   * holding rows it is no longer meant to show.
+   *
+   * Both paths write the REF before the state, because `loadOlder` reads the ref
+   * and is invoked in the same tick — a state update would not have landed yet
+   * and the first page would come back with the wrong era filter.
+   */
+  const toggleInherited = useCallback(async () => {
+    const next = !showInheritedRef.current;
+    showInheritedRef.current = next;
+    setShowInherited(next);
+
+    if (!next) {
+      setOlderPosts((prev) => prev.filter((p) => !isInheritedPost(p.id)));
+      olderPostsRef.current = olderPostsRef.current.filter((p) => !isInheritedPost(p.id));
+      setLiveHasMore(false);
+      liveHasMoreRef.current = false;
+      return;
+    }
+
+    // ⚠ FETCHES DIRECTLY RATHER THAN CALLING `loadOlder`. That function is the
+    // SCROLL path and is gated on `landedRef` — the feed having completed its
+    // landing — which never becomes true on a board with no posts of its own.
+    // Routing an explicit click through a scroll guard meant the toggle flipped
+    // its label and loaded nothing, silently, in exactly the state a fresh
+    // deploy is in. A deliberate tap is not a scroll and should not inherit its
+    // preconditions.
+    const el = scrollRef.current;
+    const cursor =
+      olderPostsRef.current.length > 0
+        ? olderPostsRef.current[0].id
+        : oldestServerIdRef.current || FORK_POINT_ID + 1;
+    setIsLoadingOlder(true);
+    try {
+      const page = await getOlderPosts(cursor, true);
+      // Captured immediately before the prepend, same contract as loadOlder:
+      // the bottom-relative anchor keeps what the reader is looking at still.
+      if (el) prependPrevHeightRef.current = el.scrollHeight;
+      if (page.length === 0) {
+        setLiveHasMore(false);
+        liveHasMoreRef.current = false;
+        return;
+      }
+      const asc = [...page].reverse();
+      setOlderPosts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...asc.filter((p) => !seen.has(p.id)), ...prev];
+      });
+      const more = page.length === 100;
+      setLiveHasMore(more);
+      liveHasMoreRef.current = more;
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  }, [scrollRef]);
 
   // Bottom-relative anchor. Keyed on olderPosts AND liveHasMore so BOTH the
   // prepend commit and the sentinel→Genesis reveal commit are compensated. NOT
@@ -367,7 +448,7 @@ function FeedContent({
     if (fading) return;
     setFading(true);
     const started = Date.now();
-    const oldest = await getOldestPosts();
+    const oldest = await getOldestPosts(showInheritedRef.current);
     const wait = 220 - (Date.now() - started);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     setOriginPosts(oldest);
@@ -578,6 +659,8 @@ function FeedContent({
             isLoadingForward={isLoadingForward}
             topSentinelRef={topSentinelRef}
             liveHasMore={liveHasMore}
+            showInherited={showInherited}
+            onToggleInherited={toggleInherited}
             isLoadingOlder={isLoadingOlder}
             oldestServerId={oldestServerId}
             onBooted={refresh}

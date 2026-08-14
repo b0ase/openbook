@@ -715,6 +715,55 @@ namespace `ticker.ts` governs. `#` achieves that too, since `findTickers` requir
 **Not built.** Recorded so the taxonomy is fixed before anything mints. Nothing here changes the
 settled gate: minting of any kind ships WITH paid posting, never before it.
 
+## $Nym — every user is their own issuer (owner's proposal, 2026-08-14)
+
+**A user may claim a personal ticker — their `$Nym` — and every post they make mints one unit of
+it.** Nobody else can ever mint that symbol. It is the user printing their own currency: the
+supply is their own output, and what it is worth is entirely subjective. If somebody wants to buy
+some, the holder can sell. Owner's framing, recorded as given.
+
+**⚠ THE CRITICAL CLAUSE, AND IT IS NOT DECORATIVE: a token confers NOTHING.** It is not a claim
+on revenue, on the platform, on the user's future work, or on anything else — unless and until
+that user chooses to build something *contractually binding in script*. Until then it is a
+receipt that someone wrote something, and a name.
+
+This is worth stating precisely because it is what keeps the whole design out of the category it
+would otherwise fall into. An instrument that automatically entitles its holder to a share of
+someone's proceeds is a security nearly everywhere; a numbered receipt that entitles the holder
+to nothing is not. **The "confers nothing by default" rule is doing legal work, not just design
+work.** Anything that quietly attaches a default entitlement — a revenue share, a governance
+right, a promise of future value — moves the whole system across that line for every user at
+once. See also TOKENS.md's existing note that this must never feed allocation.
+
+### How it sits alongside thread tokens
+
+There are now two axes, and they are NOT the same thing:
+
+| | issuer | minted by | supply |
+|---|---|---|---|
+| **Thread token** (`$Parent`) | the thread | anyone participating in it | finite, depletes, then closes |
+| **Personal token** (`$Nym`) | one user | only that user, by posting | open-ended — their own output |
+
+### ⚠ OPEN — these need answering before anything is built
+
+1. **Does one post mint one token or two?** If posting in `$Parent`'s thread mints a `$Parent`
+   unit AND a `$Nym` unit, a single act issues two different instruments. That may be right — the
+   thread records participation, the nym records authorship — but it doubles the accounting and
+   needs to be a decision rather than an accident.
+2. **One namespace or two?** `ticker.ts` enforces globally unique symbols, first-claim-wins. If
+   nyms share that namespace then claiming `$Alice` as a nym also blocks `$Alice` as a thread
+   name. That is arguably correct (one name, one thing) but it means **nym-squatting is
+   thread-squatting**, and the reverse: someone can take the name a person would have chosen.
+3. **Is a nym claim reversible?** A thread name is permanent because a thread is permanent. A
+   person may want to change their handle. Permanent-and-unique is the safer default and matches
+   the existing rule, but it means a nym is a one-shot choice made by someone who has just
+   arrived.
+4. **What stops one user claiming many nyms** and printing several currencies? Nothing currently
+   would. Whether that matters depends on (1).
+
+**Not built.** The settled gate still applies: no minting of any kind ships before paid posting,
+because anything free that confers value destroys the anchor.
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,

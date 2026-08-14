@@ -18,6 +18,7 @@ import {
   POST_LOG_COST_SATS,
   recordDailySpend,
 } from "@/lib/server-spend-budget";
+import { FORK_POINT_ID } from "@/lib/fork-point";
 import { canonicalTicker, distinctTickers, isValidTicker, ROOT_TICKER } from "@/lib/ticker";
 import { generateAnonName } from "@/lib/utils";
 
@@ -615,15 +616,34 @@ const POST_SELECT = `
  */
 const ROOTS_ONLY = "p.parent_id IS NULL";
 
-export async function getPosts(beforeId?: number): Promise<Post[]> {
+/**
+ * Posts written ON OpenBook, excluding the inherited OpenCook history.
+ *
+ * ⚠ THE DEFAULT, DELIBERATELY. Posts 1..FORK_POINT_ID happened on OpenCook: other
+ * people's words, signed by them, anchored on-chain under `app: "opencook"`.
+ * Rendering them inline in this feed presents them as if they were said here,
+ * which they were not — the owner's objection, and a fair one. They are still
+ * reachable, behind an explicit toggle that labels them for what they are.
+ *
+ * Keeping them in the database rather than deleting them is the point: the fork
+ * is only checkable if the shared history is actually here. This hides them from
+ * the default view; it does not disown them.
+ */
+const OPENBOOK_ONLY = `p.id > ${FORK_POINT_ID}`;
+
+/** The era filter for a feed read. `true` includes the inherited OpenCook run-up. */
+function eraClause(includeInherited: boolean): string {
+  return includeInherited ? ROOTS_ONLY : `${ROOTS_ONLY} AND ${OPENBOOK_ONLY}`;
+}
+
+export async function getPosts(beforeId?: number, includeInherited = false): Promise<Post[]> {
+  const where = eraClause(includeInherited);
   if (beforeId !== undefined) {
     return db
-      .prepare(`${POST_SELECT} WHERE ${ROOTS_ONLY} AND p.id < ? ORDER BY p.id DESC LIMIT 100`)
+      .prepare(`${POST_SELECT} WHERE ${where} AND p.id < ? ORDER BY p.id DESC LIMIT 100`)
       .all(beforeId) as Post[];
   }
-  return db
-    .prepare(`${POST_SELECT} WHERE ${ROOTS_ONLY} ORDER BY p.id DESC LIMIT 100`)
-    .all() as Post[];
+  return db.prepare(`${POST_SELECT} WHERE ${where} ORDER BY p.id DESC LIMIT 100`).all() as Post[];
 }
 
 export async function getNewPosts(sinceId: number): Promise<Post[]> {
@@ -682,23 +702,31 @@ export async function getUpdatedPosts(knownIds: number[]): Promise<Post[]> {
     .all(...knownIds) as Post[];
 }
 
-export async function getOlderPosts(beforeId: number): Promise<Post[]> {
+export async function getOlderPosts(beforeId: number, includeInherited = false): Promise<Post[]> {
   if (!Number.isInteger(beforeId) || beforeId <= 0) return [];
-  return getPosts(beforeId);
+  return getPosts(beforeId, includeInherited);
 }
 
-/** Oldest 100 posts, ascending (id 1 first) — the ORIGIN window. */
-export async function getOldestPosts(): Promise<Post[]> {
+/**
+ * The oldest 100 posts, ascending — the ORIGIN window.
+ *
+ * By default this is OpenBook's OWN genesis (the first post after the fork), not
+ * post id 1. Jumping a new reader to the start of somebody else's board and
+ * calling it the beginning would misrepresent both projects.
+ */
+export async function getOldestPosts(includeInherited = false): Promise<Post[]> {
   return db
-    .prepare(`${POST_SELECT} WHERE ${ROOTS_ONLY} ORDER BY p.id ASC LIMIT 100`)
+    .prepare(`${POST_SELECT} WHERE ${eraClause(includeInherited)} ORDER BY p.id ASC LIMIT 100`)
     .all() as Post[];
 }
 
 /** Next 100 posts NEWER than afterId, ascending — ORIGIN mode reads forward. */
-export async function getForwardPosts(afterId: number): Promise<Post[]> {
+export async function getForwardPosts(afterId: number, includeInherited = false): Promise<Post[]> {
   if (!Number.isInteger(afterId) || afterId < 0) return [];
   return db
-    .prepare(`${POST_SELECT} WHERE ${ROOTS_ONLY} AND p.id > ? ORDER BY p.id ASC LIMIT 100`)
+    .prepare(
+      `${POST_SELECT} WHERE ${eraClause(includeInherited)} AND p.id > ? ORDER BY p.id ASC LIMIT 100`
+    )
     .all(afterId) as Post[];
 }
 

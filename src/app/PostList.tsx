@@ -5,7 +5,7 @@ import { BootIcon } from "@/components/icons/BootIcon";
 import { useBootContext } from "@/contexts/BootContext";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useBoot } from "@/hooks/useBoot";
-import { FORK_POINT_ID } from "@/lib/fork-point";
+import { FORK_POINT_ID, isInheritedPost } from "@/lib/fork-point";
 import type { Post } from "@/types";
 import { Manifesto } from "./Manifesto";
 import { PostContent } from "./PostContent";
@@ -224,6 +224,87 @@ function ReplyButton({
 
 // ── PostList ─────────────────────────────────────────────────────────────────
 
+/**
+ * Whether the fork marker belongs immediately above this row.
+ *
+ * True for the first OpenBook-era post in the window, and only when the row
+ * before it is on the other side — so it appears exactly once, and only when the
+ * loaded window actually spans the boundary.
+ */
+function isForkBoundary(posts: Post[], post: Post, i: number): boolean {
+  return post.id > FORK_POINT_ID && (i === 0 || posts[i - 1].id <= FORK_POINT_ID);
+}
+
+/**
+ * The fork boundary: everything above came from OpenCook, everything below is
+ * OpenBook's own.
+ *
+ * ⚠ ALSO RENDERED WHEN THE FEED IS EMPTY. It normally attaches above the first
+ * OpenBook-era post — but a board with no posts of its own yet has no such row,
+ * and then the toggle would be the only route to the inherited history AND
+ * absent. That is exactly the state a fresh deploy is in. See the empty-state
+ * branch in PostList.
+ */
+function ForkMarker({
+  showInherited,
+  onToggleInherited,
+}: {
+  showInherited?: boolean;
+  onToggleInherited?: () => void;
+}) {
+  return (
+    <div className="my-6 rounded-lg border border-amber-500/40 bg-gradient-to-b from-amber-500/10 to-transparent px-4 py-5 text-center">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex-1 h-px bg-amber-500/40" />
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-400">
+          The Fork
+        </span>
+        <div className="flex-1 h-px bg-amber-500/40" />
+      </div>
+      <p className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
+        <span className="text-amber-400">$Open</span>Book starts here
+      </p>
+      {/* The copy has to follow the toggle. "Everything above is inherited" is
+          simply false while the run-up is hidden — and it is hidden by default,
+          so the wrong version was the one almost everyone would have seen. */}
+      <p className="mt-2 text-[13px] text-zinc-400 leading-relaxed max-w-md mx-auto">
+        {showInherited ? (
+          <>
+            Everything above is inherited from <span className="text-zinc-300">OpenCook</span> — the
+            same posts, the same authors, the same signatures on-chain. Everything below is ours.
+          </>
+        ) : (
+          <>
+            This board starts here. What came before was written on{" "}
+            <span className="text-zinc-300">OpenCook</span> by other people — still on-chain, still
+            readable, but not shown as though it were said here.
+          </>
+        )}
+      </p>
+      <p className="mt-2 text-[11px] text-zinc-500">
+        We forked over one thing: being paid for a contribution isn't the same as owning a piece of
+        it.
+      </p>
+      {/* ⚠ THE RUN-UP IS HIDDEN BY DEFAULT, AND THIS IS THE ONLY WAY IN.
+                  Those posts were written on OpenCook by other people. Rendering
+                  them inline, unlabelled, presents them as things said HERE —
+                  which is not true, and not ours to imply. They stay in the
+                  database and stay reachable, because a fork you cannot check is
+                  just a claim; they simply do not masquerade as this board's
+                  own history. */}
+      {onToggleInherited && (
+        <button
+          type="button"
+          onClick={onToggleInherited}
+          className="mt-3 text-[11px] text-zinc-400 hover:text-amber-400 underline underline-offset-2 decoration-zinc-600 hover:decoration-amber-400/60 transition-colors"
+        >
+          {showInherited ? "Hide the run-up" : "Show the run-up on OpenCook that led here"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 interface PostListProps {
   posts: Post[];
   mode: "live" | "origin";
@@ -253,6 +334,10 @@ interface PostListProps {
   onOpenThread?: (rootId: number) => void;
   /** Open the thread a `$Ticker` in post text names. */
   onOpenTicker?: (symbol: string) => void;
+  /** True when the inherited OpenCook run-up is being shown above the fork. */
+  showInherited?: boolean;
+  /** Toggle the inherited run-up in and out of the feed. */
+  onToggleInherited?: () => void;
 }
 
 export function PostList({
@@ -277,6 +362,8 @@ export function PostList({
   freeBootsRemaining,
   onOpenThread,
   onOpenTicker,
+  showInherited,
+  onToggleInherited,
 }: PostListProps) {
   // Re-render every 60s to keep timeAgo labels fresh
   const [, setTick] = useState(0);
@@ -312,9 +399,15 @@ export function PostList({
       )}
 
       {posts.length === 0 && (
-        <p className="py-16 text-center text-sm text-zinc-600">
-          No posts yet. Be the first to share an idea.
-        </p>
+        <>
+          <p className="py-16 text-center text-sm text-zinc-600">
+            No posts yet. Be the first to share an idea.
+          </p>
+          {/* No OpenBook post exists yet, so no row can carry the boundary — and
+              without this the inherited history would be unreachable on a board
+              that has not been posted to. */}
+          <ForkMarker showInherited={showInherited} onToggleInherited={onToggleInherited} />
+        </>
       )}
 
       <div className="divide-y divide-zinc-800/60">
@@ -324,28 +417,8 @@ export function PostList({
                 below is OpenBook's own. Rendered before the first post past the
                 fork point, and only when the previous row is on the other side,
                 so it appears exactly once and only when the window spans it. */}
-            {post.id > FORK_POINT_ID && (i === 0 || posts[i - 1].id <= FORK_POINT_ID) && (
-              <div className="my-6 rounded-lg border border-amber-500/40 bg-gradient-to-b from-amber-500/10 to-transparent px-4 py-5 text-center">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex-1 h-px bg-amber-500/40" />
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-400">
-                    The Fork
-                  </span>
-                  <div className="flex-1 h-px bg-amber-500/40" />
-                </div>
-                <p className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
-                  <span className="text-amber-400">$Open</span>Book starts here
-                </p>
-                <p className="mt-2 text-[13px] text-zinc-400 leading-relaxed max-w-md mx-auto">
-                  Everything above is inherited from <span className="text-zinc-300">OpenCook</span>{" "}
-                  — the same posts, the same authors, the same signatures on-chain. Everything below
-                  is ours.
-                </p>
-                <p className="mt-2 text-[11px] text-zinc-500">
-                  We forked over one thing: being paid for a contribution isn't the same as owning a
-                  piece of it.
-                </p>
-              </div>
+            {isForkBoundary(posts, post, i) && (
+              <ForkMarker showInherited={showInherited} onToggleInherited={onToggleInherited} />
             )}
             {mode === "live" && firstUnreadId != null && post.id === firstUnreadId && (
               <div className="flex items-center gap-3 py-2">
@@ -373,9 +446,20 @@ export function PostList({
                     post={post}
                     onOpenTicker={onOpenTicker}
                     badge={
-                      /* The very first post = topmost row when nothing older remains
-                         (ORIGIN always; LIVE once post #1 is reached). No server round-
-                         trip — derived from props PostList already has. */
+                      /* ⚠ AN INHERITED POST IS LABELLED BEFORE ANYTHING ELSE. These
+                         rows are other people's words, written on another board.
+                         Whatever else a row might be, saying WHERE it came from
+                         outranks it — an unlabelled OpenCook post in this feed is
+                         the misrepresentation the toggle exists to prevent. */
+                      isInheritedPost(post.id) ? (
+                        <span
+                          className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500 border border-zinc-700 rounded px-1 py-px shrink-0"
+                          title="Written on OpenCook, before the fork — reproduced here, not written here"
+                        >
+                          OpenCook
+                        </span>
+                      ) : /* The first post of OpenBook's own timeline, once nothing
+                             newer-side remains above it. */
                       i === 0 && (mode === "origin" || (mode === "live" && !liveHasMore)) ? (
                         <span
                           className="text-[9px] font-semibold uppercase tracking-wider text-amber-400/80 border border-amber-500/30 rounded px-1 py-px shrink-0"
