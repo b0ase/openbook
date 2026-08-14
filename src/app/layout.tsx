@@ -56,8 +56,7 @@ export const metadata: Metadata = {
   // launch — keeps a rough opencook.fun out of Google). Going public = set that
   // env var, no code change. See LAUNCH_CHECKLIST Stage 4. Kept in sync with
   // app/robots.ts.
-  robots:
-    process.env.ALLOW_INDEXING === "true" ? undefined : { index: false, follow: false },
+  robots: process.env.ALLOW_INDEXING === "true" ? undefined : { index: false, follow: false },
 };
 
 export default function RootLayout({

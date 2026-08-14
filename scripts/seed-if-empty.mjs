@@ -73,7 +73,9 @@ function copySeed() {
     // Never let a seed failure crash startup — log and let the app boot (it'll
     // create an empty DB, and the next redeploy re-attempts the seed since the
     // count is still 0). Self-healing.
-    console.error(`[seed] Seed copy FAILED: ${err instanceof Error ? err.message : String(err)} — starting as-is.`);
+    console.error(
+      `[seed] Seed copy FAILED: ${err instanceof Error ? err.message : String(err)} — starting as-is.`
+    );
   }
 }
 
