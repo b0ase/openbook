@@ -4,6 +4,7 @@ import { LinkPreviewCard } from "@/components/LinkPreviewCard";
 import { MediaEmbed } from "@/components/MediaEmbed";
 import { findUrls } from "@/lib/linkify";
 import { firstMedia } from "@/lib/media";
+import { titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
 import { PostText } from "./PostText";
@@ -37,7 +38,15 @@ export function PostContent({
   return (
     <>
       <div className="flex items-center gap-2 text-xs text-zinc-500">
-        <span className="font-medium text-zinc-300">{post.author_name}</span>
+        {/* A claimed $Nym IS the author's name — it replaces the generated
+            anon_xxxx handle rather than sitting beside it. Amber marks it as a
+            claimed name (the same treatment tickers get everywhere else), which
+            is also what distinguishes it from an unclaimed handle at a glance. */}
+        {post.author_nym ? (
+          <span className="font-medium text-amber-400">${titleCaseTicker(post.author_nym)}</span>
+        ) : (
+          <span className="font-medium text-zinc-300">{post.author_name}</span>
+        )}
         {badge}
         {post.signature && (
           <span

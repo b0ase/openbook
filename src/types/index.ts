@@ -18,6 +18,14 @@ export interface PostRow {
   id: number;
   content: string;
   author_name: string;
+  /**
+   * The author's claimed `$Nym`, canonical (uppercase, no `$`), or null while
+   * they are still anonymous. Joined live from `nyms` — see POST_SELECT — so it
+   * is the name the author goes by NOW, not the one current when they posted.
+   * Renderers show this INSTEAD OF `author_name` when present; `author_name`
+   * remains the generated `anon_xxxx` fallback.
+   */
+  author_nym: string | null;
   signature: string | null;
   pubkey: string | null;
   tx_id: string | null;

@@ -13,6 +13,7 @@ import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useInstallContext } from "@/contexts/InstallContext";
 import { satsToDollars, useBsvPrice } from "@/hooks/useBsvPrice";
 import { useCurrencyMode } from "@/hooks/useCurrencyMode";
+import { readCachedNym, writeCachedNym } from "@/lib/nym-cache";
 import { formatShare } from "@/lib/share";
 import { titleCaseTicker } from "@/lib/ticker";
 import {
@@ -30,49 +31,6 @@ import { FundAddress } from "./FundAddress";
 const BACKED_UP_KEY = "opencook_identity_backed_up";
 const PASSPHRASE_NUDGE_DISMISSED_UNTIL_KEY = "opencook_passphrase_nudge_dismissed_until";
 const PASSPHRASE_NUDGE_BACKOFF_DAYS = 30;
-
-const NYM_KEY = "opencook_nym";
-
-/**
- * Cache of the identity's public name, so the chip can render it on first paint.
- *
- * `getNym` is a server round-trip, and without a cache the chip renders
- * `anon_xxxx` first and swaps to `$Harry` when the lookup lands — a visible flip
- * on every load, and the anon name is exactly what the user chose a nym to stop
- * seeing. It also lets the LOCKED chip show the nym, matching how the locked
- * chip already falls back to `getStoredAnonName()`.
- *
- * ⚠ Stored WITH its pubkey. Restoring a different identity on this device would
- * otherwise show the previous holder's name; on a mismatch the cache is ignored
- * and the fresh `getNym` overwrites it. When locked there is no pubkey to check
- * against, so the cache is trusted — the same assumption `getStoredAnonName()`
- * already makes, and it self-corrects on unlock.
- */
-function readCachedNym(pubkey?: string): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(NYM_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { pubkey?: unknown; symbol?: unknown };
-    if (typeof parsed.symbol !== "string" || !parsed.symbol) return null;
-    if (pubkey && parsed.pubkey !== pubkey) return null;
-    return parsed.symbol;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedNym(pubkey: string, symbol: string | null): void {
-  try {
-    if (symbol) {
-      window.localStorage.setItem(NYM_KEY, JSON.stringify({ pubkey, symbol }));
-    } else {
-      window.localStorage.removeItem(NYM_KEY);
-    }
-  } catch {
-    // Private mode / quota — the nym still renders this session from state.
-  }
-}
 
 function isPassphraseNudgeSuppressed(): boolean {
   if (typeof window === "undefined") return false;

@@ -189,6 +189,13 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   // the event loop happened to favour.
   registerTickers(postId, rootId ?? postId, parentId, content.trim(), pubkey);
 
+  // Record the mention edges this post creates. Separate from the claim above:
+  // claiming is first-wins and most mentions claim nothing, but EVERY mention
+  // counts toward supply — including one of a name somebody else already holds,
+  // and including one of a RESERVED name, which claims nothing but was still
+  // said. See TOKENS.md "a tag is a MENTION WITH A TARGET".
+  recordTickerMentions(postId, content.trim(), pubkey);
+
   // Fire-and-forget: log on-chain, update tx_id if successful
   const trimmedContent = content.trim();
   const sigStr = typeof signature === "string" ? signature : null;
@@ -236,6 +243,39 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
  * `symbol` rejects a later claimant silently, so no read-then-write race exists
  * and no application-level check is needed.
  */
+/**
+ * Record the untargeted mention edges a post's text creates.
+ *
+ * ⚠ NEVER THROWS INTO THE POST PATH. A mention is a derived record; the post and
+ * its on-chain anchor are the durable facts. Failing the insert must not fail
+ * the post — the same reasoning that makes `registerTickers` swallow its errors.
+ *
+ * Targeted edges (`target_type` 'post' / 'ticker' — tagging) are NOT written
+ * here and have no writer yet: tagging is gated on paid posting. The columns
+ * exist so that gate opens onto a schema that already fits.
+ */
+function recordTickerMentions(
+  postId: number,
+  content: string,
+  pubkey: FormDataEntryValue | null
+): void {
+  try {
+    const symbols = distinctTickers(content);
+    if (!symbols.length) return;
+    const pk = typeof pubkey === "string" ? pubkey : null;
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO ticker_mentions (symbol, post_id, pubkey, target_type)
+       VALUES (?, ?, ?, 'none')`
+    );
+    const all = db.transaction(() => {
+      for (const symbol of symbols) insert.run(symbol, postId, pk);
+    });
+    all();
+  } catch (e) {
+    console.error("OpenBooks: failed to record ticker mentions", e);
+  }
+}
+
 function registerTickers(
   postId: number,
   rootId: number,
@@ -750,15 +790,28 @@ export async function getTickerSupply(symbols: string[]): Promise<Record<string,
   const wanted = [...new Set(symbols.map(canonicalTicker).filter(isValidTicker))].slice(0, 200);
   if (!wanted.length) return {};
 
+  // Reads the mention edge table (see applyTickerMentionMigration), NOT a
+  // `LIKE '%$SYM%'` scan of post content.
+  //
+  // ⚠ THE SCAN IT REPLACED WAS CAPPED AT `LIMIT 500` AND SILENTLY WRONG ABOVE
+  // IT. Supply is what ranks the public index, so the most-named tickers — the
+  // ones the cap actually bit — were exactly the ones reported inaccurately.
+  // It was also one query per symbol; this is one query for all of them.
+  //
+  // One unit per POST is enforced in the schema now (a partial unique index on
+  // `(post_id, symbol)`), rather than by de-duplicating rows after reading them.
   const out: Record<string, number> = {};
-  const stmt = db.prepare("SELECT content FROM posts WHERE UPPER(content) LIKE ? LIMIT 500");
-  for (const sym of wanted) {
-    const rows = stmt.all(`%$${sym}%`) as { content: string }[];
-    // One unit per POST, not per mention: writing `$branch $branch` in one post
-    // is one contribution, and counting the repetition would let anyone inflate
-    // a figure readers treat as significance just by typing.
-    const n = rows.filter((r) => distinctTickers(r.content).includes(sym)).length;
-    if (n > 0) out[sym] = n;
+  const placeholders = wanted.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT symbol, COUNT(*) AS n
+         FROM ticker_mentions
+        WHERE symbol IN (${placeholders})
+        GROUP BY symbol`
+    )
+    .all(...wanted) as { symbol: string; n: number }[];
+  for (const r of rows) {
+    if (r.n > 0) out[r.symbol] = r.n;
   }
   return out;
 }
@@ -939,7 +992,8 @@ const POST_SELECT = `
          lp.description as preview_description,
          lp.image_url   as preview_image,
          lp.site_name   as preview_site_name,
-         lp.status      as preview_status
+         lp.status      as preview_status,
+         ny.symbol      as author_nym
   FROM posts p
   LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
     ON bc.post_id = p.id
@@ -949,6 +1003,15 @@ const POST_SELECT = `
     ON rc.root_id = p.id
   LEFT JOIN link_previews lp
     ON lp.url_hash = p.preview_hash
+  -- The author's public name, joined LIVE rather than denormalised onto the
+  -- post. The nyms table holds one row per identity — the name it goes by NOW — so
+  -- adopting a new name reprints every post under it, which is what the claim
+  -- flow already promises: "you keep the old name, it just stops being the one
+  -- you show". Denormalising would freeze each post under whatever name was
+  -- current when it was written, and the board would show one person under
+  -- several names.
+  LEFT JOIN nyms ny
+    ON ny.pubkey = p.pubkey
 `;
 
 /**

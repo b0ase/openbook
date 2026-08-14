@@ -14,6 +14,7 @@ import { InstallProvider } from "@/contexts/InstallContext";
 import { useFeedPolling } from "@/hooks/useFeedPolling";
 import { useScrollTracker } from "@/hooks/useScrollTracker";
 import { FORK_POINT_ID, isInheritedPost } from "@/lib/fork-point";
+import { readCachedNym } from "@/lib/nym-cache";
 import { distinctTickers, parseTickerPath, ROOT_TICKER, tickerSlug } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { BootboardData, Post } from "@/types";
@@ -43,6 +44,13 @@ interface OptimisticPost {
   id: number; // temporary timestamp ID
   content: string;
   author_name: string;
+  /**
+   * The poster's `$Nym`, read from the local cache rather than the server.
+   * Without it a brand-new post renders under `anon_xxxx` and flips to the nym
+   * ~500ms later when the feed poll returns the real row — the one place the
+   * user is guaranteed to be looking.
+   */
+  author_nym?: string | null;
   created_at: string;
   failed?: boolean;
   failReason?: string;
@@ -191,6 +199,7 @@ function FeedContent({
           id: tempId,
           content,
           author_name: author,
+          author_nym: readCachedNym(identity?.pubkey),
           created_at: new Date().toISOString(),
         },
         ...prev,
@@ -198,7 +207,7 @@ function FeedContent({
       // Poll 500ms after posting to confirm quickly
       setTimeout(refresh, 500);
     },
-    [refresh]
+    [refresh, identity?.pubkey]
   );
 
   // Decrement local free boots count after a free boot is used.

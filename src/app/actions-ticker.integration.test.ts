@@ -42,6 +42,7 @@ import {
   createPost,
   getNym,
   getNyms,
+  getPosts,
   getThread,
   getTickerPath,
   getTickerSupply,
@@ -626,5 +627,178 @@ describe("reserved names — insurance, not censorship", () => {
     const out = await reserveTickers(["", "  ", "1bad", "$"]);
     expect(out.reserved).toEqual([]);
     expect(await releaseTickers([])).toBe(0);
+  });
+});
+
+/**
+ * The mention edge — `(from_post, ticker, target)`.
+ *
+ * Supply is what ranks the public index, so these tests exist to prove the
+ * COUNT is right at the edges where the old `LIKE '%$SYM%' LIMIT 500` content
+ * scan was not, and to pin the target discriminator that tagging will use
+ * before there is any tagging UI to exercise it.
+ */
+describe("ticker mentions — the (from_post, ticker, target) edge", () => {
+  it("counts ONE unit per post, however many times a name is repeated in it", async () => {
+    await post("$MEMEPLEX $MEMEPLEX $MEMEPLEX all at once");
+
+    const supply = await getTickerSupply(["MEMEPLEX"]);
+    // Counting repetition would let anyone inflate a figure readers treat as
+    // significance just by typing the same word again.
+    expect(supply.MEMEPLEX).toBe(1);
+  });
+
+  it("counts one unit per post that names it, across posts", async () => {
+    await post("$MEMEPLEX");
+    await post("$MEMEPLEX again");
+    await post("$MEMEPLEX once more");
+
+    expect((await getTickerSupply(["MEMEPLEX"])).MEMEPLEX).toBe(3);
+  });
+
+  it("counts a mention of a RESERVED name — it claimed nothing, but it was said", async () => {
+    reserveTickers(["WATER"]);
+    await post("a post about $WATER");
+
+    // The claim is refused (that is the reservation), but the mention happened
+    // and supply must reflect what people actually wrote.
+    expect((await resolveTickers(["WATER"])).WATER).toBeUndefined();
+    expect((await getTickerSupply(["WATER"])).WATER).toBe(1);
+  });
+
+  it("counts past 500 posts — the old content scan was silently capped there", async () => {
+    const insert = db.prepare(
+      "INSERT INTO posts (content, author_name, pubkey) VALUES (?, 'anon_bulk', 'pk_bulk')"
+    );
+    const mention = db.prepare(
+      `INSERT OR IGNORE INTO ticker_mentions (symbol, post_id, pubkey, target_type)
+       VALUES ('BULK', ?, 'pk_bulk', 'none')`
+    );
+    db.transaction(() => {
+      for (let i = 0; i < 620; i++) mention.run(insert.run(`$BULK ${i}`).lastInsertRowid as number);
+    })();
+
+    expect((await getTickerSupply(["BULK"])).BULK).toBe(620);
+  });
+
+  it("stores an untargeted mention for prose — the `none` case", async () => {
+    await post("$SEO matters");
+    const row = db.prepare("SELECT * FROM ticker_mentions WHERE symbol = 'SEO'").get() as {
+      target_type: string;
+      target_post_id: number | null;
+      target_symbol: string | null;
+    };
+    expect(row.target_type).toBe("none");
+    expect(row.target_post_id).toBeNull();
+    expect(row.target_symbol).toBeNull();
+  });
+
+  it("accepts both target kinds — a tag on a post and a tag on a ticker", async () => {
+    await post("$MEMEPLEX");
+    const target = lastId();
+    await post("tagging it");
+    const from = lastId();
+
+    // No writer for these yet (tagging is gated on paid posting); the schema
+    // has to accept them so that gate opens onto a table that already fits.
+    db.prepare(
+      `INSERT INTO ticker_mentions (symbol, post_id, pubkey, target_type, target_post_id)
+       VALUES ('PROFOUND', ?, 'pk_tagger', 'post', ?)`
+    ).run(from, target);
+    db.prepare(
+      `INSERT INTO ticker_mentions (symbol, post_id, pubkey, target_type, target_symbol)
+       VALUES ('PRETENTIOUS', ?, 'pk_tagger', 'ticker', 'MEMEPLEX')`
+    ).run(from);
+
+    expect(await getTickerSupply(["PROFOUND", "PRETENTIOUS"])).toEqual({
+      PROFOUND: 1,
+      PRETENTIOUS: 1,
+    });
+  });
+
+  it("rejects a target that contradicts its own type", async () => {
+    await post("$MEMEPLEX");
+    const id = lastId();
+
+    // 'none' carrying a target, and 'post' carrying none — both incoherent, and
+    // the CHECK is what stops a half-written edge from ever landing.
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO ticker_mentions (symbol, post_id, target_type, target_post_id)
+           VALUES ('X', ?, 'none', ?)`
+        )
+        .run(id, id)
+    ).toThrow();
+    expect(() =>
+      db
+        .prepare(
+          "INSERT INTO ticker_mentions (symbol, post_id, target_type) VALUES ('X', ?, 'post')"
+        )
+        .run(id)
+    ).toThrow();
+  });
+
+  it("lets one post tag two different posts with the SAME name", async () => {
+    await post("first");
+    const a = lastId();
+    await post("second");
+    const b = lastId();
+    await post("the tagger");
+    const from = lastId();
+
+    const tag = db.prepare(
+      `INSERT OR IGNORE INTO ticker_mentions (symbol, post_id, target_type, target_post_id)
+       VALUES ('COOL', ?, 'post', ?)`
+    );
+    tag.run(from, a);
+    tag.run(from, b);
+    tag.run(from, a); // duplicate of the first — must not add a second unit
+
+    // Two units: the same name pointed at two different posts is two separate
+    // acts, while re-tagging the same post is one.
+    expect((await getTickerSupply(["COOL"])).COOL).toBe(2);
+  });
+});
+
+describe("the feed shows a claimed $Nym instead of anon_xxxx", () => {
+  it("carries the author's nym on every post they have ever written", async () => {
+    const key = PrivateKey.fromRandom();
+    const pubkey = key.toPublicKey().toString();
+    const sign = (c: string) =>
+      key.sign(Array.from(new TextEncoder().encode(c))).toDER("hex") as string;
+
+    async function write(content: string) {
+      const fd = new FormData();
+      fd.set("content", content);
+      fd.set("author", "anon_before");
+      fd.set("pubkey", pubkey);
+      fd.set("signature", sign(content));
+      return createPost(fd);
+    }
+
+    // Posted BEFORE the nym exists — the join is live, so claiming a name later
+    // renames the back catalogue too. That is what the claim flow promises.
+    await write("written while still anonymous");
+
+    const nymFd = new FormData();
+    const nymContent = "I'm $B0ase";
+    nymFd.set("symbol", "B0ASE");
+    nymFd.set("content", nymContent);
+    nymFd.set("author", "anon_before");
+    nymFd.set("pubkey", pubkey);
+    nymFd.set("signature", sign(nymContent));
+    expect((await claimNym(nymFd)).ok).toBe(true);
+
+    const posts = await getPosts();
+    const mine = posts.filter((p) => p.pubkey === pubkey);
+    expect(mine.length).toBeGreaterThan(0);
+    for (const p of mine) expect(p.author_nym).toBe("B0ASE");
+  });
+
+  it("leaves author_nym null for an identity that has not claimed one", async () => {
+    await post("no name here");
+    const posts = await getPosts();
+    expect(posts[0].author_nym).toBeNull();
   });
 });

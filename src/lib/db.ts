@@ -1,6 +1,6 @@
 import path from "node:path";
 import Database from "better-sqlite3";
-import { isRootTicker, ROOT_TICKER } from "./ticker";
+import { distinctTickers, isRootTicker, ROOT_TICKER } from "./ticker";
 
 let db: ReturnType<typeof Database>;
 
@@ -174,6 +174,117 @@ export function applyReservedTickerMigration(database: Db): void {
       reserved_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+}
+
+/**
+ * The mention edge — `(from_post, ticker, target)`, the shape settled in
+ * TOKENS.md *"Tagging: a tag is a MENTION WITH A TARGET"*.
+ *
+ * ⚠ THE TARGET COLUMNS ARE THE POINT, and they are built before the feature
+ * that uses them. A tag is not a fourth primitive: an inline `$TICKER` in prose
+ * is the `target_type = 'none'` case, tagging a post is `'post'`, and tagging a
+ * ticker (`$MEMEPLEX ($PRETENTIOUS)`) is `'ticker'`. Adding the discriminator
+ * now is one table; retrofitting a second target type onto a populated edge
+ * table later is a migration over live data.
+ *
+ * ⚠ TAGGING ITSELF STAYS GATED ON PAID POSTING. This is schema only — nothing
+ * writes a targeted row yet. Free tags would put `$COOL` on everything within a
+ * day and the units could never be recalled (*anything free that confers value
+ * destroys the anchor*).
+ *
+ * Replaces a `LIKE '%$SYM%'` scan of post content that was **silently capped at
+ * 500 rows**, so a widely-named ticker's supply was wrong — and supply is what
+ * ranks the public index.
+ *
+ * ONE UNIT PER POST PER TARGET, enforced by partial unique indexes rather than a
+ * table-level UNIQUE: SQLite treats NULLs as distinct, so a plain
+ * `UNIQUE(post_id, symbol, target_post_id, target_symbol)` would NOT dedupe the
+ * untargeted rows — writing `$branch $branch` in one post would count twice, and
+ * counting repetition lets anyone inflate a figure readers treat as significance
+ * just by typing.
+ */
+export function applyTickerMentionMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ticker_mentions (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      symbol         TEXT NOT NULL,
+      -- ON DELETE CASCADE on BOTH post references: an edge is meaningless
+      -- without the post that made it or the post it points AT. Production
+      -- never deletes a post (permanence is the product), so this is inert
+      -- there — it exists so the edge table can never hold dangling rows.
+      post_id        INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+      pubkey         TEXT,
+      target_type    TEXT NOT NULL DEFAULT 'none'
+                       CHECK (target_type IN ('none', 'post', 'ticker')),
+      target_post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+      target_symbol  TEXT,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      CHECK (
+        (target_type = 'none'   AND target_post_id IS NULL     AND target_symbol IS NULL) OR
+        (target_type = 'post'   AND target_post_id IS NOT NULL AND target_symbol IS NULL) OR
+        (target_type = 'ticker' AND target_post_id IS NULL     AND target_symbol IS NOT NULL)
+      )
+    )
+  `);
+
+  // One unit per post per target — see the note above on why these are partial
+  // indexes and not a table-level UNIQUE.
+  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_mentions_uniq_none
+                   ON ticker_mentions(post_id, symbol) WHERE target_type = 'none'`);
+  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_mentions_uniq_post
+                   ON ticker_mentions(post_id, symbol, target_post_id) WHERE target_type = 'post'`);
+  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_mentions_uniq_ticker
+                   ON ticker_mentions(post_id, symbol, target_symbol) WHERE target_type = 'ticker'`);
+
+  // Supply ("how many posts named this") is the hot read — it ranks /tickers.
+  database.exec("CREATE INDEX IF NOT EXISTS idx_mentions_symbol ON ticker_mentions(symbol)");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_mentions_post ON ticker_mentions(post_id)");
+  // "Which tags does this post carry" — the read the tag UI will need.
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_mentions_target_post ON ticker_mentions(target_post_id)"
+  );
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_mentions_target_symbol ON ticker_mentions(target_symbol)"
+  );
+
+  backfillTickerMentions(database);
+}
+
+/**
+ * One-time backfill of untargeted mentions from existing post content.
+ *
+ * ⚠ Guarded on the table being EMPTY, not on a per-post check. `createPost`
+ * records mentions going forward, so this only ever needs to run once — and the
+ * degenerate case it re-runs on (a board where no post has ever named a ticker)
+ * is a scan of a board with no tickers in it, which costs nothing.
+ *
+ * Parsed with `distinctTickers`, the SAME rule the renderer and the registry
+ * use. Deriving mentions from a second pattern here is precisely how the stored
+ * edges would drift from what readers see and from what gets CLAIMED.
+ */
+export function backfillTickerMentions(database: Db): void {
+  const existing = database.prepare("SELECT 1 FROM ticker_mentions LIMIT 1").get();
+  if (existing) return;
+
+  const posts = database.prepare("SELECT id, content, pubkey FROM posts").all() as {
+    id: number;
+    content: string;
+    pubkey: string | null;
+  }[];
+  if (!posts.length) return;
+
+  const insert = database.prepare(
+    `INSERT OR IGNORE INTO ticker_mentions (symbol, post_id, pubkey, target_type)
+     VALUES (?, ?, ?, 'none')`
+  );
+  const run = database.transaction(() => {
+    for (const p of posts) {
+      for (const symbol of distinctTickers(p.content)) {
+        insert.run(symbol, p.id, p.pubkey);
+      }
+    }
+  });
+  run();
 }
 
 export function applyTickerMigration(database: Db): void {
@@ -395,6 +506,9 @@ try {
 
   // Ticker registry — first claim wins.
   applyTickerMigration(db);
+  // The mention edge — must come AFTER posts + tickers exist, since it
+  // references posts(id) and backfills from post content.
+  applyTickerMentionMigration(db);
   applyNymMigration(db);
   applyReservedTickerMigration(db);
 

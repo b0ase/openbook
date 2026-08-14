@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIdentityContext } from "@/contexts/IdentityContext";
+import { readCachedNym } from "@/lib/nym-cache";
 import { formatShare } from "@/lib/share";
 import { distinctTickers, isRootTicker, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
@@ -42,6 +43,8 @@ interface OptimisticReply {
   id: number;
   content: string;
   author_name: string;
+  /** See Feed's OptimisticPost — the same anon_xxxx flash applies to replies. */
+  author_nym?: string | null;
   created_at: string;
   failed?: boolean;
   failReason?: string;
@@ -174,13 +177,19 @@ export function ThreadView({
     (content: string, author: string, tempId: number) => {
       setOptimistic((prev) => [
         ...prev,
-        { id: tempId, content, author_name: author, created_at: new Date().toISOString() },
+        {
+          id: tempId,
+          content,
+          author_name: author,
+          author_nym: readCachedNym(identity?.pubkey),
+          created_at: new Date().toISOString(),
+        },
       ]);
       setTimeout(() => {
         void refresh();
       }, 500);
     },
-    [refresh]
+    [refresh, identity?.pubkey]
   );
 
   const handleReplyRejected = useCallback((tempId: number, reason?: string) => {

@@ -2,6 +2,43 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-14 (mention edge + nym display) — the target column, and $Nym everywhere
+
+- **Category: schema, token model, UI.**
+- **`ticker_mentions` — the `(from_post, ticker, target)` edge is BUILT** (`applyTickerMentionMigration`).
+  There was no edge table at all: supply was a `LIKE '%$SYM%'` scan of post content, **silently
+  capped at `LIMIT 500`** — so the most-named tickers, the ones that rank `/tickers`, were exactly
+  the ones counted wrong. Now one grouped query for all symbols.
+  - `target_type ∈ {'none','post','ticker'}` with CHECK constraints tying each type to its column.
+    Inline `$TICKER` in prose is the `'none'` case. **Nothing writes a targeted row yet — tagging
+    stays gated on paid posting.** The columns exist so that gate opens onto a fitting schema.
+  - **One unit per post per target enforced by PARTIAL unique indexes, not a table-level UNIQUE:**
+    SQLite treats NULLs as distinct, so `UNIQUE(post_id, symbol, target_post_id, target_symbol)`
+    would NOT dedupe untargeted rows and `$branch $branch` would count twice.
+  - **`ON DELETE CASCADE` on both post FKs.** Production never deletes a post, but without it every
+    existing test teardown that does `DELETE FROM posts` fails on the FK (52 tests did).
+  - One-time backfill from post content, guarded on the table being empty, parsed with
+    `distinctTickers` — the SAME rule the renderer and registry use.
+  - ⚠ **Live supply numbers may shift**, upward, wherever the 500 cap was biting. That is the fix.
+- **A claimed `$Nym` now displays everywhere the identity does.** `displayName` in `IdentityBar`
+  only resolved `identity.name ?? getStoredAnonName()`, so the chip still said `anon_xxxx`; and the
+  feed author line had no nym at all. Added `author_nym` to `POST_SELECT` via a **live** `LEFT JOIN
+  nyms` — adopting a new name reprints the back catalogue under it, which is exactly what the claim
+  copy promises ("you keep the old name, it just stops being the one you show"). Denormalising
+  would show one person under several names.
+- **`src/lib/nym-cache.ts` (new)** — `readCachedNym(pubkey?)` / `writeCachedNym`. Two consumers
+  justified extracting it from IdentityBar: the chip on first paint (and while LOCKED, where there
+  is no pubkey to look up), and **optimistic posts/replies**, which render from client state ~500ms
+  before the poll returns the real row — without it a brand-new post flashes `anon_xxxx` in the one
+  place the user is guaranteed to be looking. Cache stores the pubkey so a restored identity cannot
+  show the previous holder's name.
+- **Tests: 166 integration** (+10). The edge's constraints are pinned before any UI exercises them:
+  repeat-in-one-post counts 1, a reserved name still counts as a mention, past-500 counting, both
+  target kinds accepted, contradictory targets rejected, one post tagging two posts with the same
+  name = 2 units. Plus the live nym join, including a post written BEFORE the claim.
+- Bug caught in passing: backticks around a table name inside the `POST_SELECT` **template
+  literal** terminated the string. Fixed; `tsc` caught it.
+
 ## 2026-08-14 (tagging) — the tag model, and what a post-token's ID actually is
 
 - **Category: token model (docs only — no code changed).**
