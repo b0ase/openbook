@@ -260,3 +260,72 @@ describe("branch points stay visible in the parent thread", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+describe("a repeat mention is an INVOCATION, not a claim", () => {
+  // The owner's rule: "a duplicate ticker is only an invocation of the first
+  // instance". First mention founds the token; every later one cites it. This is
+  // enforced by `res.changes > 0` — `INSERT OR IGNORE` reports no change when the
+  // name is taken, so `claimedAny` stays false and nothing is re-rooted.
+  //
+  // Under the settled citation model this second mention is exactly what would
+  // mint the quoter a unit of the first post's token — once posting costs money.
+  // See TOKENS.md; do not build that here.
+
+  it("does not re-root the post that merely cites an existing ticker", async () => {
+    expect((await post("founding $Branch")).ok).toBe(true);
+    const founder = lastId();
+
+    // A REPLY citing the same name. If a citation were treated as a claim, this
+    // would be re-rooted to itself and silently leave the thread it was written
+    // in — which is what "hoisted by the second instance" looks like.
+    expect((await post("still talking about $Branch", founder)).ok).toBe(true);
+    const citer = lastId();
+
+    const row = db.prepare("SELECT root_id, parent_id FROM posts WHERE id = ?").get(citer) as {
+      root_id: number;
+      parent_id: number;
+    };
+    expect(row.root_id).toBe(founder);
+    expect(row.parent_id).toBe(founder);
+  });
+
+  it("leaves the ticker pointing at its ORIGINAL post, not the citing one", async () => {
+    await post("founding $Branch");
+    const founder = lastId();
+    await post("citing $Branch again", founder);
+
+    expect(await resolveTickers(["BRANCH"])).toEqual({
+      BRANCH: { root_id: founder, post_id: founder },
+    });
+  });
+
+  it("does not deepen the path — a name cannot become a child of itself", async () => {
+    // The reported symptom was a doubled segment, `$openbook/$test/$branch/$branch`.
+    // It cannot exist: ticker names are GLOBALLY unique, so the path is a display
+    // of ancestry, not a per-path namespace. There is only ever one $Branch.
+    await post("founding $Branch");
+    await post("citing $Branch");
+    await post("citing $Branch a third time");
+
+    const path = await getTickerPath("BRANCH");
+    expect(path).toEqual(["OPENBOOK", "BRANCH"]);
+    expect(path.filter((s) => s === "BRANCH")).toHaveLength(1);
+  });
+
+  it("still claims a genuinely new name written alongside a cited one", async () => {
+    await post("founding $Branch");
+    const founder = lastId();
+    // One name taken, one free — the free one must still be founded.
+    expect((await post("$Branch leads to $Sprout", founder)).ok).toBe(true);
+    const mixed = lastId();
+
+    expect(await resolveTickers(["SPROUT"])).toEqual({
+      SPROUT: { root_id: mixed, post_id: mixed },
+    });
+    // And that post DID claim, so it re-roots into its own thread.
+    const row = db.prepare("SELECT root_id FROM posts WHERE id = ?").get(mixed) as {
+      root_id: number;
+    };
+    expect(row.root_id).toBe(mixed);
+  });
+});

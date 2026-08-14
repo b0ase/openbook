@@ -4,12 +4,18 @@ import { ImageResponse } from "next/og";
  * The social card. Generated rather than a checked-in PNG so the wordmark and the
  * positioning line can never drift from the app's.
  *
- * ⚠ NOTHING HERE MAY CLAIM THE TOKEN EXISTS. This image is the most-shared surface
- * the project has and the least able to be questioned back — the same rule the
- * manifesto and the agent prompt follow applies hardest here. It describes what is
- * live (posts on-chain, splits in one transaction) and names the fork's argument;
- * it does not say tokens are buyable, earnable or holdable, and it carries no
+ * ⚠ THE LINE IS TOKEN vs MARKET (TOKENS.md), not "no token". This image is the
+ * most-shared surface the project has and the least able to be questioned back,
+ * so the rule the manifesto and the agent prompt follow applies hardest here. It
+ * MAY say tokens exist and are owned by whoever posted — that is live and true.
+ * It may NOT say they are buyable, sellable or worth money, and it carries no
  * "get in early" framing.
+ *
+ * An earlier version of this comment said "nothing here may claim the token
+ * exists", which was the hedge the owner rejected; it is recorded here so the
+ * old framing is not reintroduced by someone reading only this file.
+ *
+ * Per-ticker cards live in `[...ticker]/opengraph-image.tsx`. This one covers `/`.
  */
 
 export const runtime = "nodejs";

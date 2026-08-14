@@ -405,6 +405,22 @@ export async function getThreadShare(
   return { mine: row?.mine ?? 0, total: row?.total ?? 0 };
 }
 
+/**
+ * Headline counts for one thread — what a social card can say about it.
+ *
+ * `tokens` is the post count, because a post IS a token (TOKENS.md). `replies`
+ * is that minus the root, so the two numbers are consistent by construction
+ * rather than by two queries that could disagree.
+ */
+export async function getThreadStats(rootId: number): Promise<{ tokens: number; replies: number }> {
+  if (!Number.isInteger(rootId) || rootId <= 0) return { tokens: 0, replies: 0 };
+  const row = db.prepare("SELECT COUNT(*) AS n FROM posts WHERE root_id = ?").get(rootId) as {
+    n: number;
+  };
+  const tokens = row?.n ?? 0;
+  return { tokens, replies: Math.max(0, tokens - 1) };
+}
+
 export interface Holding {
   root_id: number;
   /** Ticker ancestry, root-first. Empty when the token was never named. */
