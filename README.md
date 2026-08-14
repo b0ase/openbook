@@ -1,4 +1,4 @@
-# OpenCook
+# OpenBook
 
 **A platform that builds itself, then lets anyone do the same.**
 
@@ -14,7 +14,7 @@ Most platforms extract value from contributors and keep it, distributing returns
 
 The person in Lagos with a brilliant idea but no money for a patent earns the same as the ex-Google architect. The teenager with vibes earns the same as the expert with credentials. An anonymous user posting as `anon_k` gets the same credit as anyone else.
 
-**OpenCook doesn't care who you are. It cares what you did.**
+**OpenBook doesn't care who you are. It cares what you did.**
 
 On-chain timestamps are the arbiter. Who posted first is a fact, not an opinion. You show up, contribute, and the system tracks it permanently — across key rotations, across forks, across whatever projects get built on top.
 
@@ -52,8 +52,8 @@ The fairness formula (Phase 1): contribution weight = `sqrt(engagement) × time_
 **Requires Node 20+** (Next.js 16 + React 19.2 + Turbopack).
 
 ```bash
-git clone https://github.com/Challotes/opencook
-cd opencook
+git clone https://github.com/b0ase/openbook
+cd openbook
 npm install
 cp .env.example .env.local
 npm run dev
@@ -102,7 +102,7 @@ Do you get it, anon? The system is the publication. The chain is the record.
 
 Once the model is proven here, any post can spawn its own platform. Same contribution tracking, same fairness system, same on-chain history, same rules the founder can tune from day one. The project owner sets their parameters, their community becomes their first contributors, and revenue flows automatically from the first boot.
 
-OpenCook is the first proof that this works — the seed planted before anyone else uses the model.
+OpenBook is the first proof that this works — the seed planted before anyone else uses the model.
 
 ---
 
