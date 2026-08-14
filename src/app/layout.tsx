@@ -75,12 +75,34 @@ export const metadata: Metadata = {
     description:
       "Post an idea and it's yours: timestamped on-chain, permanently, and it mints you a token in the thread it starts. Boost the ones worth reading and the payment splits straight to whoever wrote them — no balances held, no IOUs.",
     type: "website",
+    /**
+     * ⚠ A STATIC PHOTO, AND `app/opengraph-image.tsx` WAS DELETED SO IT WINS.
+     * A file-based OG image ALWAYS overrides `openGraph.images`, so the two
+     * cannot coexist — re-adding that file silently takes this photo off every
+     * share, with no error anywhere. The generated card it replaced rendered the
+     * wordmark and positioning line as text inside the image; the real sign is
+     * stronger at a glance, and the words still appear beside it as og:title and
+     * og:description.
+     *
+     * Padded to exactly 1200x630 from a 1152x768 original. The bars are
+     * invisible because the sign is already photographed on black — do not
+     * re-crop to fill, which would cut the book mark off the bottom.
+     */
+    images: [
+      {
+        url: "/og-openbook.jpg",
+        width: 1200,
+        height: 630,
+        alt: "$OpenBook",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "$OpenBook — own what you post",
     description:
       "Every post anchored on-chain, and one token to whoever wrote it. Boosts split straight to contributors in a single transaction.",
+    images: ["/og-openbook.jpg"],
   },
   manifest: "/manifest.json",
   appleWebApp: {

@@ -1,16 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- Full-bleed amber (brand amber-400 #fbbf24 — matches the "Open" wordmark).
+  <!-- ⚠ THIS SAID "OC" — OpenCook — UNTIL 2026-08-14. It was inherited at the fork
+       and shipped as the favicon, the PWA install icon and the iOS home-screen
+       icon, so the app a user installed was branded as the project it forked
+       FROM. Structure below is deliberately unchanged; only the letters and the
+       mark are OpenBook's now. -->
+  <!-- Full-bleed amber (brand amber-400 #fbbf24 — matches the "$Open" wordmark).
        Bleeds to every edge, so ANY mask (Android circle/squircle, iOS squircle,
        desktop rounded-square) crops solid amber — there is no thin edge band left
        to clip into a hairline. rx keeps the un-masked desktop corners soft. -->
   <rect width="512" height="512" rx="112" fill="#fbbf24"/>
   <!-- Black center medallion (circle, r=196 ≈ 76.5% Ø — inside Android's ~80%
-       safe-zone) so the OC + a clean amber ring survive every crop. -->
+       safe-zone) so the mark + a clean amber ring survive every crop. -->
   <circle cx="256" cy="256" r="196" fill="#000000"/>
-  <!-- "OC" centered in the medallion: O amber (Open) on black, C white (Cook). -->
-  <text x="256" y="256"
+  <!-- "$OB" would be illegible at 16px, so the favicon carries the one glyph the
+       brand owns outright: the $ that names the token, in the amber it is always
+       drawn in. The open book beneath it mirrors the physical sign. Both sit
+       inside the medallion so a circular Android mask never clips either. -->
+  <text x="256" y="205"
     font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace"
-    font-weight="800" font-size="228" text-anchor="middle"
-    dominant-baseline="central" letter-spacing="-12"
-  ><tspan fill="#fbbf24">O</tspan><tspan fill="#ffffff">C</tspan></text>
+    font-weight="800" font-size="200" text-anchor="middle"
+    dominant-baseline="central"
+  ><tspan fill="#fbbf24">$</tspan></text>
+  <!-- Open book: two pages sweeping up and out from a centre spine, matching the
+       physical sign. Drawn rather than traced from the photo — at 16px a
+       photographic mark turns to mush, and straight edges stay a book at every
+       size. The outer tips sit well ABOVE the spine; without that rise the two
+       shapes read as a single slab rather than an open book. The 10px gap at the
+       centre is what separates the pages, so keep it. -->
+  <g fill="#ffffff">
+    <path d="M251 352 L140 316 L140 358 L251 394 Z"/>
+    <path d="M261 352 L372 316 L372 358 L261 394 Z"/>
+  </g>
 </svg>
