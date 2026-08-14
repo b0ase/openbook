@@ -12,9 +12,16 @@ import { IdentityProvider, useIdentityContext } from "@/contexts/IdentityContext
 import { InstallProvider } from "@/contexts/InstallContext";
 import { useFeedPolling } from "@/hooks/useFeedPolling";
 import { useScrollTracker } from "@/hooks/useScrollTracker";
+import { parseTickerPath, ROOT_TICKER, tickerSlug } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { BootboardData, Post } from "@/types";
-import { getForwardPosts, getOlderPosts, getOldestPosts, resolveTickers } from "./actions";
+import {
+  getForwardPosts,
+  getOlderPosts,
+  getOldestPosts,
+  getTickerPath,
+  resolveTickers,
+} from "./actions";
 import { Bootboard } from "./Bootboard";
 import { FundAddress } from "./FundAddress";
 import { Header } from "./Header";
@@ -463,7 +470,47 @@ function FeedContent({
     // An unclaimed symbol is a normal answer — posts written before the registry
     // existed contain tickers nobody registered. Do nothing rather than open an
     // empty thread or throw.
-    if (hit) setThreadRootId(hit.root_id);
+    if (!hit) return;
+    setThreadRootId(hit.root_id);
+    // Make the open thread addressable WITHOUT navigating: pushState changes the
+    // URL and adds a history entry (so Back closes the thread) while leaving the
+    // feed mounted. A real navigation would remount it and lose the scroll
+    // position, which is the reason ThreadView is an overlay in the first place.
+    const path = await getTickerPath(symbol);
+    const url = `/${(path.length ? path : [symbol]).map(tickerSlug).join("/")}`;
+    window.history.pushState({ ticker: symbol }, "", url);
+  }, []);
+
+  // Close on Back, rather than letting Back leave the site while a thread is open.
+  useEffect(() => {
+    const onPop = () => {
+      const fromUrl = parseTickerPath(window.location.pathname);
+      const leaf = fromUrl.at(-1);
+      if (!leaf || leaf === ROOT_TICKER) {
+        setThreadRootId(null);
+        return;
+      }
+      void resolveTickers([leaf]).then((r) => {
+        const hit = r[leaf];
+        setThreadRootId(hit ? hit.root_id : null);
+      });
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // A COLD LOAD of a shared `/$openbook/$test` link opens that thread. Runs once:
+  // afterwards the URL is driven by pushState above.
+  const openedFromUrlRef = useRef(false);
+  useEffect(() => {
+    if (openedFromUrlRef.current) return;
+    openedFromUrlRef.current = true;
+    const leaf = parseTickerPath(window.location.pathname).at(-1);
+    if (!leaf || leaf === ROOT_TICKER) return;
+    void resolveTickers([leaf]).then((r) => {
+      const hit = r[leaf];
+      if (hit) setThreadRootId(hit.root_id);
+    });
   }, []);
 
   const handleAskAgent = useCallback(() => {
@@ -673,7 +720,11 @@ function FeedContent({
           rootId={threadRootId}
           bootPrice={bootPrice}
           freeBootsRemaining={freeBootsRemaining}
-          onClose={() => setThreadRootId(null)}
+          onClose={() => {
+            setThreadRootId(null);
+            // Back to the root token's URL — the main feed IS $OpenBook's thread.
+            window.history.pushState({}, "", `/${tickerSlug(ROOT_TICKER)}`);
+          }}
           onBooted={refresh}
           onFundNeeded={(address, balance, fee) => {
             setUserAddress(address);

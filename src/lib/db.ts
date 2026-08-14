@@ -124,6 +124,15 @@ export function applyTickerMigration(database: Db): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+  // tickers.parent_symbol — the ticker of the thread the claim was MADE IN, which
+  // is what makes the tree in TOKENS.md real rather than notional: a token branches
+  // from the token it was named inside, and a parent takes a share of each child.
+  //
+  // The root token has parent NULL and is its own top. Everything claimed in the
+  // main feed (a thread with no ticker of its own) parents to the root, so the
+  // whole board reads as one tree: $OPENBOOK / $CHILD / $GRANDCHILD.
+  addColumnIfMissing(database, "tickers", "parent_symbol", "parent_symbol TEXT");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_tickers_parent ON tickers(parent_symbol)");
   // Reverse lookup: "which tickers does this thread carry?" — used to show a
   // thread's own symbol, and by any future allocation that keys on the thread.
   database.exec("CREATE INDEX IF NOT EXISTS idx_tickers_root_id ON tickers(root_id)");

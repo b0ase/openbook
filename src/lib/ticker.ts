@@ -101,3 +101,37 @@ export function distinctTickers(content: string): string[] {
 export function isValidTicker(symbol: string): boolean {
   return /^[A-Z][A-Z0-9]{0,15}$/.test(symbol);
 }
+
+/**
+ * The root token. Every ticker claimed outside another ticker's thread parents to
+ * this, so the whole board is one tree rather than a scattering of unrelated
+ * names — and the main feed is simply this token's thread.
+ */
+export const ROOT_TICKER = "OPENBOOK";
+
+/** Render a claim path for display: `["OPENBOOK","TEST"]` → `$OpenBook/$Test`. */
+export function formatTickerPath(path: string[], display?: Record<string, string>): string {
+  return path.map((s) => `$${display?.[s] ?? titleCaseTicker(s)}`).join("/");
+}
+
+/**
+ * Canonical symbols are UPPERCASE, which shouts in a header. This restores a
+ * readable form for display ONLY — identity is always the uppercase symbol.
+ */
+export function titleCaseTicker(symbol: string): string {
+  return symbol.charAt(0) + symbol.slice(1).toLowerCase();
+}
+
+/** URL path segment for a ticker: `OPENBOOK` → `$openbook`. */
+export function tickerSlug(symbol: string): string {
+  return `$${symbol.toLowerCase()}`;
+}
+
+/** Parse `/$openbook/$test` → `["OPENBOOK","TEST"]`. Non-ticker segments are ignored. */
+export function parseTickerPath(pathname: string): string[] {
+  return pathname
+    .split("/")
+    .filter((seg) => seg.startsWith("$"))
+    .map((seg) => canonicalTicker(decodeURIComponent(seg)))
+    .filter(isValidTicker);
+}

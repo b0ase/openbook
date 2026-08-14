@@ -18,7 +18,7 @@ import {
   POST_LOG_COST_SATS,
   recordDailySpend,
 } from "@/lib/server-spend-budget";
-import { distinctTickers, isValidTicker } from "@/lib/ticker";
+import { canonicalTicker, distinctTickers, isValidTicker, ROOT_TICKER } from "@/lib/ticker";
 import { generateAnonName } from "@/lib/utils";
 
 async function getBsvSdk() {
@@ -244,12 +244,24 @@ function registerTickers(
   try {
     const symbols = distinctTickers(content);
     if (!symbols.length) return;
+    // The parent is the ticker of the thread this claim was made IN — that is what
+    // makes the tree real. A claim made in the main feed (a thread carrying no
+    // ticker) parents to the root, so every token hangs off $OPENBOOK and the whole
+    // board is one tree rather than a scattering of unrelated names.
+    const enclosing = db
+      .prepare("SELECT symbol FROM tickers WHERE root_id = ? ORDER BY post_id ASC LIMIT 1")
+      .get(rootId) as { symbol: string } | undefined;
+    const parent = enclosing?.symbol ?? ROOT_TICKER;
+
     const stmt = db.prepare(
-      "INSERT OR IGNORE INTO tickers (symbol, post_id, root_id, pubkey) VALUES (?, ?, ?, ?)"
+      "INSERT OR IGNORE INTO tickers (symbol, post_id, root_id, pubkey, parent_symbol) VALUES (?, ?, ?, ?, ?)"
     );
     const pk = typeof pubkey === "string" ? pubkey : null;
     const claimAll = db.transaction(() => {
-      for (const symbol of symbols) stmt.run(symbol, postId, rootId, pk);
+      for (const symbol of symbols) {
+        // The root token is its own top — it must never parent to itself.
+        stmt.run(symbol, postId, rootId, pk, symbol === ROOT_TICKER ? null : parent);
+      }
     });
     claimAll();
   } catch (e) {
@@ -285,6 +297,56 @@ export async function resolveTickers(
  * A thread can in principle hold several (one post naming two symbols), so this
  * returns the FIRST claimed, which is the one that founded it.
  */
+/**
+ * A ticker's ancestry, root-first: `["OPENBOOK","TEST"]` for `$OpenBook/$Test`.
+ *
+ * Depth-capped and cycle-guarded. `parent_symbol` is written once at claim time and
+ * never edited, so a loop should be impossible — but this walk runs on a render
+ * path, and "impossible" data is exactly what hangs a request.
+ */
+export async function getTickerPath(symbol: string): Promise<string[]> {
+  const start = canonicalTicker(symbol);
+  if (!isValidTicker(start)) return [];
+  const stmt = db.prepare("SELECT parent_symbol FROM tickers WHERE symbol = ?");
+  const path: string[] = [start];
+  const seen = new Set<string>([start]);
+  let current = start;
+  for (let depth = 0; depth < 16; depth++) {
+    const row = stmt.get(current) as { parent_symbol: string | null } | undefined;
+    const parent = row?.parent_symbol;
+    if (!parent || seen.has(parent)) break;
+    path.unshift(parent);
+    seen.add(parent);
+    current = parent;
+  }
+  return path;
+}
+
+/**
+ * How widely a ticker is used: how many DISTINCT THREADS mention it.
+ *
+ * ⚠ DISTINCT THREADS, NOT RAW MENTIONS. Raw mentions are free and unbounded, so
+ * anyone could inflate a number that readers treat as significance. Counting
+ * threads at least ties the figure to separate conversations. This is DISPLAY
+ * ONLY and must never feed allocation — mentions are free, and anything free that
+ * confers value destroys the anchor (TOKENS.md).
+ */
+export async function getTickerUsage(symbols: string[]): Promise<Record<string, number>> {
+  const wanted = symbols.map(canonicalTicker).filter(isValidTicker);
+  if (!wanted.length) return {};
+  const out: Record<string, number> = {};
+  const stmt = db.prepare(
+    "SELECT COUNT(DISTINCT root_id) AS n FROM posts WHERE UPPER(content) LIKE ?"
+  );
+  for (const sym of wanted) {
+    // `$SYM` followed by a non-alphanumeric or end — mirrors the parse rule's word
+    // boundary closely enough for a display count.
+    const row = stmt.get(`%$${sym}%`) as { n: number };
+    out[sym] = row?.n ?? 0;
+  }
+  return out;
+}
+
 export async function getThreadTicker(rootId: number): Promise<string | null> {
   if (!Number.isInteger(rootId) || rootId <= 0) return null;
   const row = db

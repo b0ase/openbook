@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
-import { getThread, getThreadTicker } from "./actions";
+import { getThread, getThreadTicker, getTickerPath } from "./actions";
 import { PostContent } from "./PostContent";
 import { PostForm } from "./PostForm";
 import { BootButton } from "./PostList";
@@ -62,6 +63,7 @@ export function ThreadView({
 }: ThreadViewProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [ticker, setTicker] = useState<string | null>(null);
+  const [path, setPath] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [optimistic, setOptimistic] = useState<OptimisticReply[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -80,8 +82,12 @@ export function ThreadView({
   // once per thread rather than on the poll.
   useEffect(() => {
     let live = true;
-    void getThreadTicker(rootId).then((t) => {
-      if (live) setTicker(t);
+    void getThreadTicker(rootId).then(async (t) => {
+      if (!live) return;
+      setTicker(t);
+      // The ancestry, so the header reads $OpenBook/$Test rather than a bare name
+      // — a token's position in the tree is part of what it IS.
+      setPath(t ? await getTickerPath(t) : []);
     });
     return () => {
       live = false;
@@ -175,8 +181,19 @@ export function ThreadView({
                 that carries a ticker IS that idea, so the symbol is the title
                 and "Thread" is only the fallback for unnamed ones. */}
             <h1 className="text-base font-semibold tracking-tight leading-none">
-              {ticker ? (
-                <span className="text-amber-400">${ticker}</span>
+              {path.length ? (
+                path.map((seg, i) => (
+                  <span key={seg}>
+                    {i > 0 && <span className="text-zinc-600 mx-0.5">/</span>}
+                    {/* The leaf is this thread; ancestors are context, so they are
+                        dimmed rather than competing with it. */}
+                    <span className={i === path.length - 1 ? "text-amber-400" : "text-zinc-500"}>
+                      ${titleCaseTicker(seg)}
+                    </span>
+                  </span>
+                ))
+              ) : ticker ? (
+                <span className="text-amber-400">${titleCaseTicker(ticker)}</span>
               ) : (
                 <span className="text-zinc-100">Thread</span>
               )}

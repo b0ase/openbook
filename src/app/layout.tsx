@@ -38,10 +38,20 @@ export const metadata: Metadata = {
   title: "$OpenBook — A platform that builds itself",
   description:
     "Post ideas, boot the best ones to the top, earn value through contribution. Agentic fairness on BSV.",
+  // ⚠ Describes what is LIVE. No claim that a token exists — the share card is the
+  // least questionable surface the project has, so the manifesto's tense rule
+  // applies hardest here.
   openGraph: {
-    title: "$OpenBook — A platform that builds itself",
+    title: "$OpenBook — an open book of who built what",
     description:
-      "Post ideas, boot the best ones to the top, earn value through contribution. Agentic fairness on BSV.",
+      "Post an idea and it's timestamped on-chain, permanently. Boost a post and the payment splits straight to contributors in one transaction — no balances held, no IOUs.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "$OpenBook — an open book of who built what",
+    description:
+      "Every post anchored on-chain. Every boost split straight to contributors in a single transaction.",
   },
   manifest: "/manifest.json",
   appleWebApp: {

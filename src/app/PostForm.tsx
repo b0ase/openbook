@@ -7,6 +7,7 @@ import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useVoiceToText } from "@/hooks/useVoiceToText";
 import { AgentChat } from "./AgentChat";
 import { createPost } from "./actions";
+import { TickerHint } from "./TickerHint";
 
 interface PostFormProps {
   onPostCreated?: (content: string, author: string, tempId: number) => void;
@@ -42,6 +43,9 @@ export function PostForm({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isPending, startTransition] = useTransition();
   const [hasContent, setHasContent] = useState(false);
+  // Mirrored for the ticker hint. The textarea is uncontrolled (auto-grow writes
+  // to it directly), so the hint needs its own copy of the text.
+  const [draft, setDraft] = useState("");
   const [justPosted, setJustPosted] = useState(false);
   const [resumeNudge, setResumeNudge] = useState(false);
   const { identity, needsUnlock, sign, requireIdentity } = useIdentityContext();
@@ -112,6 +116,7 @@ export function PostForm({
       onPostCreated?.(content, currentIdentity.name, tempId);
       formRef.current.reset();
       setHasContent(false);
+      setDraft("");
       setJustPosted(true);
       setTimeout(() => setJustPosted(false), 1500);
       if (textareaRef.current) {
@@ -236,6 +241,7 @@ export function PostForm({
             el.style.height = "auto";
             el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
             setHasContent(el.value.trim().length > 0);
+            setDraft(el.value);
           }}
         />
         {hasContent ? (
@@ -323,6 +329,8 @@ export function PostForm({
           </button>
         )}
       </div>
+      {/* Claim-vs-cite disclosure for any $Ticker being typed. See TickerHint. */}
+      <TickerHint content={draft} />
       {voiceError && (
         <button
           type="button"
