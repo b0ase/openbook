@@ -492,7 +492,44 @@ then a spotlight that expires; nothing persists. Under this it MINTS — a perma
 invokable name for that post, which composes directly with *Media tickers and transclusion*
 above: once a killer text post has a ticker, it can be quoted by invoking it.
 
-### Who receives the tokens — reuse the split that already exists
+### Who receives the tokens — WITHDRAWN, then answered differently
+
+> **The suggestion below is withdrawn (2026-08-14).** It proposed mirroring the sat split
+> (80% pool / 15% creator / 5% platform) for token allocation. That is wrong, and the owner
+> caught it: the sat split governs a REVENUE event that lands once and is gone, and the weights
+> behind it **decay on a 30-day half-life**. Equity must be durable. Wiring decaying
+> revenue logic into a token would reproduce the exact flaw this fork exists to fix, one layer
+> up. Kept visible rather than deleted, because the reasoning that killed it is the useful part.
+
+**The answer instead: ONE TOKEN PER CONTRIBUTION.** Tokenise a post and you own one unit. Anyone
+else may tokenise the SAME post under a DIFFERENT ticker and own one unit of theirs. The ticker
+opens a thread, and every subsequent contribution to it mints one more unit to that
+contributor. Equity spreads evenly as the thing is built.
+
+**Why this beats any formula:**
+- **100% of a thing nobody else holds is worth nothing.** No market, no network, nobody with a
+  reason to care. A hundred holders is a hundred people with a stake in it mattering.
+  Distribution is not a dilution cost; it is where the value comes from.
+- **It fits in one sentence** — "you posted, you own one." No weights, no sqrt, no decay,
+  nothing to reverse-engineer or argue about.
+- **Supply becomes emergent and honest**: the supply IS the record of participation.
+- **Multiple tickers on one post is safe.** Each TICKER still resolves to exactly one thread;
+  it is one POST seeding several named conversations. The uniqueness invariant holds.
+
+**Reconciling it with closure (the collision to be aware of).** *Supply and dilution* settles
+that a thread has a FINITE, depleting supply and CLOSES when minted out; "one token per
+comment, forever" is uncapped and flat. They reconcile cleanly: **a finite supply of N, one unit
+per paid post, means a thread holds exactly N contributions and is then full.** Closure stops
+being an abstraction and becomes legible — *"40 of 100 places left."*
+
+**The residual objection, and its answer.** One-per-contribution equates PARTICIPATION with
+CONTRIBUTION — a hundred people saying "agreed" own as much as a hundred doing work, which is
+precisely why `weights.ts` exists. The model's own answer is pay-to-post: worthless comments
+cost real money, so price does the filtering a formula otherwise would. That is a better answer
+than weighting, **but it makes the COST PER POST — not the allocation rule — the parameter that
+governs quality.** Set it too low and the flat allocation is farmed.
+
+### Superseded: reuse the split that already exists
 
 The obvious reading of *"the payer receives the tokens"* gives them all to the booster, which
 means paying to own a token named after someone else's work. That is appropriation with a

@@ -612,3 +612,33 @@ the two places the build deviated from the spec.
   paid? Paying to *mint a ticker* is a founding act and a natural fee. Paying to *post* is a
   different thing and would end the zero-friction onboarding DIRECTION.md's conversion claim
   rests on. Separate these explicitly before either is built.
+
+## One identity across OpenBook and OpenCook (settled 2026-08-14)
+
+The same person appeared as `anon_ukx2` here and `anon_jtiz` upstream. **Cause: the WIF lives
+in `localStorage`, which is scoped PER ORIGIN** — `opencook.fun` and the Railway host are
+different origins, so OpenBook silently generated a fresh key and a fresh anon name.
+
+**Decision: use ONE key across both**, by saving the OpenCook recovery file and restoring it
+here. **No code change is required** — `restore-from-file.ts` carries `name` alongside the WIF
+and `importEncryptedIdentity` applies it, so the identity, address and anon name all line up.
+
+**Why, and it is not convenience.** This fork imported OpenCook's history to post 2023, and
+that history contains the owner's own posts as `anon_jtiz` — including the one announcing the
+fork. Posting here under a different name would show two different people either side of the
+fork boundary for the same person, on a project whose entire claim is *"an open book of who
+built what"*. The contradiction would sit exactly at the seam. Practically, the fairness engine
+attributes by pubkey, so one key also means inherited and new posts are ONE contributor rather
+than two — which began to matter the moment `LAUNCH_TS` opened the pool.
+
+**Accepted costs, both real:**
+- **Blast radius doubles.** One key signs on two sites, so a client-side compromise of either
+  exposes both. This project's CSP is tight; upstream's is not ours to vouch for.
+- **It is a one-way door.** Once the same key posts on both, the two sites are publicly and
+  permanently linked as one person on-chain. Acceptable here only because the fork was already
+  announced under that name, so nothing is given away that was private.
+
+**DO NOT use the server wallet key (`BSV_SERVER_WIF`) as a posting identity.** Keeping the
+operator wallet separate from the contributor identity is what stops "the platform cut" and "a
+contributor's earnings" becoming indistinguishable — which is the asymmetry this fork exists to
+argue against.
