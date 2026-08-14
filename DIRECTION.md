@@ -330,3 +330,51 @@ In order, cheapest and highest-value first. **None of this needs the token marke
 Steps 1–3 are days of work and would make the thesis testable long before any market exists. If
 the index is not useful when the names are free, a price will not make it useful.
 
+### ⚠ The dictionary landgrab — costed, 2026-08-14
+
+Asked: *"how much would it cost to mint a dictionary's worth of keywords as tokens on BSV?"*
+The arithmetic matters less than what it implies.
+
+**The arithmetic** (substitute your own rates — this is the shape, not a quote):
+
+```
+per inscription ≈ tx overhead + inscription script + 1 sat output
+                ≈ ~300 bytes  ≈ ~300 sats at 1 sat/byte
+100,000 words   ≈ 30,000,000 sats ≈ 0.3 BSV
+200,000 words   ≈ 60,000,000 sats ≈ 0.6 BSV
+```
+
+Batching several inscriptions per transaction cuts the overhead sharply, and BSV fee rates below
+1 sat/byte are routine. **So: tens of dollars, not thousands. A fraction of one coin.**
+
+**That number is the problem, not the good news.** First-claim-wins on a globally unique namespace
+where the total cost of claiming *the entire English language* is a restaurant bill means **one
+actor can own every common word before anybody else arrives.** If that happens the index is dead
+as a public good: every standing question people actually search for would be owned by whoever ran
+a script first, and the market for them never forms.
+
+This is the weakness recorded above ("capital can corner names") at a magnitude that changes its
+character. It is not *a rich party could corner some names*. It is *anyone with pocket money could
+corner all of them*.
+
+**What currently stands in the way — and it was not designed for this job.** A ticker can only be
+claimed BY POSTING it, and posting is rate-limited: **10 posts/minute per pubkey** and
+**`ONCHAIN_POST_IP_LIMIT` (default 200) per IP per day** (`src/app/actions.ts`). At 200/day, one
+IP needs ~500 days to claim 100,000 names. That is a real gate, but it is an ABUSE control that
+happens to be load-bearing for namespace fairness, and it is defeated by renting IPs.
+
+**Options, none decided:**
+
+- **Make claiming cost more than posting.** A claim is a founding act; pricing it separately from a
+  post is the most direct lever, and TOKENS.md already anticipates the claim eventually costing
+  money.
+- **Escalating cost per claim per identity** — the Nth name an identity claims costs more than the
+  first. Attacks the accumulation directly rather than the rate.
+- **Require the name to be USED** — a claim that never attracts a second post decays or is
+  reclaimable. Cuts against permanence, which is a core promise, so it would need care.
+- **Reserve a dictionary list** so common words must be earned rather than bought. Simple and
+  paternalistic; hard to draw the line.
+
+**This should be settled before `ALLOW_INDEXING` is turned on**, because the moment the index is
+publicly visible is the moment the landgrab becomes obviously worth doing.
+
