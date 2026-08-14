@@ -2,6 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "redirects": [
     {
+      "//": "The bare root needs its OWN entry. `/:path*` is zero-or-more, so it looks like it should cover `/` — it does not, and the symptom is deep links redirecting correctly while the homepage keeps serving a stale ISR page from the edge. Do not merge these two rules back together.",
+      "source": "/",
+      "destination": "https://openbook-production-7dd5.up.railway.app/",
+      "permanent": false
+    },
+    {
       "source": "/:path*",
       "destination": "https://openbook-production-7dd5.up.railway.app/:path*",
       "permanent": false
