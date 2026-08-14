@@ -436,6 +436,47 @@ But it means the honest framing of this fork is **not** "adding a token to a tok
 system." It is: *a permanent claim already exists and exactly one party holds it; the
 question is whether others get one too.*
 
+## Media tickers and transclusion (proposed 2026-08-14)
+
+Post an image, video or track and you are prompted to give it a ticker. Anyone can then
+**invoke** `$Thatticker` in their own post and the media is embedded there.
+
+**This is what gives a ticker a FUNCTION rather than a label.** Today `$Test` names a thread;
+under this it also becomes an ADDRESS for a thing, and invoking it transcludes that thing.
+
+**It also resolves the "should everything be tokenised" tension.** Media is discrete and
+RE-USABLE — an image or a track gets referenced repeatedly, while a text comment is read once
+in place. Naming earns its cost exactly where re-use happens. So "a token per post" is wrong
+and "a token per referenceable thing" is right.
+
+**It needs no new concepts.** A media post is already a thread root, so naming it makes it a
+thread AND an address, and `resolveTickers` already returns that root. Invoking a ticker whose
+thread root carries media can render that media inline — an extension of what exists, not a
+second system.
+
+### What has to be got right
+
+- **Attribution is not optional.** An embed must carry a visible "from `$Ticker`" linking
+  back. Without it, invoking is appropriation with extra steps.
+- **Naming is consent to be quoted.** Once `$MyTrack` exists anyone can place it in a post its
+  author would hate. That is the same bargain a public URL already makes, but it should be
+  understood AT NAMING TIME — which is a job for the prompt, not the small print.
+- **The prompt must not become a nag.** Asking on every media post trains people to dismiss
+  it. Surface it only when a post is media-only with no ticker, and make it one tap.
+- **Bandwidth.** Transcluded media appears in many posts; `preload="none"` and lazy loading
+  (already in `MediaEmbed`) are what stop that becoming a bill for whoever hosts the file.
+
+### The open question this creates
+
+If invoking embeds, invocation becomes a genuine usage signal — which is precisely
+DIRECTION.md's music example, *"artists should own their distribution… every listen splits
+revenue."* **Should invoking pay the media's owner?**
+
+Tempting, and the right shape, but it walks back into the trap in open question 9: an
+invocation must never be both free and valuable, or the inflation problem returns. If it pays,
+it must be because the INVOKING POST is paid for (pay-to-post) with a slice routed to the
+owner — never because a mention conjures value from nothing. **Not decided.**
+
 ## Is a domain a token? (asked 2026-08-14)
 
 The intuition: a domain and a ticker are both unique names in a namespace, claimed
