@@ -1264,6 +1264,44 @@ Two mechanisms fit without custody:
    in the same transaction it arrived in* is in the manifesto. Do not adopt this without deciding
    to give that up deliberately.
 
+### SETTLED — the split pays the TOP 100 HOLDERS (owner, 2026-08-14)
+
+*"forget the idea that money is split up amongst token holders. If it's too complex, we're chasing
+a phantom… maybe we split it max 100 ways. top 100 holders get paid."*
+
+Full proportional fan-out is abandoned. **A payment splits across at most 100 recipients, ranked by
+holding.** 100 outputs is ~3.4KB — trivial — and at ~65,000 sats per penny the arithmetic budget is
+~6,500 recipients, so 100 is a POLICY choice for simplicity, not a limit forced by the chain. It
+also removes the need for probabilistic settlement: a deterministic top-100 split is simpler to
+build, simpler to audit, and simpler to explain, which matters more than expected-value elegance.
+
+⚠ **A cap on the COUNT does not by itself guarantee each share is spendable — SKEW does.** If the
+platform holds 9.99M of 10M units of `$LOVE`, a proportional split across the top 100 gives the
+platform ~99.9% and leaves holder #100 with ~10⁻⁷ of a penny: back below the floor, just with
+fewer rows. The rule has to be a floor on the AMOUNT as well as a cap on the count:
+
+> Sort holders by holding, descending. Include a holder while their proportional share is **≥ ~10
+> sats** (the economic floor — a UTXO below its own spending cost). Stop at 100.
+
+That yields at most 100 recipients, every one of whom receives something they can actually spend,
+and it adapts on its own as a token's distribution changes.
+
+### Ponzinomics is an adoption MECHANIC, and the honest version here is NAMESPACE SCARCITY
+
+*"we shouldn't discount the alluring pull of ponzinomics either. People rush in because others are
+rushing in. It's an important network adoption mechanic, but we shouldn't confuse the mechanic for
+the end purpose."*
+
+The distinction is the right one, and it has a concrete consequence worth recording: **under
+receipt semantics and flat cost-plus pricing there is no price appreciation to rush toward.** The
+classic pull — *get in before it goes up* — is structurally unavailable here, by choice.
+
+**The pull that IS available is first-claim-wins on a finite namespace.** Names run out; the good
+ones go to whoever is early. That is the same urgency domain registration has, it is real rather
+than manufactured, and it does not depend on later entrants paying earlier ones — which is exactly
+what makes it survive the moment inflow stops. Early claimants are rewarded for being early, not
+funded by the people behind them.
+
 ### ⚠ A withdrawn suggestion: DECAY IS WRONG FOR THIS MODEL
 
 An earlier version proposed decaying a unit's earnings (`halfLifeDays`, `fairness/config.ts`) so

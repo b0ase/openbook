@@ -848,3 +848,24 @@ arrived in*) and must not be adopted without deciding to give that up on purpose
 
 **No new schema is needed.** `ticker_mentions` already records which post used which token and who
 holds each token's units.
+
+## The split pays the TOP 100 HOLDERS, with an amount floor (settled 2026-08-14)
+
+**Full proportional fan-out is abandoned.** *"maybe we split it max 100 ways. top 100 holders get
+paid."* A payment splits across at most 100 recipients ranked by holding. 100 outputs is ~3.4KB,
+and the arithmetic budget for a penny is ~6,500 recipients — so **100 is a policy choice for
+simplicity, not a chain limit.** It also supersedes the probabilistic-settlement recommendation:
+deterministic is simpler to build, audit and explain, which beats expected-value elegance.
+
+⚠ **A cap on the COUNT does not make each share spendable — SKEW decides that.** If the platform
+holds 9.99M of 10M units, a proportional top-100 split leaves holder #100 with ~10⁻⁷ of a penny:
+below the floor again, just with fewer rows. **The rule needs an amount floor as well as a count
+cap:** sort by holding descending, include a holder while their proportional share is ≥ ~10 sats
+(a UTXO below its own spending cost is worth less than nothing), stop at 100.
+
+**Adoption mechanic, recorded separately from purpose:** the owner notes reflexive rush-in is a
+real network mechanic but must not be confused with the end purpose. Consequence — under receipt
+semantics and flat pricing **there is no price appreciation to rush toward, by choice**. The pull
+available instead is **first-claim-wins on a finite namespace**: names run out, the good ones go to
+whoever is early. Same urgency as domain registration, real rather than manufactured, and it does
+not depend on later entrants paying earlier ones — which is why it survives the inflow stopping.
