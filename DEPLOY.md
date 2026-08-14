@@ -119,6 +119,13 @@ build is provisioned, and a redirect accepts only `source`, `destination`, `perm
 fails the whole deployment with **no build logs at all**, because it never reaches the build
 step. If a Vercel deploy shows `ERROR` with an empty log, suspect the config, not the code.
 
+⚠ **NEVER point a redirect at a host that Vercel itself serves.** An attempt to forward the
+`*.vercel.app` URL to `openbooks.space` took the site down with a 307 loop: `openbooks.space`
+is served BY Vercel, so it matched the rule and was redirected to itself. Host conditions were
+supposed to prevent that, but `/:path*` does not match the bare root (see below), so `/` fell
+through to the unconditional rule. Every destination here must be the Railway origin until DNS
+moves — at which point Vercel stops seeing this domain at all and the question disappears.
+
 **The domain lives on the WRONG SIDE right now.** `openbooks.space` uses Vercel's nameservers
 and is served by Vercel, so it hits these redirects and bounces to the Railway URL. No Vercel
 config can fix that — Vercel cannot run this app at all (see above). **The fix is DNS:** add
