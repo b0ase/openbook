@@ -36,7 +36,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { createPost, getTickerPath, resolveTickers } from "./actions";
+import { createPost, getThread, getTickerPath, resolveTickers } from "./actions";
 
 async function post(content: string, parentId?: number) {
   const key = PrivateKey.fromRandom();
@@ -217,5 +217,46 @@ describe("the tree is the right way round", () => {
   it("parents a top-level claim to the root token", async () => {
     await post("just $Hotel on its own");
     expect(await getTickerPath("HOTEL")).toEqual(["OPENBOOK", "HOTEL"]);
+  });
+});
+
+describe("branch points stay visible in the parent thread", () => {
+  it("keeps the claiming post in the thread it branched off", async () => {
+    // The regression this pins: re-rooting removed the post from its parent's
+    // root_id set, so the branch point — and the $child link in it — vanished
+    // from the conversation it came out of.
+    await post("root of $India");
+    const indiaRoot = lastId();
+    await post("branching into $Juliet from here", indiaRoot);
+    const branchPost = lastId();
+
+    const parent = await getThread(indiaRoot);
+    expect(parent.map((p) => p.id)).toContain(branchPost);
+  });
+
+  it("does not pull the branch's own replies into the parent", async () => {
+    await post("root of $Kilo");
+    const kiloRoot = lastId();
+    await post("branching into $Lima", kiloRoot);
+    const branchPost = lastId();
+    await post("a reply inside the branch", branchPost);
+    const deepReply = lastId();
+
+    const parent = await getThread(kiloRoot);
+    expect(parent.map((p) => p.id)).toContain(branchPost);
+    expect(parent.map((p) => p.id)).not.toContain(deepReply);
+
+    // And the child thread stands on its own.
+    const child = await getThread(branchPost);
+    expect(child.map((p) => p.id)).toEqual([branchPost, deepReply]);
+  });
+
+  it("does not duplicate ordinary replies", async () => {
+    await post("root of $Mike");
+    const mikeRoot = lastId();
+    await post("just a normal reply", mikeRoot);
+
+    const ids = (await getThread(mikeRoot)).map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

@@ -492,9 +492,24 @@ export async function getNewPosts(sinceId: number): Promise<Post[]> {
  */
 export async function getThread(rootId: number): Promise<Post[]> {
   if (!Number.isInteger(rootId) || rootId <= 0) return [];
+  // ⚠ THE SECOND CLAUSE IS THE BRANCH POINTS, AND IT IS NOT OPTIONAL. Claiming a
+  // ticker re-roots the claiming post onto its own thread, which by construction
+  // removes it from THIS thread's `root_id` set — so without this the post that
+  // started a branch simply disappears from the conversation it branched off, and
+  // the `$child` link goes with it. The parent thread would show a discussion with
+  // a hole where the interesting turn was.
+  //
+  // It adds only re-rooted direct children: an ordinary reply already carries this
+  // root and is matched by the first clause, so nothing is duplicated. Their OWN
+  // replies stay in the child thread, which is what keeps the two pages distinct.
   return db
-    .prepare(`${POST_SELECT} WHERE p.root_id = ? ORDER BY p.id ASC LIMIT 500`)
-    .all(rootId) as Post[];
+    .prepare(
+      `${POST_SELECT}
+       WHERE p.root_id = ?
+          OR p.parent_id IN (SELECT id FROM posts WHERE root_id = ?)
+       ORDER BY p.id ASC LIMIT 500`
+    )
+    .all(rootId, rootId) as Post[];
 }
 
 /**
