@@ -779,3 +779,33 @@ wallets and indexers need no bespoke work.
 author's address, so ownership is "whoever can spend that satoshi". Today's `OP_FALSE OP_RETURN`
 is provably unspendable — a record beside the token, not the token. Inscription, minting and paid
 posting remain ONE milestone; this decision names the artifact that milestone produces.
+
+## Flat cost-plus pricing is OPEN, and it turns on investment-vs-receipt (raised 2026-08-14)
+
+**The owner is reconsidering the linear mint curve:** *"tokens should be sold at cost price or a
+very slight markup that no one will notice but which builds a multi squillion dollar
+corporation."* Recorded as OPEN rather than settled, and the linear-curve section in TOKENS.md is
+left intact — it is the reasoning that has to be answered.
+
+**Flat pricing keeps more of the curve's properties than it looks.** The anti-pump ceiling gets
+STRONGER (a resale market cannot detach upward from a price that never rises), platform inventory
+stays non-self-dealing (no discretionary pricing either way), and the dictionary landgrab stays
+affordable to the platform — an escalating curve makes our own bulk claiming most expensive
+exactly on the common vocabulary that matters most.
+
+**What it costs is the dilution defence, and that is the whole question.** Supply is unbounded and
+a share is `mine / total`, so repeated posting of a name dilutes every holder. Under the curve the
+200th mint costs 200× and an attack prices itself out; flat at cost, taking a holder from 100% to
+1% costs ~99 × a fraction of a cent, with rate limits (10/min per pubkey, 200/day per IP) as the
+only brake.
+
+**So the decision is not about revenue — it is whether a token is an INVESTMENT or a RECEIPT.** If
+investments, a share must be defensible and the curve is the defence. If receipts (provenance —
+"I said this, here is the record"), dilution is spam, rate limits are the right tool, and a share
+describes participation rather than a position. The owner's own framing ("Own what you post")
+reads closer to RECEIPT — but that is incompatible with presenting `mine/total` as a holding worth
+defending, which is exactly how the wallet presents it today. Whichever way it goes, the wallet
+copy and the pricing model have to agree.
+
+**Do not implement either pricing until this is settled.** Neither can ship before paid posting
+exists at all.

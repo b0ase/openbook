@@ -1117,6 +1117,58 @@ rather than softening it).
 
 **Not built.** Same gate: nothing mints before posting costs money.
 
+## ⚠ FLAT COST-PLUS PRICING — the owner is reconsidering the curve below (OPEN, 2026-08-14)
+
+*"I dont know that the price per token should go up… I think maybe tokens should be sold at cost
+price or a very slight markup that no one will notice but which builds a multi squillion dollar
+corporation."*
+
+**This is a challenge to the linear curve settled immediately below, not a refinement of it.** The
+section below is left intact and unedited: it is the reasoning that has to be answered, and the
+decision is NOT yet made. What follows is what changes if flat pricing wins.
+
+### What flat pricing keeps, and keeps better
+
+- **The anti-pump ceiling gets STRONGER, not weaker.** The curve's whole anti-pump property is
+  that nobody rationally pays more second-hand than the cost of minting fresh. At a flat price
+  that ceiling is flat and low *forever* — you cannot detach a resale market upward from a price
+  that never rises. Pumping is not bounded by arithmetic here; it is priced out entirely.
+- **Platform inventory stays safe.** The reason the curve mattered for the genesis-and-copies model
+  is that it removes discretionary pricing, so the platform selling copies of what it minted is not
+  self-dealing. A flat public price does that at least as well.
+- **The landgrab stays affordable to US.** ~20,000 names for $2 (DIRECTION.md) assumed near-cost
+  minting. Under an escalating curve, the platform's own bulk claiming gets more expensive exactly
+  where it matters most — the common vocabulary that everybody names.
+- **The business becomes volume, not scarcity.** Inscription on BSV is a fraction of a cent, so a
+  markup nobody notices is fractions of a cent. That is a rails business — revenue is
+  `tiny × enormous`, which is the "multi squillion" bet and a different company from one that
+  monetises scarcity.
+
+### ⚠ WHAT IT COSTS — the dilution defence, and this is the real question
+
+**An escalating price is what makes diluting somebody self-limiting.** Supply is unbounded and a
+holder's share is `mine / total`, so anyone who posts a name repeatedly dilutes every existing
+holder. Under the curve the 200th mint costs 200×, so an attack on a valuable name prices itself
+out. **Flat, at cost, it does not:** taking a holder from 100% to 1% costs ~99 × a fraction of a
+cent, plus the rate limits (10/min per pubkey, 200/day per IP) as the only real brake.
+
+So the choice is not really about revenue. It is:
+
+> **Is a token an INVESTMENT or a RECEIPT?**
+
+- If tokens are **investments**, a share must be defensible, and the curve is the defence.
+- If tokens are **receipts** — provenance, "I said this, here is the record" — then dilution is
+  just spam, rate limits are the right tool, and a share is a description of participation rather
+  than a position anyone should be able to protect.
+
+The owner's own framing (*"Own what you post"*, the manifesto's ownership pitch) reads much closer
+to RECEIPT than to investment, which is a genuine argument for flat pricing. But **it is
+incompatible with treating `mine/total` as a holding worth defending**, and the wallet currently
+presents it as exactly that. Whichever way this goes, the two have to agree.
+
+**Not decided. Do not implement either pricing until it is** — and note that neither can ship
+before paid posting exists at all.
+
 ## Mint price scales LINEARLY, and supply is unbounded (owner, 2026-08-14)
 
 *"Maybe the amount of dilution per token IS infinite, but the price to mint a new token scales.
