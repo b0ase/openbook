@@ -96,6 +96,27 @@ can capture a torn state.
 
 ---
 
+## The Vercel project is a redirect, nothing more
+
+`vercel.json` catches every path and forwards it to the Railway origin. The Next.js app still
+builds there (the build succeeds — only *runtime* DB access fails), but no request ever
+reaches a function, because Vercel applies redirects at the edge.
+
+**Why a redirect and not a proxy.** A Vercel `rewrite` would keep the `*.vercel.app` URL in
+the address bar, which looks nicer and is the wrong trade. Every per-IP cap in this app — the
+200/day post cap, the free-boot cap, the agent rate limit — keys on `x-forwarded-for`. Put a
+second proxy in front and the app stops seeing real client IPs, so the caps stop separating
+users. Those caps are what stand between the server wallet and a drain, so a rewrite is a
+security regression dressed as a cosmetic improvement. See CLAUDE.md "Deployment Notes".
+
+**Why 307 and not 308.** The destination is an auto-generated Railway subdomain that gets
+replaced the moment a real domain is attached. A permanent redirect is cached by browsers
+indefinitely, so a 308 would pin every visitor to a URL intended to be thrown away, with no
+way to unstick them. **When a real domain lands on Railway, update `destination` here** — or
+delete the Vercel project entirely, which is the better end state.
+
+---
+
 ## Environment variables
 
 See `.env.example` for the full annotated list. The ones that decide whether a deploy is
