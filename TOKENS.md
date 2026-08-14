@@ -1000,6 +1000,66 @@ Two caveats before anyone starts:
 **Sequence: protocols first (no new features, immediate interoperability), then Tags, then
 Repost with the mint. Like and Follow are product decisions to take on their merits.**
 
+## Liking IS buying a unit — one primitive, three names (owner's design, 2026-08-14)
+
+*"Liking a post is boosting it and buying a share into your wallet at minimum cost. You copy it
+into your wallet at cost price. The amount of likes a post gets scales its number in circulation.
+If you want to see how popular a post is, you can see how many tokens a post has."*
+
+**This resolves the objection raised against a free Like** (see the Bitcoin Schema section): the
+like is not free, so it cannot cannibalise the boost and cannot break the anchor. It is the boost,
+at the bottom of the price range.
+
+**It also collapses three things that were being designed separately into ONE primitive:**
+
+| named as | what actually happens |
+|---|---|
+| **Like** | pay the post's current price, receive a unit |
+| **Boost** | pay the post's current price, receive a unit |
+| **Quote / cite** | pay the post's current price, receive a unit |
+
+One action — *acquire a unit of a post by paying its current price* — with three affordances
+pointing at it. That is a large simplification, and it means **popularity is denominated in
+supply**: how many tokens a post has issued IS how many people paid to hold a piece of it. No
+separate like counter, no separate ranking signal, nothing free to inflate.
+
+### ⚠ THE ONE CONFLICT TO RESOLVE: is the price FLAT or ON A CURVE?
+
+A **flat** "minimum cost" contradicts a mechanic already settled in this document: a thread has a
+**depleting supply**, tokens **get scarcer and cost more** as it fills, and **the thread CLOSES
+when the supply is minted out**. A flat mint price means unbounded supply and no closure — the
+game stops being a game.
+
+**These reconcile if "minimum cost" means the current price on a RISING curve** — minimum at the
+*start*, not forever. Which is what the earlier design already says. Then:
+
+- The first person to like a post pays least. **Spotting something early is the position that pays
+  off**, without any "get in early" promise being made — it just falls out of the curve.
+- Later units cost more, so supply is soft-capped by price rather than by a number picked in
+  advance (see the supply-cap note above, which recommended exactly this).
+- Closure still happens.
+
+**Recommendation: the like/boost/mint price is the thread's current price, and it rises.**
+
+### On the dilution the owner already spotted
+
+*"if social posting creates MORE of the tokens then the POST content gets MORE valuable as it's
+tokenised more and more often, which implies that the value of the tokens in your wallet goes DOWN
+over time — but I'm not bothered about that."*
+
+The observation is right, and worth completing: **per-unit value only falls if attention grows
+more slowly than supply.** Supply grows one unit per liker. Whether each unit is worth less
+depends on whether the post's total standing grows faster than that — and on a rising curve, each
+new unit is sold at a higher price than the last, which sets a rising floor rather than a
+diluting one. So the outcome is not automatic in either direction.
+
+There is also a genuine asymmetry worth naming: **the author is diluted the most and benefits the
+most.** Their share falls as the post spreads, which is the same trade already accepted for
+citation-minting (*the quoter holds the new unit*), and it is what makes a widely-held post a
+measure of reach rather than of authorship.
+
+**Not built.** Same gate as everything else here: nothing mints before posting costs money.
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,
