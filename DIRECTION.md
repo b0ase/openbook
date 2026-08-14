@@ -2,7 +2,7 @@
 
 > Where this project is going and why. Read this before suggesting features or architecture changes.
 >
-> **OpenBook is a fork of OpenCook, and it diverges on economics.** This document is
+> **OpenBooks is a fork of OpenCook, and it diverges on economics.** This document is
 > upstream's direction, kept because most of it still holds and because the reasoning is
 > worth preserving. Three sections are now superseded and say so inline: *Onboarding
 > Philosophy* (posting is paid), *Yeah, we pump* (there IS a token), and *The Recursive
@@ -11,7 +11,7 @@
 >
 > **On the two names:** "OpenCook" is kept wherever it means the upstream project, its
 > historical firsts, or its authorship of the fairness rules — those statements are true of
-> upstream and it would be dishonest to relabel them. "OpenBook" is used where the sentence
+> upstream and it would be dishonest to relabel them. "OpenBooks" is used where the sentence
 > describes the product a reader is actually using. Both are accurate; neither is a leftover.
 
 ## The Vision
@@ -31,7 +31,7 @@ Everyone. Not just developers.
 
 The person in Lagos with a brilliant idea but no money for a patent. The ex-Google architect who disagrees with how things are built but has no platform to prove it. The graphic designer browsing spawned projects at midnight, offering their eye for UI. The attorney who spots a legal gap. The music artist who wants fair royalties. The marketer who knows how to make things spread. The property owner with an idea for how rentals should work. The teenager with vibes and nothing else.
 
-**OpenBook doesn't care who you are. It cares what you did.**
+**OpenBooks doesn't care who you are. It cares what you did.**
 
 Every contribution is timestamped on-chain. An anonymous user posting as `anon_k` gets the same credit as anyone else. No resumes, no interviews, no gatekeepers. You contribute, you're credited, you earn. The poorest person with the best idea earns the same as the richest person with the same idea.
 
@@ -51,7 +51,7 @@ The endgame isn't one platform. It's a universal system where **whoever contribu
 
 An idea posted on-chain has a timestamp. If someone codes that idea later, the original poster gets credit — the idea came first. If code exists before someone posts it as an idea, the coder gets credit. On-chain timestamps are the arbiter. No disputes, no committees, no politics.
 
-This works across forks. OpenCook is open source, and **OpenBook is that claim being tested rather than asserted** — this project is a fork of it, diverging on economics while keeping the contribution history. Anyone can fork it, improve it, launch their own version. That's not a threat — it's the model working. Contributors don't pick sides. They post ideas, write code, and earn proportionally from every project that uses their contribution. The best projects attract the most activity. Competition drives quality, not lock-in.
+This works across forks. OpenCook is open source, and **OpenBooks is that claim being tested rather than asserted** — this project is a fork of it, diverging on economics while keeping the contribution history. Anyone can fork it, improve it, launch their own version. That's not a threat — it's the model working. Contributors don't pick sides. They post ideas, write code, and earn proportionally from every project that uses their contribution. The best projects attract the most activity. Competition drives quality, not lock-in.
 
 **How it works:**
 - Every contribution is timestamped on-chain (posts, code commits linked to BSV identity)
@@ -101,7 +101,7 @@ Once this model is proven on OpenCook, any idea posted here can spawn its own pr
 
 ## Onboarding Philosophy
 
-**SUPERSEDED for OpenBook (2026-08-14) — posting is paid.** The upstream position is kept
+**SUPERSEDED for OpenBooks (2026-08-14) — posting is paid.** The upstream position is kept
 below because what survives of it is most of it.
 
 **Still true, and still the hard part:**
@@ -111,7 +111,7 @@ below because what survives of it is most of it.
 - No wallet downloads. No seed phrases. No third-party wallet to install.
 
 **No longer true:** *"no buy crypto first"*, the server covering the ~$0.0005 per post, and
-the **~15% conversion vs industry ~0.3%** target that rested on both. Under OpenBook's token
+the **~15% conversion vs industry ~0.3%** target that rested on both. Under OpenBooks's token
 model every post is a purchase — you pay to post and receive the thread's tokens as a
 tradable receipt (see TOKENS.md, *Supply and dilution*). A first-time user must have funded
 their address before their first post.
@@ -119,7 +119,7 @@ their address before their first post.
 **This is a deliberate trade, not an oversight.** The bet: fewer users who are actually
 buying something, over more users whose contribution is counted but not owned. It is the
 fork's entire thesis, and it costs the single biggest number in this document. Anyone
-quoting the 50x conversion figure for OpenBook is quoting a claim that no longer applies.
+quoting the 50x conversion figure for OpenBooks is quoting a claim that no longer applies.
 
 **What replaces it as the onboarding problem:** getting a first-time user funded without
 reintroducing the friction the keypair generation removed. That problem is unsolved and is
@@ -131,7 +131,7 @@ Once the platform works, any post can become its own project. Someone posts an i
 
 "Every idea is a seed. Every seed can grow into a forest."
 
-**AMENDED for OpenBook (2026-08-14) — spawning has a mechanism now, not just traction.** A
+**AMENDED for OpenBooks (2026-08-14) — spawning has a mechanism now, not just traction.** A
 thread's token supply depletes as people post into it, and **when it is minted out the thread
 closes**. The natural continuation of a closed thread is a child thread, which mints its own
 token and gives the parent a share.
@@ -155,13 +155,13 @@ It doesn't matter what the idea is. The model works for anything:
 The person who spawns a project becomes the project owner. They can:
 - Direct development priorities
 - Set the initial fairness parameters for their project
-- Use OpenBook's community as their first users and contributors
+- Use OpenBooks's community as their first users and contributors
 - Drop tokens to their users if they want (BSV-21 — nothing stops them)
 - The fairness system tracks contributions automatically — no payroll, no invoicing
 
 ### Yeah, we pump. We pump real value.
 
-**SUPERSEDED for OpenBook (2026-08-14) — there IS a token, and it is the point.** Upstream's
+**SUPERSEDED for OpenBooks (2026-08-14) — there IS a token, and it is the point.** Upstream's
 position is preserved verbatim below, because it is the strongest argument against what this
 fork is doing and deleting it would be self-serving.
 
@@ -172,7 +172,7 @@ fork is doing and deleting it would be self-serving.
 > points, governance tokens, whatever — that's their choice. But the base layer is always:
 > real work → real payment. The fairness system pays in real money (BSV), not promises.
 
-**OpenBook's position.** Every post is a purchase: you pay to post, and you receive the
+**OpenBooks's position.** Every post is a purchase: you pay to post, and you receive the
 thread's tokens as a tradable receipt on a supply that depletes. Tokens are still not sold in
 a presale and still not a governance instrument — they are minted by the act of contributing,
 priced by what you write, and the payment *is* the proof of contribution. But calling this
@@ -199,7 +199,7 @@ Enforcement is phased: start with instructions only, add hooks when contributors
 
 ## Competitive Positioning
 
-OpenBook inherits a combination that exists separately elsewhere but had not been put together on a chain where the economics work — and then changes the economics. The table below is upstream's analysis; read the note after it for where the fork no longer gets to claim its answers.
+OpenBooks inherits a combination that exists separately elsewhere but had not been put together on a chain where the economics work — and then changes the economics. The table below is upstream's analysis; read the note after it for where the fork no longer gets to claim its answers.
 
 ### Why existing approaches failed
 
@@ -209,11 +209,11 @@ OpenBook inherits a combination that exists separately elsewhere but had not bee
 | **SourceCred** | Algorithmic contribution scoring | Synthetic tokens not real money, organization dissolved | Real BSV micropayments, sustainable revenue from boot fees |
 | **Coordinape** | Peer-based contribution allocation | Subjective, political, doesn't scale | AI removes human politics from distribution |
 | **Twetch** | BSV on-chain social with micropayments | Required wallet upfront, killed onboarding | 2-click onboarding, identity generated silently |
-| **Friend.tech/DeSo** | Social tokens, speculation on creators | Pure speculation, no intrinsic value, bubbles pop | Rewards actual contribution, not speculation — **but see the note below: OpenBook's token model moves toward this row, not away from it** |
+| **Friend.tech/DeSo** | Social tokens, speculation on creators | Pure speculation, no intrinsic value, bubbles pop | Rewards actual contribution, not speculation — **but see the note below: OpenBooks's token model moves toward this row, not away from it** |
 | **Botto** | AI + community + value distribution | Token-weighted voting (plutocracy risk), aesthetic not contribution | AI evaluates contribution quality, inverted agency model |
 
-**Where OpenBook must be honest about this table.** The Friend.tech row indicts
-early-buyer-advantage on assets nobody can evaluate. OpenBook's model — pay to post, tokens
+**Where OpenBooks must be honest about this table.** The Friend.tech row indicts
+early-buyer-advantage on assets nobody can evaluate. OpenBooks's model — pay to post, tokens
 cheaper early, on a name whose thread has not happened yet — is structurally closer to that
 row than upstream is. The claimed difference is that the token is minted by contributing
 rather than bought from a bonding curve on a person, and that a thread's supply is finite and
@@ -240,4 +240,4 @@ The innovation lives or dies on one demo: **a user posts an idea, someone boots 
 - Not a crypto wallet app
 - Not a social media platform (yet — it may evolve into one)
 - Not a fundraising tool
-- Not built on bOpen.ai — bOpen is the toolkit, the product is OpenBook
+- Not built on bOpen.ai — bOpen is the toolkit, the product is OpenBooks

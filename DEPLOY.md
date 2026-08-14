@@ -1,4 +1,4 @@
-# Deploying OpenBook
+# Deploying OpenBooks
 
 > Durable deployment reference. The launch-day do-list lives in LAUNCH_CHECKLIST.md
 > (temporary); this file is the part that stays true afterwards.
@@ -25,7 +25,7 @@ per-instance and wiped between invocations. There is nowhere to put the database
 observed failure is not subtle:
 
 ```
-Error: OpenBook DB: failed to open local.db — unable to open database file
+Error: OpenBooks DB: failed to open local.db — unable to open database file
     at module evaluation (.next/server/chunks/…)
 ```
 

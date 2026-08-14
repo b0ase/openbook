@@ -764,6 +764,42 @@ There are now two axes, and they are NOT the same thing:
 **Not built.** The settled gate still applies: no minting of any kind ships before paid posting,
 because anything free that confers value destroys the anchor.
 
+## Supply cap vs divisibility — do not conflate them (raised 2026-08-14)
+
+Owner floated capping every token at **100,000,000**, like satoshis in a bitcoin, while saying
+they hold it loosely: *"It's arbitrary and it might make no sense. It might be that tokens get
+divided indefinitely."* Recorded with the one distinction that decides it.
+
+**These are two different numbers and only one of them is arbitrary.**
+
+- **SUPPLY** — how many units a thread ever issues. This is load-bearing. The whole scarcity
+  mechanic is that a thread's supply depletes, tokens get dearer as it fills, and **the thread
+  CLOSES when the supply is minted out** (see *Closure*). At one token per post, a 100,000,000
+  cap means a thread needs a hundred million posts to close. Closure would never happen, and the
+  mechanic it exists to create — a finished thing, fixed forever, held by the people who built it
+  — would quietly never fire. **A 100M supply cap does not make the design more bitcoin-like; it
+  deletes the part that makes it a game.**
+- **DIVISIBILITY** — how finely one unit can be split for trade. This one genuinely can be 100M
+  and costs nothing. It is a protocol field, not an app decision: BSV-21 carries `dec`
+  (decimals), and 1Sat Ordinals already gives each unit its own satoshi. Bitcoin's 100,000,000 is
+  a DIVISIBILITY figure — a bitcoin is divisible into that many satoshis — not a supply cap. The
+  supply cap is 21,000,000.
+
+**So the analogy points the other way round from how it was framed.** The bitcoin-shaped design
+is a *small* supply that is *finely divisible*, which is exactly what a depleting per-thread
+supply plus `dec` gives.
+
+⚠ **One tension to resolve before either number is fixed:** tokens here are semi-fungible —
+each unit is a non-fungible instance with a serial (see *The unit*). **A serial cannot be split.**
+Divisibility can therefore only apply to the fungible layer, or instances stop being instances.
+Deciding to make units divisible is deciding they are NOT individually identified, which
+contradicts the taxonomy the owner set out. Pick one.
+
+**Recommendation:** leave divisibility at the protocol default and set no numeric supply cap yet.
+The supply that matters is per-thread and should fall out of the pricing curve (how fast cost
+rises as a thread fills), not be picked as a round number first. **Not built; nothing depends on
+a number yet, so this can stay open without blocking anything.**
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,

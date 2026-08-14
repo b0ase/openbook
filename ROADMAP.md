@@ -330,7 +330,7 @@ Right-sized after an owner free-speech discussion (see DECISIONS.md "Thin-core c
 - [ ] Template system for new instances
 - [ ] Yours Wallet integration via @1sat/connect for power users
 
-## Threading (OpenBook fork) — COMPLETE
+## Threading (OpenBooks fork) — COMPLETE
 
 > The prerequisite for the token tree in TOKENS.md — a token attaches to a thread root, so
 > there must be thread roots. Spec + rationale: THREADS.md. Decisions: DECISIONS.md "Threading".

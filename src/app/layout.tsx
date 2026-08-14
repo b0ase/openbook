@@ -84,9 +84,14 @@ export const metadata: Metadata = {
      * stronger at a glance, and the words still appear beside it as og:title and
      * og:description.
      *
-     * Padded to exactly 1200x630 from a 1728x1152 original. The bars are
-     * invisible because the sign is already photographed on black — do not
-     * re-crop to fill, which would cut the book mark off the bottom.
+     * CROPPED to fill 1200x630 from a 1728x1152 original, not padded.
+     *
+     * An earlier version letterboxed it on black. The bars were invisible
+     * against the photograph, but Telegram (and any client that renders the card
+     * at its own aspect) then showed a small image floating in a large frame. A
+     * centre crop to 1728x907 keeps both the wordmark and the book mark inside —
+     * checked, not assumed — so filling the frame costs nothing here. Re-crop
+     * from the original if the image is ever replaced; do not scale this one up.
      */
     images: [
       {
