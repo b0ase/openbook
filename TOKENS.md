@@ -632,19 +632,31 @@ building. Users create, and own, tokens when they post."* The distinction that a
 posting, depleting supply, any way to trade). Only the market should be hedged in UI copy, and
 `Manifesto.tsx` now says exactly that.
 
-**Open — and load-bearing: who holds the unit that a citation mints?** Three readings, and the
-choice is the entire economics:
+**SETTLED 2026-08-14 — the QUOTER holds the unit a citation mints.** Alice posts and holds 1 of
+1. Bob quotes her: the edition becomes 1-of-2 and **Bob holds the new unit**. Carol quotes: 1-of-3,
+Carol holds one. Tokens spread to whoever cites them, so a widely-invoked post ends up distributed
+across everyone who found it worth invoking. The owner chose this over crediting the author,
+knowing both consequences below.
 
-1. **The quoter holds it.** Invoking someone spreads their token to you; the author is diluted
-   but distributed. Citation becomes acquisition.
-2. **The author holds it.** Being invoked increases the author's own holding. Citation becomes
-   reward, and the author's share never dilutes.
-3. **Both.** Supply rises by two; author and quoter each gain one.
+**Consequence 1 — an author is diluted by other people's actions.** Alice's share of her own post
+falls as it is cited, without her doing anything. This is the deliberate trade: it makes a token a
+record of *reach* rather than of authorship, and it is what lets a token circulate at all. An
+author who wants to keep their share can simply not be quoted, which is not a lever anyone would
+pull.
 
-(1) makes tokens circulate and gives quoting a cost-free acquisition path — which collides with
-*anything free that confers value destroys the anchor*. (2) keeps the anchor intact but means a
-token never leaves its author except by sale. Undecided; **do not implement citation-minting
-until this is answered**, because it is not reversible once units exist.
+**Consequence 2 — and this one is BLOCKING: quoting must COST something.** Free acquisition of a
+thing that carries value is the exact failure this project has already ruled out — *anything free
+that confers value destroys the anchor*. If quoting is free and quoting mints you a unit of
+someone else's token, then minting is free, and the token means nothing. Today posting is free.
+
+**Therefore citation-minting ships WITH paid posting, never before it.** This is not a sequencing
+preference, it is the condition that makes the mechanism sound: under paid posting a quote IS a
+post, so it costs the thread's current price, and the quoter is *buying* the unit they receive
+rather than being given it. That is a coherent market. Shipping the mint first would hand out
+free units that can never be recalled, since units are not reversible once they exist.
+
+**Do not implement quote-minting until posting costs money.** If a future contributor finds this
+tempting to build early, the answer is no, and the reason is the sentence above.
 
 **Built today:** one token per post, held by the author, visible in the wallet with the holder's
 percentage of each thread (`getHoldings` / `getThreadShare` in `src/app/actions.ts`). **Not

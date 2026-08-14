@@ -675,9 +675,17 @@ Consequences that are deliberate:
   different revision of the thread than the posts beside it.
 - **Holdings load on panel open, not on a poll** — a share moves only when someone posts.
 
-**Not built, and blocked on an unanswered question:** citation-minting (a post is a 1-of-1 that
-becomes a 1-of-2 when invoked). Who holds the newly minted unit — quoter, author, or both —
-decides the whole economics and is not reversible once units exist. See TOKENS.md.
+**Citation-minting: settled, and deliberately NOT built yet.** A post is a 1-of-1 that becomes a
+1-of-2 when quoted, and **the quoter holds the new unit** (settled by the owner 2026-08-14) — so
+tokens spread to whoever cites them, and an author is diluted by other people's invocations. That
+is the intended trade: a token records reach, not just authorship.
+
+**It is gated on paid posting, and that gate is not optional.** Free acquisition of something
+carrying value is the failure already ruled out — *anything free that confers value destroys the
+anchor*. Posting is free today, so shipping quote-minting now would hand out free units that can
+never be recalled. Under paid posting a quote IS a post, so the quoter pays the thread price and
+is *buying* the unit rather than being given it, which is the thing that makes the mechanism
+sound. **Do not implement quote-minting until posting costs money.** See TOKENS.md.
 
 ## The identity chip belongs in the thread overlay too (settled 2026-08-14)
 
