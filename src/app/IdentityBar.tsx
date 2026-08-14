@@ -31,6 +31,49 @@ const BACKED_UP_KEY = "opencook_identity_backed_up";
 const PASSPHRASE_NUDGE_DISMISSED_UNTIL_KEY = "opencook_passphrase_nudge_dismissed_until";
 const PASSPHRASE_NUDGE_BACKOFF_DAYS = 30;
 
+const NYM_KEY = "opencook_nym";
+
+/**
+ * Cache of the identity's public name, so the chip can render it on first paint.
+ *
+ * `getNym` is a server round-trip, and without a cache the chip renders
+ * `anon_xxxx` first and swaps to `$Harry` when the lookup lands — a visible flip
+ * on every load, and the anon name is exactly what the user chose a nym to stop
+ * seeing. It also lets the LOCKED chip show the nym, matching how the locked
+ * chip already falls back to `getStoredAnonName()`.
+ *
+ * ⚠ Stored WITH its pubkey. Restoring a different identity on this device would
+ * otherwise show the previous holder's name; on a mismatch the cache is ignored
+ * and the fresh `getNym` overwrites it. When locked there is no pubkey to check
+ * against, so the cache is trusted — the same assumption `getStoredAnonName()`
+ * already makes, and it self-corrects on unlock.
+ */
+function readCachedNym(pubkey?: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(NYM_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { pubkey?: unknown; symbol?: unknown };
+    if (typeof parsed.symbol !== "string" || !parsed.symbol) return null;
+    if (pubkey && parsed.pubkey !== pubkey) return null;
+    return parsed.symbol;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedNym(pubkey: string, symbol: string | null): void {
+  try {
+    if (symbol) {
+      window.localStorage.setItem(NYM_KEY, JSON.stringify({ pubkey, symbol }));
+    } else {
+      window.localStorage.removeItem(NYM_KEY);
+    }
+  } catch {
+    // Private mode / quota — the nym still renders this session from state.
+  }
+}
+
 function isPassphraseNudgeSuppressed(): boolean {
   if (typeof window === "undefined") return false;
   try {
@@ -134,8 +177,10 @@ export function IdentityChip(): React.JSX.Element | null {
 
   // Threads this identity holds a share of. See `getHoldings` — this is the
   // contribution record, not a minted balance.
-  /** The public name this identity goes by, or null while still anonymous. */
-  const [nym, setNym] = useState<string | null>(null);
+  /** The public name this identity goes by, or null while still anonymous.
+   *  Seeded from the cache so the chip paints the nym immediately rather than
+   *  showing `anon_xxxx` until the `getNym` round-trip lands. */
+  const [nym, setNym] = useState<string | null>(() => readCachedNym());
   const [showNymModal, setShowNymModal] = useState(false);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [holdingsExpanded, setHoldingsExpanded] = useState(false);
@@ -272,11 +317,17 @@ export function IdentityChip(): React.JSX.Element | null {
   // is a DB aggregate rather than a cached summary — polling it would be the
   // most expensive query in the panel refreshing to show the same numbers.
   useEffect(() => {
-    if (!identity?.pubkey) return;
+    const pubkey = identity?.pubkey;
+    if (!pubkey) return;
     let live = true;
-    void getNym(identity.pubkey)
+    // The server is authoritative — it also corrects a cache left behind by a
+    // different identity restored on this device.
+    setNym(readCachedNym(pubkey));
+    void getNym(pubkey)
       .then((n: string | null) => {
-        if (live) setNym(n);
+        if (!live) return;
+        setNym(n);
+        writeCachedNym(pubkey, n);
       })
       .catch(() => {});
     return () => {
@@ -580,7 +631,16 @@ export function IdentityChip(): React.JSX.Element | null {
   // When locked (needsUnlock && !identity), show the chip with the cached name
   // from the encrypted store. Click opens the You modal, which gates on the
   // manage-passphrase flow. Transaction actions open SignInModal instead.
-  const displayName = identity?.name ?? getStoredAnonName() ?? "...";
+  // A claimed nym IS the user's name — it outranks the generated anon handle
+  // everywhere the identity is shown. Without this the chip kept saying
+  // `anon_xxxx` after a nym was claimed, since the nym was only rendered in the
+  // name row inside the You modal.
+  //
+  // NOTE: feed author lines still show `anon_xxxx` — that surface is a separate,
+  // deliberately deferred change (see ROADMAP), not an oversight here.
+  const displayName = nym
+    ? `$${titleCaseTicker(nym)}`
+    : (identity?.name ?? getStoredAnonName() ?? "...");
 
   // E27: show the amber warning dot when EITHER the user has never saved any
   // recovery file globally (`backedUp === false` — first-launch UX) OR the
@@ -629,7 +689,10 @@ export function IdentityChip(): React.JSX.Element | null {
         open={showNymModal}
         onClose={() => setShowNymModal(false)}
         current={nym}
-        onClaimed={(symbol) => setNym(symbol)}
+        onClaimed={(symbol) => {
+          setNym(symbol);
+          if (identity?.pubkey) writeCachedNym(identity.pubkey, symbol);
+        }}
       />
       {showChangePassModal && identity && (
         <ChangePassphraseModal
