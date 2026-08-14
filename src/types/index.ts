@@ -22,6 +22,19 @@ export interface PostRow {
   pubkey: string | null;
   tx_id: string | null;
   created_at: string;
+  /**
+   * Threading (THREADS.md). `parent_id` is the immediate parent; NULL means this
+   * post is a thread ROOT, which is what the feed shows and what a token ticker
+   * attaches to. `root_id` is the thread this post belongs to, denormalised so a
+   * thread's contents are `WHERE root_id = ?` — one indexed scan rather than a
+   * recursive walk, because that query sits on the token-allocation path.
+   *
+   * `root_id` is self-referential for roots (root_id === id). It is nullable only
+   * because ALTER TABLE ADD COLUMN cannot backfill; the migration roots every
+   * pre-threading row, so NULL should not appear in practice.
+   */
+  parent_id: number | null;
+  root_id: number | null;
 }
 
 export type Post = PostRow & { boot_count: number };

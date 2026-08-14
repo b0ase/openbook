@@ -46,9 +46,23 @@ indexed lookup. The cost is one column and one write-time rule.
 ```sql
 CREATE INDEX IF NOT EXISTS idx_posts_parent_id ON posts(parent_id);
 CREATE INDEX IF NOT EXISTS idx_posts_root_id   ON posts(root_id);
--- Partial index for the root feed, which is the hottest read in the app.
-CREATE INDEX IF NOT EXISTS idx_posts_roots ON posts(id DESC) WHERE parent_id IS NULL;
 ```
+
+**Two, not three — corrected by measurement during the build.** This spec originally
+called for a partial `idx_posts_roots ON posts(id DESC) WHERE parent_id IS NULL` to serve
+the root feed. `EXPLAIN QUERY PLAN` over 50 roots + 2,000 replies shows SQLite never
+chooses it:
+
+```
+WITH BOTH:     SEARCH posts USING INDEX idx_posts_parent_id (parent_id=?)
+PARTIAL ONLY:  SCAN posts USING INDEX idx_posts_roots
+```
+
+`id` is `INTEGER PRIMARY KEY`, i.e. the rowid, so an index on `(parent_id)` physically
+stores `(parent_id, rowid)` pairs. Walking its `parent_id IS NULL` span backwards yields
+`ORDER BY id DESC` directly — no sort step, no temp b-tree. The partial index would add
+write cost on every insert and buy nothing. Dropped, with a test asserting it stays
+dropped.
 
 ### The existing 2,006 posts need no backfill
 
