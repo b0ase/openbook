@@ -67,6 +67,38 @@ changing is the disclosure.
   The parse rule needs a deliberate shape, and the ambiguous cases resolve toward NOT
   minting.
 
+### The ticker is a hotlink, and claiming is the genesis mint
+
+Refined 2026-08-14 (owner, posting publicly as the design was worked out):
+
+> *"People 'claim' new token ideas — they get the genesis token — just by adding a new
+> `$tokenidea` inline. The `$tokenidea` is a hotlink to their new thread. Click on it and you
+> can follow their idea."*
+
+Three things that adds to the gesture above:
+
+- **A `$ticker` in post text renders as a LINK to that ticker's thread.** This is the part
+  that makes the tree navigable instead of merely existing in the schema — a thread can point
+  at a child by naming it mid-sentence, and readers follow it like any other link. It is also
+  the one piece of the whole token design that is **buildable today**: threading shipped, so
+  a `$ticker` could resolve to a `root_id` and open the thread view right now, with no mint,
+  no fee and no covenant behind it.
+- **The claimer receives the genesis token.** Naming a ticker nobody has claimed is itself the
+  first mint, and it goes to the person who named it. That is what makes claiming a founding
+  act rather than a reservation, and it is why the gesture has to be paid — a free claim is a
+  free option on every word in the language.
+- **"Proof of writing."** The owner's phrase for the issuance rule, and a good one: tokens are
+  awarded for writing, cheaply at first and more expensively as supply dries up. It names what
+  the payment is evidence OF, which is the thing a reader needs to understand in one line.
+
+**Unresolved by this refinement:** ticker uniqueness. BSV-21 identity is the deploy
+`txid_vout`, so `sym` is deliberately NOT globally unique (see *BSV-20 vs BSV-21*) — which
+removes squatting but means two threads can both call themselves `$NewIdea`. If a `$ticker` in
+post text is a hotlink, it must resolve to exactly one thread, so the APP needs a first-claim
+registry even though the PROTOCOL does not. First claim wins is the obvious rule; it is not
+yet a decision, and it is the point where "the UI parse rule is consensus-critical" stops being
+abstract.
+
 **Not built.** Nothing about minting exists yet — no ticker registry, no fee, no covenant.
 Building the button before the thing it triggers would be a button that lies.
 
