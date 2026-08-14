@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { InlineAgentAnswer } from "@/components/InlineAgentAnswer";
 import { InstallBookmark } from "@/components/InstallBookmark";
 import { PermanenceGate } from "@/components/PermanenceGate";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useMediaUpload } from "@/hooks/useMediaUpload";
 import { useVoiceToText } from "@/hooks/useVoiceToText";
+import { parseSlashCommand } from "@/lib/slash";
 import { ACCEPTED_MIME } from "@/lib/upload";
 import { AgentChat } from "./AgentChat";
 import { createPost, getPostingMode } from "./actions";
@@ -57,6 +59,14 @@ export function PostForm({
   const wantedToPostRef = useRef(false);
   // One-time permanence acknowledgement gate, shown before the user's FIRST post.
   const [showPermanenceGate, setShowPermanenceGate] = useState(false);
+  // The inline agent answer. Ephemeral — see InlineAgentAnswer for why it is
+  // never posted.
+  const [agentAsk, setAgentAsk] = useState<{
+    question: string;
+    answer: string;
+    streaming: boolean;
+    error: string | null;
+  } | null>(null);
   const pendingPostRef = useRef<{
     identity: NonNullable<typeof identity>;
     content: string;
@@ -233,12 +243,79 @@ export function PostForm({
     [onPostCreated, onPostRejected, sign, parentId]
   );
 
+  /**
+   * Ask the platform agent, inline.
+   *
+   * ⚠ NO `requireIdentity()` GATE. Asking is a READ — it stores nothing, spends
+   * nothing and signs nothing — and the sign-in prompt is reserved for actions
+   * that need a key. Gating a question behind sign-in is exactly what the
+   * deleted global click-catcher did wrong.
+   */
+  const askAgent = useCallback(async (question: string) => {
+    setAgentAsk({ question, answer: "", streaming: true, error: null });
+    try {
+      const res = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [{ from: "user", text: question }] }),
+      });
+      if (!res.ok || !res.body) {
+        setAgentAsk({
+          question,
+          answer: "",
+          streaming: false,
+          error: await res.text().catch(() => "The agent is unavailable right now."),
+        });
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        setAgentAsk({ question, answer: acc, streaming: true, error: null });
+      }
+      setAgentAsk({ question, answer: acc, streaming: false, error: null });
+    } catch {
+      setAgentAsk({
+        question,
+        answer: "",
+        streaming: false,
+        error: "Couldn't reach the agent — try again.",
+      });
+    }
+  }, []);
+
   function submitForm(): void {
     if (!formRef.current) return;
     const formData = new FormData(formRef.current);
     const content = formData.get("content");
     if (typeof content !== "string" || !content.trim()) return;
     const trimmed = content.trim();
+
+    // ⚠ INTERCEPTED BEFORE EVERY POST GATE BELOW. A question is not a post: it
+    // must not consume the permanence acknowledgement, must not trip the
+    // sign-in prompt, and must never reach createPost.
+    const command = parseSlashCommand(trimmed);
+    if (command?.name === "agent") {
+      if (!command.arg) {
+        setAgentAsk({
+          question: "",
+          answer: "",
+          streaming: false,
+          error: "Ask a question after /agent — for example, /agent what is this board for?",
+        });
+        return;
+      }
+      formRef.current.reset();
+      setHasContent(false);
+      setDraft("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      void askAgent(command.arg);
+      return;
+    }
 
     if (!requireIdentity() || !identity) {
       wantedToPostRef.current = true;
@@ -298,6 +375,17 @@ export function PostForm({
       }}
       className="w-full max-w-2xl"
     >
+      {/* The agent's answer sits ABOVE the box it was asked from, so the
+          question and the reply read in order and the composer stays put. */}
+      {agentAsk && (
+        <InlineAgentAnswer
+          question={agentAsk.question}
+          answer={agentAsk.answer}
+          streaming={agentAsk.streaming}
+          error={agentAsk.error}
+          onDismiss={() => setAgentAsk(null)}
+        />
+      )}
       {/* Drop target is the whole compose box, not just the textarea: aiming a
           drag at a one-line input is fiddly, and a drop that lands two pixels
           outside would otherwise navigate the tab to the file. `preventDefault`
@@ -521,6 +609,26 @@ export function PostForm({
           </button>
         )}
       </div>
+      {/* ⚠ A "/" IS AMBIGUOUS UNTIL IT IS FINISHED, so say what it does before
+          the send button is pressed — the same job TickerHint does for "$".
+          Without this, a slash command is a feature only the person who built
+          it knows exists, and the first thing a user learns is that their post
+          vanished. */}
+      {draft.trimStart().startsWith("/") && (
+        <p className="mt-1.5 px-1 text-[11px] text-zinc-500">
+          {parseSlashCommand(draft) ? (
+            <>
+              <span className="text-amber-400">/agent</span> asks the AI &mdash; this won&rsquo;t be
+              posted
+            </>
+          ) : (
+            <>
+              Starts with &ldquo;/&rdquo; but isn&rsquo;t a command, so it posts as written. Try{" "}
+              <span className="text-amber-400">/agent</span>
+            </>
+          )}
+        </p>
+      )}
       {/* Claim-vs-cite disclosure for any $Ticker being typed. See TickerHint. */}
       <TickerHint content={draft} />
       {uploading && (

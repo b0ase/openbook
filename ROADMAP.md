@@ -115,6 +115,9 @@ Full reasoning in TOKENS.md; these are the live questions, not a summary of sett
       after Build D so ARC error codes are stable. ~3–4h.
 - [ ] **Pending-payment badge** ("$0.12 · 1 pending"). Natural fit once SSE lands. ~30–60min.
 - [ ] **Notification system** (bell — "someone featured your post", daily earnings summary).
+- [x] **`/agent` inline** — ask the platform agent from the compose box; answer is ephemeral.
+- [ ] **`$Name` agent invocation** — external agents addressed through the ticker namespace, not a
+      second registry. Deferred with `$TickerAgents`; see DECISIONS.md.
 - [ ] **Agent chat: DB query tools** (live oracle — real post counts, contributor stats, prices).
 - [ ] **Rename `boot` → `boost`** in schema/API/identifiers. UI copy already says Boost.
 - [ ] **Thread-aggregated boot counts** — touches `weights.ts` + bootboard semantics.
