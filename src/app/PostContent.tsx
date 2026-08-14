@@ -1,6 +1,9 @@
 "use client";
 
 import { LinkPreviewCard } from "@/components/LinkPreviewCard";
+import { MediaEmbed } from "@/components/MediaEmbed";
+import { findUrls } from "@/lib/linkify";
+import { firstMedia } from "@/lib/media";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
 import { PostText } from "./PostText";
@@ -26,6 +29,8 @@ export function PostContent({
   /** Open the thread a `$Ticker` names. Omitted = tickers render as plain text. */
   onOpenTicker?: (symbol: string) => void;
 }) {
+  const media = firstMedia(findUrls(post.content).map((u) => u.url));
+
   return (
     <>
       <div className="flex items-center gap-2 text-xs text-zinc-500">
@@ -69,7 +74,10 @@ export function PostContent({
       <p className="mt-1.5 text-[15px] leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">
         <PostText content={post.content} onOpenTicker={onOpenTicker} />
       </p>
-      <LinkPreviewCard post={post} />
+      {/* A direct media link is SHOWN; anything else falls through to the unfurl
+          card. Both never render for the same post — a media file is not HTML, so
+          the unfurl records `not_html` and the card declines to draw. */}
+      {media ? <MediaEmbed url={media.url} kind={media.kind} /> : <LinkPreviewCard post={post} />}
     </>
   );
 }

@@ -77,6 +77,14 @@ const nextConfig: NextConfig = {
               // image proxy anyone can point at any URL, on our bandwidth. That
               // is a worse trade than the one taken here.
               "img-src 'self' data: blob: https:",
+              // ⚠ SAME TRADE AS img-src ABOVE, made knowingly. Posted media lives
+              // on whatever host the poster used, so no allowlist is possible.
+              // Without this, <video>/<audio> fall back to `default-src 'self'`
+              // and every embed is silently blocked. Media cannot execute script,
+              // and `script-src` is untouched. The residual cost is the same one
+              // img-src already accepts: the host learns a viewer's IP, bounded by
+              // referrerPolicy="no-referrer" and `preload="none"`.
+              "media-src 'self' https: blob:",
               "connect-src 'self' https://api.whatsonchain.com https://arc.taal.com https://arc.gorillapool.io",
               "font-src 'self'",
               "frame-ancestors 'none'",
