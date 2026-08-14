@@ -496,6 +496,13 @@ try {
   // posts.signature / posts.pubkey — added after the original posts schema.
   addColumnIfMissing(db, "posts", "signature", "signature TEXT");
   addColumnIfMissing(db, "posts", "pubkey", "pubkey TEXT");
+  // posts.vout — the output index of the post's INSCRIPTION, paired with
+  // `tx_id` to form the outpoint `<txid>_<vout>` that IS the token's identity
+  // (DECISIONS.md). NULL for every post anchored the old way: an OP_RETURN
+  // record has no ownable output, so there is no outpoint to record. Its
+  // presence is therefore what distinguishes an inscribed post from an
+  // anchored one.
+  addColumnIfMissing(db, "posts", "vout", "vout INTEGER");
 
   // Threading columns, backfill and indexes — see THREADS.md. Extracted so the
   // backfill can be tested against a real pre-threading schema.

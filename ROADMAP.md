@@ -35,6 +35,17 @@ Concretely: a post's data moves onto a **1-satoshi spendable output** at the aut
 ownership becomes "whoever can spend that satoshi", and the token's identity becomes its **origin
 outpoint `<txid>_<vout>`** — not the SQLite id, not a content hash. See DECISIONS.md.
 
+**Server side is BUILT and flag-gated** (`PAID_POSTING`, default off):
+`inscription.ts` (1-sat ordinal envelope), `post-economics.ts` (flat cost-plus),
+`client-post.ts` (browser builds + funds + broadcasts), `paid-post.ts` (server verifies), and
+`createPost` storing the outpoint (`posts.vout`) instead of paying to anchor.
+
+- [ ] ⚠ **Broadcast ONE inscription and confirm a public indexer shows it.** The envelope follows
+      the 1Sat convention and is unit-tested for shape, but shape is not recognition. **Nothing may
+      be charged for until this passes.** It costs a few pence and only the owner can authorise it.
+- [ ] **Wire the compose box** — price quote, insufficient-funds → deposit, the paid submit path.
+      `clientSidePost` has no caller yet.
+
 **Waiting behind this gate, in order:**
 
 - [ ] **Tagging.** The `(from_post, ticker, target)` edge table is BUILT (`ticker_mentions`,

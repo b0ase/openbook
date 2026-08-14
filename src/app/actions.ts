@@ -12,6 +12,8 @@ import {
   savePreview,
   urlHash,
 } from "@/lib/link-preview-store";
+import { verifyPaidPost } from "@/lib/paid-post";
+import { isPaidPostingEnabled, MIN_ECONOMIC_OUTPUT_SATS } from "@/lib/post-economics";
 import { rateLimit } from "@/lib/rate-limit";
 import {
   FREE_BOOT_COST_SATS,
@@ -29,7 +31,7 @@ async function getBsvSdk() {
 
 import { sweepOrphans } from "@/services/bsv/anchor-sweep";
 import { logPostOnChain } from "@/services/bsv/onchain";
-import { isServerSpendDisabled } from "@/services/bsv/wallet";
+import { getServerAddress, isServerSpendDisabled } from "@/services/bsv/wallet";
 import { executeBoot } from "@/services/fairness/boot-orchestrator";
 import { getBootPrice, getBootPriceForUser } from "@/services/fairness/pricing";
 import { unfurl } from "@/services/link-unfurl";
@@ -45,7 +47,11 @@ export interface CreatePostResult {
     | "paused"
     | "invalid_signature"
     | "rejected_content"
-    | "invalid_parent";
+    | "invalid_parent"
+    /** Paid posting is on and no funded transaction was supplied. */
+    | "payment_required"
+    /** A transaction was supplied but does not do what it claims. */
+    | "invalid_payment";
 }
 
 /**
@@ -159,12 +165,25 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
       pk: string | null;
       parent: number | null;
       root: number | null;
+      /** Set only for a PAID post — the inscription is already on-chain, so the
+       *  outpoint is known before the row exists and there is nothing to sweep. */
+      txId: string | null;
+      vout: number | null;
     }): number => {
       const res = db
         .prepare(
-          "INSERT INTO posts (content, author_name, signature, pubkey, parent_id, root_id) VALUES (?, ?, ?, ?, ?, ?)"
+          "INSERT INTO posts (content, author_name, signature, pubkey, parent_id, root_id, tx_id, vout) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
-        .run(args.content, args.author, args.sig, args.pk, args.parent, args.root);
+        .run(
+          args.content,
+          args.author,
+          args.sig,
+          args.pk,
+          args.parent,
+          args.root,
+          args.txId,
+          args.vout
+        );
       const id = res.lastInsertRowid as number;
       if (args.root === null) {
         db.prepare("UPDATE posts SET root_id = id WHERE id = ?").run(id);
@@ -173,6 +192,53 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
     }
   );
 
+  // ── Paid posting ─────────────────────────────────────────────────────────
+  // When enabled the AUTHOR funds and broadcasts their own inscription, so the
+  // server verifies a transaction instead of paying for one. Everything above
+  // (signature, content screen, rate limits, parent resolution) is unchanged and
+  // still runs first — paying does not buy an exemption from any of it.
+  let paidTxId: string | null = null;
+  let paidVout: number | null = null;
+  if (isPaidPostingEnabled()) {
+    const rawTx = formData.get("raw_tx");
+    if (typeof rawTx !== "string" || rawTx.trim() === "") {
+      // ⚠ REFUSE rather than falling back to the free server-funded path. A
+      // fallback would make the gate meaningless: anyone could post for free by
+      // omitting a field.
+      return { ok: false, reason: "payment_required" };
+    }
+
+    let authorAddress: string;
+    try {
+      const { PublicKey } = await getBsvSdk();
+      authorAddress = PublicKey.fromString(pubkey).toAddress().toString();
+    } catch {
+      return { ok: false, reason: "missing_pubkey" };
+    }
+
+    const verdict = verifyPaidPost({
+      rawTx: rawTx.trim(),
+      content: content.trim(),
+      authorAddress,
+      platformAddress: getServerAddress(),
+      // ⚠ A FLOOR, NOT THE QUOTED PRICE. The author has ALREADY broadcast and
+      // already paid by the time we see this — rejecting for a few satoshis of
+      // legitimate fee drift would take their money and give them no post. The
+      // floor only has to stop a post that paid the platform nothing.
+      minPlatformSats: MIN_ECONOMIC_OUTPUT_SATS,
+    });
+    if (!verdict.ok) return { ok: false, reason: "invalid_payment" };
+
+    // Replay: the same broadcast must not mint two posts.
+    const seen = db.prepare("SELECT id FROM posts WHERE tx_id = ? LIMIT 1").get(verdict.txid) as
+      | { id: number }
+      | undefined;
+    if (seen) return { ok: false, reason: "invalid_payment" };
+
+    paidTxId = verdict.txid;
+    paidVout = verdict.vout;
+  }
+
   const postId = insertPost({
     content: content.trim(),
     author: authorName,
@@ -180,6 +246,8 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
     pk: typeof pubkey === "string" ? pubkey : null,
     parent: parentId,
     root: rootId,
+    txId: paidTxId,
+    vout: paidVout,
   });
 
   // Claim any `$Ticker` in the post — FIRST CLAIM WINS, enforced by the PRIMARY
@@ -201,25 +269,29 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   const sigStr = typeof signature === "string" ? signature : null;
   const pkStr = typeof pubkey === "string" ? pubkey : null;
 
-  logPostOnChain({
-    id: postId,
-    content: trimmedContent,
-    author: authorName,
-    signature: sigStr,
-    pubkey: pkStr,
-    parent: parentId,
-  })
-    .then((txid) => {
-      if (txid) {
-        db.prepare("UPDATE posts SET tx_id = ? WHERE id = ?").run(txid, postId);
-        recordDailySpend(POST_LOG_COST_SATS);
-      } else {
-        console.error(`OpenBook: on-chain logging returned null for post ${postId}`);
-      }
+  // A paid post is ALREADY on-chain and already owned — anchoring it again
+  // would spend server funds to duplicate a record the author paid for, and the
+  // sweep would keep retrying a post that already has a tx_id.
+  if (paidTxId === null)
+    logPostOnChain({
+      id: postId,
+      content: trimmedContent,
+      author: authorName,
+      signature: sigStr,
+      pubkey: pkStr,
+      parent: parentId,
     })
-    .catch((e) => {
-      console.error(`OpenBook: on-chain logging failed for post ${postId}`, e);
-    });
+      .then((txid) => {
+        if (txid) {
+          db.prepare("UPDATE posts SET tx_id = ? WHERE id = ?").run(txid, postId);
+          recordDailySpend(POST_LOG_COST_SATS);
+        } else {
+          console.error(`OpenBook: on-chain logging returned null for post ${postId}`);
+        }
+      })
+      .catch((e) => {
+        console.error(`OpenBook: on-chain logging failed for post ${postId}`, e);
+      });
 
   // Durable guarantee: drain any older un-anchored post (this one is too fresh
   // to be swept — see anchor-sweep MIN_AGE). Fire-and-forget, single-flight.
