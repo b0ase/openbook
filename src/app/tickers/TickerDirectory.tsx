@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatShare } from "@/lib/share";
-import { titleCaseTicker } from "@/lib/ticker";
+import { tickerHref, titleCaseTicker } from "@/lib/ticker";
 import { searchTickers, type TickerHit } from "../actions";
 
 /**
@@ -84,7 +84,7 @@ export function TickerDirectory({ initial }: { initial: TickerHit[] }) {
             // decide which one wins.
             <li key={h.symbol} className="flex items-baseline justify-between gap-3 py-3">
               <a
-                href={`/${h.path.map((s) => `$${s.toLowerCase()}`).join("/")}`}
+                href={tickerHref(h.path)}
                 className="group flex min-w-0 flex-1 items-baseline justify-between gap-3"
               >
                 <span className="min-w-0">

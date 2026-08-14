@@ -353,12 +353,15 @@ describe("a repeat mention is an INVOCATION, not a claim", () => {
 });
 
 describe("the root ticker is claimable like any other", () => {
-  // Nobody had claimed the board's own name, so `/$openbooks` was hard-coded to
-  // mean "show the feed". That is only safe while it stays unclaimed: once it is
-  // a real thread, `handleOpenTicker` pushes `/$openbooks` into the address bar
-  // for a thread the URL handler would refuse to reopen — you would see one
-  // thing and share another. These pin the resolution, which is what the URL
-  // handler now depends on rather than a special case.
+  // Claiming the board's own name must stay an ordinary registration, because
+  // the ROUTING no longer depends on whether it happens to be claimed: `/` is
+  // the root's one address, and `/$openbooks` redirects there whether or not a
+  // post ever named it (`tickerHref` / the catch-all's `redirectIfRoot`).
+  //
+  // What these pin is that the claim itself is still normal — same registry row,
+  // same resolution, no parent. An earlier rule read the other way round and let
+  // `handleOpenTicker` push `/$openbooks` for a claimed root, which is how the
+  // address bar grew a path nobody typed.
 
   it("registers the root name as a normal claim", async () => {
     expect((await post(`naming the board itself: $${ROOT_TICKER}`)).ok).toBe(true);
