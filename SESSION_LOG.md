@@ -27,10 +27,24 @@
   — yes, via the depleting supply: early contributors get more because tokens are cheaper
   early, not because a multiplier favours them. The curve's *shape* is still unset and the
   steepness cautions still apply.
-- **New open question 8: what happens when a thread's supply is exhausted?** The question
-  this model has to answer — threads fill up and close, or posting continues while minting
-  stops, or the supply is "large enough". None chosen. A valuable thread getting locked
-  because it was popular is an unrecoverable failure.
+- **Open question 8 raised and ANSWERED the same session: threads CLOSE when minted out.**
+  No further posts; the thread stays readable forever (the posts are already permanent).
+  Chosen over "posting continues, minting stops" (would give the one move two modes) and
+  "supply large enough that it never happens" (theoretical scarcity prices like theoretical
+  scarcity). Two properties fall out: the token becomes **genuinely fixed-supply at close**
+  — which is where the deflationary intuition that started the discussion actually arrives,
+  at sell-out rather than at deploy — and **closure feeds the tree**, because the natural
+  continuation of a closed thread is a child thread that mints its own token and pays the
+  parent a share. The Recursive Model arrived at by economics rather than by asking users to
+  start sub-projects.
+- **Closure's two risks recorded.** (1) Supply size is now a thread's LIFESPAN and the most
+  important number in the system — a tuning problem, not a constant. (2) **A thread can be
+  bought closed:** anyone wanting a discussion stopped can exhaust the remaining supply. It
+  is expensive griefing (attacker pays the top of the curve and is left holding a token they
+  just killed) and irrational for profit — but entirely rational for silencing, which
+  collides with the project's free-speech position. **Flagged as needing a rule before
+  mainnet** (per-identity share cap, rate limit near exhaustion, or an accepted reason
+  neither is needed).
 - **Paid posting accepted as a cost, not overlooked.** It ends DIRECTION.md's zero-friction
   onboarding claim (~15% vs industry ~0.3%) — a first-time user must fund an address before
   their first post. Raised twice, reaffirmed twice, so recorded as a chosen trade with a

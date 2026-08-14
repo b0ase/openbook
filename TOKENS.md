@@ -293,6 +293,44 @@ enforced by the covenant. Note the arithmetic — a 50% parent share means the c
 receives half of what is minted on their behalf, and the child's supply depletes at twice
 the contribution rate.
 
+## Closure — a thread ends when its supply is minted out
+
+**Settled 2026-08-14.** When a thread's supply is exhausted it closes: no further posts. The
+thread stays readable forever — the posts are already permanent and on-chain — but nothing
+more can be added to it.
+
+**Why this is the right answer and not just the tidy one.**
+
+- **It is the only reading that keeps the model honest.** If posting continued after
+  exhaustion, posts would stop being purchases and the "one move" would have two modes. If
+  the supply were merely "large enough that it never happens", the scarcity driving the whole
+  curve would be theoretical, and theoretical scarcity prices like theoretical scarcity.
+- **The token becomes genuinely fixed-supply at close.** This is where the deflationary
+  intuition that started this discussion actually arrives — not at deploy, but at sell-out.
+  A closed thread's token can never be diluted again, and its holders are exactly the people
+  who were there.
+- **Closure feeds the tree.** The natural continuation of a closed thread is a **child**
+  thread, which mints its own token and gives the parent a share. Closure is not death, it
+  is branching pressure — which is precisely the Recursive Model this fork exists to
+  instantiate, arrived at by economics rather than by asking users to please start
+  sub-projects.
+
+### What closure puts at risk
+
+- **Supply size becomes the most important number in the system.** It is now a thread's
+  lifespan. Too small and good threads die young; too large and the curve never bites. This
+  is a single parameter with no obvious right value and it should be treated as the tuning
+  problem it is, not a constant someone picks once.
+- **A thread can be bought closed.** Anyone who wants a discussion stopped can exhaust its
+  remaining supply and end it. It is *expensive* griefing — the attacker pays the top of the
+  curve, the most costly tokens in the thread — and they are left holding a large share of
+  something they just killed, so it is irrational for profit. But it is entirely rational for
+  silencing, and this project's stated position is free speech. **This is the one place
+  closure and the ethos collide, and it needs a rule before mainnet** — a per-identity share
+  cap, a rate limit as supply nears zero, or an accepted answer for why neither is needed.
+- **The UI has to say why.** A compose box that silently refuses is the worst version. A
+  closed thread must state that it is minted out, and point at starting a child.
+
 ## BSV-20 vs BSV-21
 
 | | BSV-20 | BSV-21 |
@@ -410,17 +448,8 @@ question is whether others get one too.*
    None of that says no. It says the curve's shape is an economic decision with a security
    consequence, and it should be made after question 1, not before.
 
-8. **What happens when a thread's supply is exhausted?** Open, and it is the question this
-   model has to answer. If posting requires minting and there is nothing left to mint, the
-   thread becomes unpostable. Three readings, none chosen:
-   - **Threads fill up and close.** Defensible, even elegant — a thread has a lifetime and
-     then it is history. But a genuinely valuable discussion getting locked because it was
-     popular is a bad failure, and it is unrecoverable.
-   - **Posting continues, minting stops.** The thread stays alive; late posts are free and
-     mint nothing. Keeps discussion open but removes the incentive exactly where the thread
-     has proven itself.
-   - **Supply is large enough that exhaustion is theoretical.** Avoids the choice rather than
-     making it, and "theoretical" has a way of arriving.
+8. ~~**What happens when a thread's supply is exhausted?**~~ **ANSWERED 2026-08-14: the
+   thread CLOSES.** Minted out means finished. See *Closure* below.
 
 **On hard-capping supply** — asked 2026-08-14, initially answered "not open", then **resolved
 the other way the same day.** The original objection was mechanical: a minted supply has to
