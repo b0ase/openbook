@@ -683,3 +683,46 @@ header as well.
 **The same component, not a copy.** The chip carries the locked / unlocked / read-only states
 and the sign-in trigger; a second implementation would drift from the header's on precisely the
 paths that are hardest to notice.
+
+## Media uploads live on the Railway volume, not on-chain (settled 2026-08-14)
+
+Drag-and-drop, paste and a `+` button in the compose box upload images, video and audio to
+`POST /api/upload`, which writes them to the **persistent volume beside the SQLite file**
+(`UPLOAD_PATH`, defaulting to `dirname(DATABASE_PATH)/uploads`) and returns an absolute URL. The
+URL is inserted into the post text, so it renders through the existing `MediaEmbed` path and
+travels on-chain inside the post — **no new database field, no schema change, no second render
+path** that could disagree with the linked-media one.
+
+**The post is on-chain; the file is not.** This is a real asymmetry in a product whose claim is
+permanence, and it is a staging decision, not an oversight — on-chain/ORDFS storage costs
+satoshis per megabyte and belongs after the token model funds it (TOKENS.md). Names are
+content-addressed (`sha256(bytes).ext`), so a later migration to ORDFS can keep the same
+identifiers. Defaulting the upload directory to the database's own directory means the two
+cannot drift: if the database survives a deploy, so do the uploads.
+
+Security decisions that are load-bearing, not incidental:
+
+- **No SVG.** `classifyMedia` accepts `.svg` for LINKED media, which renders in a foreign origin.
+  An uploaded SVG is served from OUR origin and SVG carries `<script>` — that is stored XSS with
+  a same-origin session. No PDF, no archives, no documents either: this is a media affordance,
+  not file hosting. **Widening the type table is a decision, not a tweak.**
+- **The extension is chosen by us, from a fixed table** — no part of a user-supplied filename
+  ever reaches the filesystem, which makes traversal and null-byte tricks structurally
+  impossible rather than filtered.
+- **The serving route matches, it does not sanitise.** `parseStoredName` accepts only 64
+  lowercase hex characters plus a known extension; `../../local.db` fails to be a name and 404s.
+  The `Content-Type` is derived from the stored extension, never echoed from the upload, and is
+  sent with `nosniff`.
+- **Size is re-checked after reading the body.** `file.size` is client-declared.
+- **Uploading takes `requireIdentity()`**, like every other write — otherwise a locked or
+  read-only user could push bytes onto the volume without being able to post them.
+
+**`SITE_ORIGIN` must be set before real uploads.** The returned URL goes into post text and is
+anchored on-chain verbatim, so it can never be edited. Without it the URL is built from whichever
+host served the request — meaning posts made during a domain move would point at the old domain
+forever. This was written during exactly such a move.
+
+Local-dev consequence: uploads resolve to `http://localhost`, and `classifyMedia` requires
+`https:`, so an uploaded file shows as a link rather than an inline embed in development. That
+is the linked-media rule working as designed (an http embed on an https page is blocked as mixed
+content), not an upload bug.

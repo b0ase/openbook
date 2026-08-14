@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { InstallBookmark } from "@/components/InstallBookmark";
 import { PermanenceGate } from "@/components/PermanenceGate";
 import { useIdentityContext } from "@/contexts/IdentityContext";
+import { useMediaUpload } from "@/hooks/useMediaUpload";
 import { useVoiceToText } from "@/hooks/useVoiceToText";
+import { ACCEPTED_MIME } from "@/lib/upload";
 import { AgentChat } from "./AgentChat";
 import { createPost } from "./actions";
 import { TickerHint } from "./TickerHint";
@@ -88,6 +90,44 @@ export function PostForm({
     toggle: toggleMic,
     dismissError: dismissMicError,
   } = useVoiceToText(handleTranscript);
+
+  // An uploaded file becomes a URL in the post text — the same thing a user gets
+  // by pasting a link, so it renders through `MediaEmbed` and travels on-chain
+  // inside the post with no new field, no schema change and no second render
+  // path that could disagree with the linked-media one.
+  const handleUploaded = useCallback(
+    (url: string) => {
+      handleTranscript(url);
+    },
+    [handleTranscript]
+  );
+
+  const {
+    upload,
+    pending: uploadPending,
+    total: uploadTotal,
+    error: uploadError,
+    dismissError: dismissUploadError,
+    busy: uploading,
+  } = useMediaUpload(handleUploaded);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Drag state is counted, not a boolean: dragging over a child element fires
+  // dragleave on the parent, so a boolean flickers the highlight off mid-drag.
+  const dragDepth = useRef(0);
+  const [dragging, setDragging] = useState(false);
+
+  // Uploading is a write, so it takes the same gate as posting — otherwise a
+  // locked or read-only user could push bytes onto the volume without ever being
+  // able to post them. See CLAUDE.md "transaction action requires sign-in".
+  const startUpload = useCallback(
+    (files: File[]) => {
+      if (!files.length) return;
+      if (!requireIdentity()) return;
+      void upload(files);
+    },
+    [requireIdentity, upload]
+  );
 
   // Refocus textarea after post completes
   const wasPendingRef = useRef(false);
@@ -210,11 +250,49 @@ export function PostForm({
       }}
       className="w-full max-w-2xl"
     >
-      <div className="relative">
+      {/* Drop target is the whole compose box, not just the textarea: aiming a
+          drag at a one-line input is fiddly, and a drop that lands two pixels
+          outside would otherwise navigate the tab to the file. `preventDefault`
+          on dragOver is what stops that default navigation. */}
+      {/* Drag-and-drop has no keyboard equivalent and needs none: the `+` button
+          inside this div is the accessible, focusable path to the same action,
+          and it is not conditional on pointer capability. Making the container
+          itself focusable would add a tab stop that does nothing when reached. */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: see above */}
+      <div
+        className="relative"
+        onDragEnter={(e) => {
+          if (!e.dataTransfer?.types?.includes("Files")) return;
+          dragDepth.current += 1;
+          setDragging(true);
+        }}
+        onDragOver={(e) => {
+          if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
+        }}
+        onDragLeave={() => {
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDragging(false);
+        }}
+        onDrop={(e) => {
+          if (!e.dataTransfer?.types?.includes("Files")) return;
+          e.preventDefault();
+          dragDepth.current = 0;
+          setDragging(false);
+          startUpload(Array.from(e.dataTransfer.files));
+        }}
+      >
         <textarea
           ref={textareaRef}
           name="content"
           aria-label="Share an idea"
+          onPaste={(e) => {
+            // A screenshot on the clipboard is the commonest way an image
+            // reaches a compose box; without this it pastes as nothing at all.
+            const files = Array.from(e.clipboardData?.files ?? []);
+            if (!files.length) return;
+            e.preventDefault();
+            startUpload(files);
+          }}
           placeholder={
             !identity && !needsUnlock
               ? "Setting up your identity..."
@@ -223,16 +301,18 @@ export function PostForm({
           maxLength={1000}
           disabled={!identity && !needsUnlock}
           onKeyDown={handleKeyDown}
-          className={`block w-full bg-zinc-900 border rounded-3xl pl-4 pr-14 py-3 sm:pl-5 sm:py-4 text-sm sm:text-base resize-none focus:outline-none placeholder:text-zinc-600 min-h-[48px] sm:min-h-[56px] max-h-[200px] disabled:opacity-50 scrollbar-hide ${
+          className={`block w-full bg-zinc-900 border rounded-3xl pl-12 pr-14 py-3 sm:pl-13 sm:py-4 text-sm sm:text-base resize-none focus:outline-none placeholder:text-zinc-600 min-h-[48px] sm:min-h-[56px] max-h-[200px] disabled:opacity-50 scrollbar-hide ${
             resumeNudge ? "" : "transition-colors duration-300"
           } ${
-            justPosted
-              ? "border-green-600/60 focus:border-green-600/60"
-              : resumeNudge && hasContent
-                ? "border-amber-400/60 focus:border-amber-400/60 animate-[nudgePulse_0.8s_ease-in-out_2]"
-                : hasContent
-                  ? "border-amber-400/60 focus:border-amber-400/60"
-                  : "border-zinc-800 focus:border-zinc-700"
+            dragging
+              ? "border-amber-400 focus:border-amber-400"
+              : justPosted
+                ? "border-green-600/60 focus:border-green-600/60"
+                : resumeNudge && hasContent
+                  ? "border-amber-400/60 focus:border-amber-400/60 animate-[nudgePulse_0.8s_ease-in-out_2]"
+                  : hasContent
+                    ? "border-amber-400/60 focus:border-amber-400/60"
+                    : "border-zinc-800 focus:border-zinc-700"
           }`}
           style={{ scrollbarWidth: "none" }}
           rows={1}
@@ -244,6 +324,70 @@ export function PostForm({
             setDraft(el.value);
           }}
         />
+        {/* Attach. Mirrors the mic/send button on the right — same size, same
+            bottom offset — so the box stays symmetrical as it grows. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={ACCEPTED_MIME.join(",")}
+          className="hidden"
+          onChange={(e) => {
+            startUpload(Array.from(e.target.files ?? []));
+            // Cleared so choosing the SAME file twice in a row still fires
+            // onChange the second time.
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading || (!identity && !needsUnlock)}
+          aria-label="Add a photo, video or audio"
+          title="Add a photo, video or audio"
+          className={`absolute left-3 bottom-[7px] sm:bottom-[11px] rounded-full p-2.5 transition-colors disabled:opacity-40 ${
+            dragging ? "text-amber-400" : "text-zinc-500 hover:text-amber-400"
+          }`}
+        >
+          {uploading ? (
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              className="animate-spin"
+              aria-hidden="true"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="9"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeOpacity="0.25"
+              />
+              <path
+                d="M21 12a9 9 0 0 0-9-9"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          ) : (
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          )}
+        </button>
         {hasContent ? (
           <button
             type="button"
@@ -331,6 +475,23 @@ export function PostForm({
       </div>
       {/* Claim-vs-cite disclosure for any $Ticker being typed. See TickerHint. */}
       <TickerHint content={draft} />
+      {uploading && (
+        <p className="mt-1 text-[11px] text-zinc-500" aria-live="polite">
+          {uploadTotal > 1
+            ? `Uploading ${uploadTotal - uploadPending + 1} of ${uploadTotal}…`
+            : "Uploading…"}
+        </p>
+      )}
+      {uploadError && !uploading && (
+        <button
+          type="button"
+          onClick={dismissUploadError}
+          className="mt-1 w-full text-left text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 hover:bg-amber-500/15 transition-colors"
+          aria-live="polite"
+        >
+          {uploadError}
+        </button>
+      )}
       {voiceError && (
         <button
           type="button"
