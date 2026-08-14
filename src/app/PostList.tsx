@@ -325,15 +325,26 @@ export function PostList({
                 fork point, and only when the previous row is on the other side,
                 so it appears exactly once and only when the window spans it. */}
             {post.id > FORK_POINT_ID && (i === 0 || posts[i - 1].id <= FORK_POINT_ID) && (
-              <div className="flex items-center gap-3 py-3">
-                <div className="flex-1 h-px bg-amber-500/30" />
-                <span className="text-[10px] font-medium uppercase tracking-wider text-amber-500/80 text-center leading-tight">
-                  OpenBook forks here
-                  <span className="block text-[9px] normal-case tracking-normal text-zinc-500">
-                    above: inherited from OpenCook
+              <div className="my-6 rounded-lg border border-amber-500/40 bg-gradient-to-b from-amber-500/10 to-transparent px-4 py-5 text-center">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex-1 h-px bg-amber-500/40" />
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-400">
+                    The Fork
                   </span>
-                </span>
-                <div className="flex-1 h-px bg-amber-500/30" />
+                  <div className="flex-1 h-px bg-amber-500/40" />
+                </div>
+                <p className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
+                  <span className="text-amber-400">$Open</span>Book starts here
+                </p>
+                <p className="mt-2 text-[13px] text-zinc-400 leading-relaxed max-w-md mx-auto">
+                  Everything above is inherited from <span className="text-zinc-300">OpenCook</span>{" "}
+                  — the same posts, the same authors, the same signatures on-chain. Everything below
+                  is ours.
+                </p>
+                <p className="mt-2 text-[11px] text-zinc-500">
+                  We forked over one thing: being paid for a contribution isn't the same as owning a
+                  piece of it.
+                </p>
               </div>
             )}
             {mode === "live" && firstUnreadId != null && post.id === firstUnreadId && (

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getBootboard, getNewPosts, getPostCounts, getPosts, getUpdatedPosts } from "@/app/actions";
 import { rateLimit } from "@/lib/rate-limit";
 import { sweepOrphans } from "@/services/bsv/anchor-sweep";
+import { sweepPreviews } from "@/services/link-preview-sweep";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,9 @@ export async function GET(request: NextRequest) {
   // the "every post on-chain" invariant holds without a dedicated worker.
   // Fire-and-forget, single-flight (no-op if a sweep is already running).
   void sweepOrphans();
+  // Backfill previews for seeded/imported posts, which never went through
+  // createPost and so were never unfurled. One network fetch per sweep.
+  void sweepPreviews();
 
   const sinceIdParam = request.nextUrl.searchParams.get("since_id");
   const sinceId = sinceIdParam !== null ? parseInt(sinceIdParam, 10) : null;

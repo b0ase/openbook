@@ -279,6 +279,23 @@ export async function resolveTickers(
 }
 
 /**
+ * The ticker a thread carries, if any — so a thread can be headlined by the name
+ * it was claimed under rather than the generic word "Thread".
+ *
+ * A thread can in principle hold several (one post naming two symbols), so this
+ * returns the FIRST claimed, which is the one that founded it.
+ */
+export async function getThreadTicker(rootId: number): Promise<string | null> {
+  if (!Number.isInteger(rootId) || rootId <= 0) return null;
+  const row = db
+    .prepare(
+      "SELECT symbol FROM tickers WHERE root_id = ? ORDER BY post_id ASC, symbol ASC LIMIT 1"
+    )
+    .get(rootId) as { symbol: string } | undefined;
+  return row?.symbol ?? null;
+}
+
+/**
  * Unfurl a post's first link and attach it. Never throws — it runs detached, so
  * a rejection here would be an unhandled rejection with nothing to catch it.
  */

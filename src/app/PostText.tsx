@@ -1,19 +1,20 @@
 "use client";
 
-import { findTickers } from "@/lib/ticker";
+import { findSegments } from "@/lib/linkify";
 
 /**
- * Post body text with `$Ticker` rendered as a link to the thread it names.
+ * Post body text with URLs as live links and `$Ticker`s as links to the thread
+ * they name.
  *
- * ⚠ SPLIT ON `findTickers`' OFFSETS, NEVER ON A SECOND REGEX. The parse rule is
- * consensus-critical (see lib/ticker.ts) — a renderer with its own pattern would
- * eventually disagree with the one that decides what gets CLAIMED, and the
- * visible link would stop matching the recorded owner.
+ * ⚠ SPLIT ON THE SHARED MATCHER'S OFFSETS, NEVER ON A SECOND REGEX. The ticker
+ * parse rule is consensus-critical (see lib/ticker.ts) — a renderer with its own
+ * pattern would eventually disagree with the one that decides what gets CLAIMED,
+ * and the visible link would stop matching the recorded owner.
  *
- * Every ticker in an existing post resolves, because registration happens at post
- * time: a `$X` here was claimed either by this post or by an earlier one. The
- * exception is posts written before the registry existed, which is why the click
- * handler tolerates an unresolved symbol instead of assuming.
+ * Links open in a new tab with `rel="noopener noreferrer"`: post content is
+ * user-supplied and permanent, so a link must never be able to reach back into
+ * this page via `window.opener`. `findSegments` only ever yields http(s) URLs,
+ * so `javascript:` and `data:` can never become an href.
  */
 export function PostText({
   content,
@@ -22,33 +23,50 @@ export function PostText({
   content: string;
   onOpenTicker?: (symbol: string) => void;
 }) {
-  const matches = findTickers(content);
-  if (matches.length === 0 || !onOpenTicker) return <>{content}</>;
+  const segments = findSegments(content);
+  if (segments.length === 0) return <>{content}</>;
 
   const parts: React.ReactNode[] = [];
   let cursor = 0;
 
-  matches.forEach((m, i) => {
-    if (m.start > cursor) parts.push(content.slice(cursor, m.start));
-    parts.push(
-      <button
-        // Index is stable here: the list is derived from immutable post content
-        // and is never reordered or filtered.
-        key={`${m.symbol}-${i}`}
-        type="button"
-        onClick={(e) => {
-          // The whole post row is not a link, but a parent may become one —
-          // opening a thread should not also trigger anything above it.
-          e.stopPropagation();
-          onOpenTicker(m.symbol);
-        }}
-        className="text-amber-400 hover:text-amber-300 font-medium transition-colors underline-offset-2 hover:underline"
-        title={`Open the $${m.raw} thread`}
-      >
-        ${m.raw}
-      </button>
-    );
-    cursor = m.end;
+  segments.forEach((seg, i) => {
+    if (seg.start > cursor) parts.push(content.slice(cursor, seg.start));
+
+    if (seg.kind === "url") {
+      parts.push(
+        <a
+          key={`u-${i}`}
+          href={seg.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-sky-400 hover:text-sky-300 transition-colors underline underline-offset-2 break-all"
+        >
+          {seg.url}
+        </a>
+      );
+    } else if (onOpenTicker) {
+      parts.push(
+        <button
+          key={`t-${seg.symbol}-${i}`}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenTicker(seg.symbol);
+          }}
+          className="text-amber-400 hover:text-amber-300 font-medium transition-colors underline-offset-2 hover:underline"
+          title={`Open the $${seg.raw} thread`}
+        >
+          ${seg.raw}
+        </button>
+      );
+    } else {
+      // No handler wired — render the ticker as plain text rather than a control
+      // that does nothing.
+      parts.push(`$${seg.raw}`);
+    }
+
+    cursor = seg.end;
   });
 
   if (cursor < content.length) parts.push(content.slice(cursor));

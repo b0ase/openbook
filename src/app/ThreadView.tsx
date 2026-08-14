@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
-import { getThread } from "./actions";
+import { getThread, getThreadTicker } from "./actions";
 import { PostContent } from "./PostContent";
 import { PostForm } from "./PostForm";
 import { BootButton } from "./PostList";
@@ -61,6 +61,7 @@ export function ThreadView({
   onOpenTicker,
 }: ThreadViewProps) {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [ticker, setTicker] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [optimistic, setOptimistic] = useState<OptimisticReply[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -74,6 +75,18 @@ export function ThreadView({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // The ticker is immutable once claimed (first claim wins), so it is fetched
+  // once per thread rather than on the poll.
+  useEffect(() => {
+    let live = true;
+    void getThreadTicker(rootId).then((t) => {
+      if (live) setTicker(t);
+    });
+    return () => {
+      live = false;
+    };
+  }, [rootId]);
 
   // Keep the thread live the same way the feed is, and for the same reason: a
   // reply from someone else should appear without a manual refresh. Skipped
@@ -158,8 +171,15 @@ export function ThreadView({
             </svg>
           </button>
           <div>
-            <h1 className="text-base font-semibold tracking-tight leading-none text-zinc-100">
-              Thread
+            {/* Headline the thread by the name it was claimed under. A thread
+                that carries a ticker IS that idea, so the symbol is the title
+                and "Thread" is only the fallback for unnamed ones. */}
+            <h1 className="text-base font-semibold tracking-tight leading-none">
+              {ticker ? (
+                <span className="text-amber-400">${ticker}</span>
+              ) : (
+                <span className="text-zinc-100">Thread</span>
+              )}
             </h1>
             <p className="text-[11px] text-zinc-500 tracking-wide mt-0.5">
               {loading
