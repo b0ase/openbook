@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { siteOrigin } from "@/lib/site-origin";
-import { canonicalTicker, isValidTicker, titleCaseTicker } from "@/lib/ticker";
+import {
+  canonicalTicker,
+  isRootTicker,
+  isValidTicker,
+  ROOT_HREF,
+  titleCaseTicker,
+} from "@/lib/ticker";
 import { getServerAddress } from "@/services/bsv/wallet";
 import { getBootboard, getPosts } from "../actions";
 import { Feed } from "../Feed";
@@ -25,6 +32,33 @@ import { Feed } from "../Feed";
  */
 export const revalidate = 10;
 
+/** The claim path a URL names, e.g. `["$openbooks","$test"]` → `["OPENBOOKS","TEST"]`. */
+function pathFromParams(ticker: string[] | undefined): string[] {
+  return (ticker ?? [])
+    .map((seg) => canonicalTicker(decodeURIComponent(seg)))
+    .filter(isValidTicker);
+}
+
+/**
+ * `/$openbooks` is the site itself, so it belongs at `/`.
+ *
+ * The root token's thread and the main feed are one view, and `ROOT_HREF` picks
+ * the address people actually type. Serving both would mean the domain someone
+ * was given and the domain they end up on are different strings — so the longer
+ * one redirects rather than rendering a second copy.
+ *
+ * Only a path whose LAST segment is the root redirects: that is the segment that
+ * decides which thread opens, so `/$openbooks/$test` is `$Test` and stays put.
+ *
+ * TEMPORARY (307), not permanent: a 308 is cached by the browser indefinitely,
+ * and `/$openbooks` is a name that can be reclaimed or re-pointed. Costing a
+ * round trip on a URL nobody shares is the cheaper side of that trade.
+ */
+function redirectIfRoot(path: string[]): void {
+  const leaf = path.at(-1);
+  if (leaf && isRootTicker(leaf)) redirect(ROOT_HREF);
+}
+
 /**
  * Title, description and social card for a shared ticker link.
  *
@@ -48,9 +82,9 @@ export async function generateMetadata({
   params: Promise<{ ticker: string[] }>;
 }): Promise<Metadata> {
   const { ticker } = await params;
-  const path = (ticker ?? [])
-    .map((seg) => canonicalTicker(decodeURIComponent(seg)))
-    .filter(isValidTicker);
+  const path = pathFromParams(ticker);
+  // The root redirects to `/`, whose own metadata is the one that should be read.
+  redirectIfRoot(path);
   const leaf = path.at(-1);
   if (!leaf) return {};
   const name = `$${titleCaseTicker(leaf)}`;
@@ -68,7 +102,9 @@ export async function generateMetadata({
   };
 }
 
-export default async function TickerPage() {
+export default async function TickerPage({ params }: { params: Promise<{ ticker: string[] }> }) {
+  redirectIfRoot(pathFromParams((await params).ticker));
+
   const [posts, bootboard] = await Promise.all([getPosts(), getBootboard()]);
   // Derived from BSV_SERVER_WIF, never hardcoded — a key rotation must not leave a
   // dead address published.

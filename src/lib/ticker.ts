@@ -130,6 +130,23 @@ export function isRootTicker(symbol: string): boolean {
   return symbol === ROOT_TICKER || symbol === LEGACY_ROOT_TICKER;
 }
 
+/**
+ * The root token's address is the bare site — `openbooks.space`, not
+ * `openbooks.space/$openbooks`.
+ *
+ * ⚠ THIS IS THE ONE URL PEOPLE TYPE, so it is worth stating why the root gets a
+ * shorter address than every other ticker. The main feed IS the root's thread;
+ * they are the same view, not two views that happen to look alike. Given two
+ * URLs for one thing, the one on the business card wins — nobody shares
+ * `/$openbooks`, and a visitor who typed the domain should not watch the address
+ * bar grow a path they never asked for.
+ *
+ * So: `/` is the root, `/$whatever` is every other thread. `/$openbooks` (and the
+ * pre-plural `/$openbook`) stay VALID and redirect here — old links, and links
+ * from before this rule existed, must not break.
+ */
+export const ROOT_HREF = "/";
+
 /** Render a claim path for display: `["OPENBOOK","TEST"]` → `$OpenBooks/$Test`. */
 export function formatTickerPath(path: string[], display?: Record<string, string>): string {
   return path.map((s) => `$${display?.[s] ?? titleCaseTicker(s)}`).join("/");
@@ -146,6 +163,24 @@ export function titleCaseTicker(symbol: string): string {
 /** URL path segment for a ticker: `OPENBOOK` → `$openbook`. */
 export function tickerSlug(symbol: string): string {
   return `$${symbol.toLowerCase()}`;
+}
+
+/**
+ * The address of the thread a claim path names: `["OPENBOOKS","TEST"]` →
+ * `/$openbooks/$test`, and the root on its own → `/` (see `ROOT_HREF`).
+ *
+ * Keyed on the LAST segment because that is the only one that decides which
+ * thread opens (`parseTickerPath(...).at(-1)`) — an ancestor named `$OpenBooks`
+ * is breadcrumb context and stays in the URL.
+ *
+ * Every link to a thread goes through here so no caller can mint a second
+ * address for the root by hand; that is exactly how `/$openbooks` used to end up
+ * in the address bar after closing a thread.
+ */
+export function tickerHref(path: string[]): string {
+  const leaf = path.at(-1);
+  if (!leaf || isRootTicker(leaf)) return ROOT_HREF;
+  return `/${path.map(tickerSlug).join("/")}`;
 }
 
 /** Parse `/$openbook/$test` → `["OPENBOOK","TEST"]`. Non-ticker segments are ignored. */

@@ -7,7 +7,16 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { canonicalTicker, distinctTickers, findTickers, isValidTicker } from "./ticker";
+import {
+  canonicalTicker,
+  distinctTickers,
+  findTickers,
+  isValidTicker,
+  LEGACY_ROOT_TICKER,
+  ROOT_HREF,
+  ROOT_TICKER,
+  tickerHref,
+} from "./ticker";
 
 const symbols = (s: string) => findTickers(s).map((t) => t.symbol);
 
@@ -119,5 +128,37 @@ describe("isValidTicker", () => {
     ["OPEN-BOOK"],
   ])("rejects %j", (s) => {
     expect(isValidTicker(s)).toBe(false);
+  });
+});
+
+/**
+ * The root's address is the bare site.
+ *
+ * `openbooks.space` and `openbooks.space/$openbooks` were both the front page,
+ * and closing any thread parked you on the second one — so the domain someone
+ * was given stopped matching the domain they were looking at. `tickerHref` is
+ * the single minting point that keeps `/$openbooks` from being produced at all.
+ */
+describe("tickerHref", () => {
+  it("sends the root to the bare site, not /$openbooks", () => {
+    expect(tickerHref([ROOT_TICKER])).toBe(ROOT_HREF);
+    expect(ROOT_HREF).toBe("/");
+  });
+
+  it("sends the pre-plural root home too", () => {
+    expect(tickerHref([LEGACY_ROOT_TICKER])).toBe(ROOT_HREF);
+  });
+
+  it("treats an empty path as the root", () => {
+    expect(tickerHref([])).toBe(ROOT_HREF);
+  });
+
+  it("keeps the root as an ANCESTOR — only the leaf decides the address", () => {
+    expect(tickerHref([ROOT_TICKER, "TEST"])).toBe("/$openbooks/$test");
+    expect(tickerHref([ROOT_TICKER, "FOXTROT", "GOLF"])).toBe("/$openbooks/$foxtrot/$golf");
+  });
+
+  it("addresses an ordinary ticker by its whole path", () => {
+    expect(tickerHref(["TEST"])).toBe("/$test");
   });
 });

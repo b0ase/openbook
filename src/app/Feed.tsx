@@ -15,7 +15,13 @@ import { useFeedPolling } from "@/hooks/useFeedPolling";
 import { useScrollTracker } from "@/hooks/useScrollTracker";
 import { FORK_POINT_ID, isInheritedPost } from "@/lib/fork-point";
 import { readCachedNym } from "@/lib/nym-cache";
-import { distinctTickers, parseTickerPath, ROOT_TICKER, tickerSlug } from "@/lib/ticker";
+import {
+  distinctTickers,
+  isRootTicker,
+  parseTickerPath,
+  ROOT_HREF,
+  tickerHref,
+} from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { BootboardData, Post } from "@/types";
 import {
@@ -633,6 +639,18 @@ function FeedContent({
   // for every rendered post: a click is rare, a feed render is constant, and
   // resolving lazily keeps the ticker feature off the 5s poll entirely.
   const handleOpenTicker = useCallback(async (symbol: string) => {
+    // The root's own name means the feed you are already looking at, so it goes
+    // HOME rather than opening an overlay that would duplicate the feed behind
+    // it — the same rule the breadcrumb's root crumb follows. Pushed only when
+    // the address actually changes, so clicking `$OpenBooks` from the feed does
+    // not stack a history entry whose Back does nothing visible.
+    if (isRootTicker(symbol)) {
+      setThreadRootId(null);
+      if (window.location.pathname !== ROOT_HREF) {
+        window.history.pushState({}, "", ROOT_HREF);
+      }
+      return;
+    }
     const resolved = await resolveTickers([symbol]);
     const hit = resolved[symbol];
     // An unclaimed symbol is a normal answer — posts written before the registry
@@ -645,8 +663,7 @@ function FeedContent({
     // feed mounted. A real navigation would remount it and lose the scroll
     // position, which is the reason ThreadView is an overlay in the first place.
     const path = await getTickerPath(symbol);
-    const url = `/${(path.length ? path : [symbol]).map(tickerSlug).join("/")}`;
-    window.history.pushState({ ticker: symbol }, "", url);
+    window.history.pushState({ ticker: symbol }, "", tickerHref(path.length ? path : [symbol]));
   }, []);
 
   // Close on Back, rather than letting Back leave the site while a thread is open.
@@ -654,7 +671,8 @@ function FeedContent({
     const onPop = () => {
       const fromUrl = parseTickerPath(window.location.pathname);
       const leaf = fromUrl.at(-1);
-      if (!leaf) {
+      // No ticker in the URL and the root's own name both mean the feed.
+      if (!leaf || isRootTicker(leaf)) {
         setThreadRootId(null);
         return;
       }
@@ -672,25 +690,29 @@ function FeedContent({
   /**
    * Open the thread named by the URL on a cold load.
    *
-   * ⚠ THE ROOT TICKER IS NOT SPECIAL-CASED HERE, DELIBERATELY. `/$openbooks`
-   * used to short-circuit to "show the feed", which was fine only while nobody
-   * had claimed that name. The moment it IS claimed, `handleOpenTicker` pushes
-   * `/$openbooks` into the address bar for a thread that this effect would then
-   * refuse to reopen — so you would see a thread, copy its address, and send
-   * someone the feed. A URL that does not reproduce what the sharer was looking
-   * at is worse than no URL.
+   * The division is: `/` is the root — feed and root thread being the same view
+   * — and `/$whatever` is any other thread. An unclaimed name resolves to
+   * nothing and falls through to the feed anyway.
    *
-   * The division is now: `/` is the feed, `/$whatever` is a thread. An unclaimed
-   * name resolves to nothing and falls through to the feed anyway, so the old
-   * behaviour survives for as long as it is the true one — including for the
-   * pre-plural `/$openbook`.
+   * ⚠ THE ROOT TICKER IS SPECIAL-CASED, and the reason the earlier rule went the
+   * other way is worth keeping: while `handleOpenTicker` could push
+   * `/$openbooks` for a claimed root, refusing to reopen it here would have let
+   * you view a thread, copy its address, and send someone the feed — a URL that
+   * does not reproduce what the sharer was looking at. That is fixed at the
+   * source instead: `tickerHref` never mints `/$openbooks`, so the only address
+   * for the root is `/`, and the two views it could point at are the same view.
+   *
+   * `/$openbooks` and the pre-plural `/$openbook` stay valid — the catch-all
+   * route redirects them here, and this check is the client-side half for a URL
+   * that arrives without a server round trip (an old tab's pushState, Back into
+   * pre-redirect history).
    */
   const openedFromUrlRef = useRef(false);
   useEffect(() => {
     if (openedFromUrlRef.current) return;
     openedFromUrlRef.current = true;
     const leaf = parseTickerPath(window.location.pathname).at(-1);
-    if (!leaf) return;
+    if (!leaf || isRootTicker(leaf)) return;
     void resolveTickers([leaf]).then((r) => {
       const hit = r[leaf];
       if (hit) setThreadRootId(hit.root_id);
@@ -909,8 +931,9 @@ function FeedContent({
           freeBootsRemaining={freeBootsRemaining}
           onClose={() => {
             setThreadRootId(null);
-            // Back to the root token's URL — the main feed IS $OpenBooks's thread.
-            window.history.pushState({}, "", `/${tickerSlug(ROOT_TICKER)}`);
+            // Back to the root token's URL — the main feed IS $OpenBooks's thread,
+            // and that thread's address is the bare site, not `/$openbooks`.
+            window.history.pushState({}, "", ROOT_HREF);
           }}
           onBooted={refresh}
           onFundNeeded={(address, balance, fee) => {

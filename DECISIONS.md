@@ -869,3 +869,38 @@ semantics and flat pricing **there is no price appreciation to rush toward, by c
 available instead is **first-claim-wins on a finite namespace**: names run out, the good ones go to
 whoever is early. Same urgency as domain registration, real rather than manufactured, and it does
 not depend on later entrants paying earlier ones — which is why it survives the inflow stopping.
+
+## The root token's address is the bare site, not `/$openbooks` (settled 2026-08-14)
+
+*"we want to load the site on openbooks.space not /$openbooks"*.
+
+The main feed and `$OpenBooks`'s thread are **one view, not two views that resemble each other** —
+the breadcrumb's root crumb already closed the overlay rather than opening a thread that would
+duplicate the feed behind it. But the URL side had not caught up: closing ANY thread pushed
+`/$openbooks`, so someone who typed the domain, opened a thread and closed it watched the address
+bar grow a path they never asked for. Clicking a `$OpenBooks` mention and cold-loading `/$openbooks`
+did the same.
+
+**Given two addresses for one thing, the one on the business card wins.** `/` is the root;
+`/$whatever` is every other thread. `/$openbooks` and the pre-plural `/$openbook` stay VALID and
+**redirect** — old links and pre-rule pushState history must not break.
+
+⚠ **THIS REVERSES THE EARLIER "the root is NOT special-cased" RULE, and the reasoning it was
+protecting still stands** — so read this before restoring it. That rule feared a claimed root being
+pushed to `/$openbooks` by `handleOpenTicker` while the URL handler refused to reopen it: you would
+see a thread, copy its address, and send someone the feed. **The fix is at the source, not by
+serving both:** `tickerHref()` is the single minting point and never produces `/$openbooks`, so the
+root has exactly one address and the two views it could name are the same view. The old failure is
+unreachable rather than tolerated.
+
+**`tickerHref` keys on the LAST segment**, because that is the only one that decides which thread
+opens (`parseTickerPath(...).at(-1)`). So the root collapses to `/` only when it IS the leaf —
+`/$openbooks/$test` is untouched, and `$OpenBooks` survives as breadcrumb context in the URL.
+
+**Redirect is 307, not 308.** A permanent redirect is cached by the browser indefinitely, and
+`/$openbooks` is a name that can be reclaimed or re-pointed. Costing a round trip on a URL nobody
+shares is the cheaper side of that trade.
+
+**Claiming `$OpenBooks` is still an ordinary registration.** Routing no longer depends on whether
+the root happens to be claimed — which is the property that made the old rule fragile in the first
+place.

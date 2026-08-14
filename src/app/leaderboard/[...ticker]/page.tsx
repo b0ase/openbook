@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { formatShare } from "@/lib/share";
 import { siteOrigin } from "@/lib/site-origin";
-import { parseTickerPath, tickerSlug, titleCaseTicker } from "@/lib/ticker";
+import { parseTickerPath, tickerHref, titleCaseTicker } from "@/lib/ticker";
 import { getTickerLeaderboard } from "../../actions";
 
 /**
@@ -55,7 +55,7 @@ export default async function LeaderboardPage({ params }: Params) {
   if (!board) notFound();
 
   const unowned = board.total - board.attributed;
-  const threadHref = `/${board.path.map((s) => `$${tickerSlug(s)}`).join("/")}`;
+  const threadHref = tickerHref(board.path);
 
   return (
     <div className="min-h-[100dvh] bg-black text-white">

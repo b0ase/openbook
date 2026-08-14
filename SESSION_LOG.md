@@ -2,6 +2,33 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-14 (root address) — the site loads on `openbooks.space`, not `/$openbooks`
+
+- **Category: routing / UX.** *"we want to load the site on openbooks.space not /$openbooks"*.
+- **The root token's address is now `/`, and it is minted in exactly one place.** `ROOT_HREF` +
+  `tickerHref(path)` in `lib/ticker.ts`: keyed on the LAST segment, so the root alone → `/` while
+  `$OpenBooks` as an ANCESTOR stays in the URL (`/$openbooks/$test` is unchanged — the leaf is what
+  decides which thread opens).
+- **Where `/$openbooks` was coming from.** Closing ANY thread pushed it (`Feed.tsx` ThreadView
+  `onClose`), so a visitor who typed the domain, opened a thread and closed it ended up on a URL
+  they never asked for. Two smaller sources: clicking a `$OpenBooks` mention opened an overlay
+  duplicating the feed behind it, and a cold load of `/$openbooks` did the same.
+- **Fixed on both sides.** Client: `onClose` → `ROOT_HREF`; `handleOpenTicker` sends the root home
+  (pushing only when the address actually changes, so no dead Back entry); popstate + cold-load
+  treat a root leaf as "the feed". Server: the catch-all's `redirectIfRoot` 307s `/$openbooks` and
+  the pre-plural `/$openbook` to `/`. Verified against a real `next start`: 307 for both spellings
+  and `/$OpenBooks`, 200 and no redirect for `/$openbooks/$test`, `/$test`, `/tickers`.
+- **Reversed a documented rule, deliberately** — the ⚠ block in `Feed.tsx` said the root must NOT be
+  special-cased, on the grounds that a claimed root would otherwise be viewable at a URL that
+  reopens the feed. That is answered at the source rather than by serving both: `tickerHref` never
+  mints `/$openbooks`, so the root has ONE address and the two views it could name are the same
+  view. Comment rewritten in place rather than deleted, incl. the now-inverted note in
+  `actions-ticker.integration.test.ts`. See DECISIONS "The root token's address is the bare site".
+- **307, not 308** — a permanent redirect is cached by browsers indefinitely and `/$openbooks` is a
+  name that could be re-pointed; a round trip on a URL nobody shares is the cheaper side.
+- Directory and leaderboard thread links routed through `tickerHref` too, so no caller can hand-mint
+  a second root address. 6 new unit tests; 434 unit + 184 integration green, build clean.
+
 ## 2026-08-14 (mention edge + nym display) — the target column, and $Nym everywhere
 
 - **Category: schema, token model, UI.**
