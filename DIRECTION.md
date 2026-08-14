@@ -430,3 +430,42 @@ unclaimable-by-others in the database costs nothing, is reversible, and removes 
 now — with the platform releasing or minting them properly once inscription ships. It buys the
 same insurance for £0 and does not require deciding the ownership question first.
 
+### Reserving and land-grabbing are the same ACT — the release is the difference
+
+Owner, 2026-08-14: *"the landgrab concept and the reserved register are the same thing unless
+we're just creating infrastructure for our platform, which I think we might be."*
+
+That is exactly right, and worth stating plainly rather than dressing up. **Claiming a name to
+hold it and claiming a name to corner it are the same action.** Nothing about the mechanism
+distinguishes them. The only thing that does is what happens next:
+
+- **Landgrab:** claim → hold → extract.
+- **Reservation:** claim → hold → **release, or issue on terms everyone can see.**
+
+So the release path is not a nice-to-have on this feature — **it is the entire difference**, and
+a reservation with no stated release policy is a landgrab with better manners. Which is why
+`releaseTickers` exists alongside `reserveTickers`, why the list is a TABLE rather than a
+constant (releasing must not require a deploy), and why reserving can never take a name somebody
+already holds.
+
+**What is still missing is the commitment**, and only the owner can make it: under what conditions
+does a reserved name get released or issued, and to whom? Until that is written down, this feature
+is insurance with no policy document.
+
+### Why "inscribe and chill" was empty and this is not
+
+The owner's read on the ticker-inscription wave — *"like telling people not to register domain
+names, but rather to claim paths on a URL"* — identifies the real flaw. **BSV-21's `sym` is not
+unique.** Two people can inscribe the same ticker and both hold something; neither holds THE name.
+So the thing being sold was the act of inscribing, not an exclusive claim — which is why it
+behaved like squatting on a path nobody has to respect.
+
+**This namespace is the opposite, and that is precisely why the landgrab risk here is real.**
+`tickers.symbol` is a PRIMARY KEY, canonicalised to uppercase so `$openbook` and `$OpenBook` are
+one claim, and the parse rule is treated as consensus-critical (`src/lib/ticker.ts`). First claim
+wins, permanently, and there is exactly one holder.
+
+**Enforced uniqueness is what makes a claim worth something — and therefore what makes cornering
+the dictionary worth doing.** The same property that gives the index its value is the one that
+creates the exposure. That is the honest reason this reservation is not paranoia.
+

@@ -143,6 +143,39 @@ export function applyNymMigration(database: Db): void {
   database.exec("CREATE INDEX IF NOT EXISTS idx_nyms_symbol ON nyms(symbol)");
 }
 
+/**
+ * `reserved_tickers` — names an ordinary post cannot claim.
+ *
+ * ⚠ THIS IS INSURANCE, NOT CENSORSHIP, AND THE DIFFERENCE IS THE RELEASE PATH.
+ * Claiming the common vocabulary costs roughly $2 once inscription exists
+ * (DIRECTION.md), so the entire English language can be cornered by whoever runs
+ * a script first — and the moment the index is published, doing so becomes
+ * obviously worth it. Reserving costs nothing, is reversible, and holds the
+ * namespace open until the platform can mint properly.
+ *
+ * ⚠ A TABLE, NOT A HARDCODED LIST. The operator has to be able to release a name
+ * — one at a time, or all of them — WITHOUT a deploy. A constant in the source
+ * would mean every release is a code change, which is how a temporary measure
+ * becomes permanent by friction.
+ *
+ * ⚠ IT NEVER TOUCHES AN EXISTING CLAIM. Reserving is checked only at claim time
+ * (`registerTickers`), so a name somebody already holds stays theirs whatever
+ * this table says. Anything else would be retroactively confiscating a name that
+ * was claimed under the rules as they stood.
+ *
+ * `reason` is stored so a refusal can explain itself, and so a later reader can
+ * tell a landgrab reservation from any other kind.
+ */
+export function applyReservedTickerMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS reserved_tickers (
+      symbol      TEXT PRIMARY KEY,
+      reason      TEXT NOT NULL DEFAULT 'namespace',
+      reserved_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+}
+
 export function applyTickerMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS tickers (
@@ -363,6 +396,7 @@ try {
   // Ticker registry — first claim wins.
   applyTickerMigration(db);
   applyNymMigration(db);
+  applyReservedTickerMigration(db);
 
   // Boot grants — free boot tracking per user (no custody)
   db.exec(`

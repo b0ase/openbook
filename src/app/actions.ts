@@ -271,8 +271,16 @@ function registerTickers(
       // branch came from; `root_id` answers the different question of which
       // thread — which token — a post belongs to. That split is what keeps
       // `WHERE root_id = ?` one indexed scan on the allocation path.
+      // ⚠ RESERVED NAMES ARE SKIPPED, NOT REFUSED. The post itself still stands —
+      // writing `$Water` must not fail to publish just because that name is held
+      // open. It simply claims nothing, exactly as it already does when somebody
+      // else got there first. Refusing the post instead would make a reservation
+      // list into a word filter, which is a different and much worse thing.
+      const isReserved = db.prepare("SELECT 1 FROM reserved_tickers WHERE symbol = ?");
+
       let claimedAny = false;
       for (const symbol of symbols) {
+        if (isReserved.get(symbol)) continue;
         const res = insert.run(
           symbol,
           postId,
@@ -530,6 +538,60 @@ export async function getNyms(pubkeys: string[]): Promise<Record<string, string>
     .prepare(`SELECT pubkey, symbol FROM nyms WHERE pubkey IN (${placeholders})`)
     .all(...wanted) as { pubkey: string; symbol: string }[];
   return Object.fromEntries(rows.map((r) => [r.pubkey, r.symbol]));
+}
+
+/** True if this name is being held open and cannot be claimed by a post. */
+export async function isReservedTicker(symbol: string): Promise<boolean> {
+  const sym = canonicalTicker(symbol);
+  if (!isValidTicker(sym)) return false;
+  return Boolean(db.prepare("SELECT 1 FROM reserved_tickers WHERE symbol = ?").get(sym));
+}
+
+/**
+ * Hold names open so they cannot be claimed by an ordinary post.
+ *
+ * ⚠ NEVER TAKES A NAME SOMEBODY ALREADY HAS. Already-claimed symbols are skipped
+ * and reported back, because reserving one retroactively would confiscate a name
+ * claimed under the rules as they stood — and the whole point of first-claim-wins
+ * is that it cannot be revised afterwards.
+ *
+ * Returns what actually happened rather than a count, so a caller reserving ten
+ * thousand words can see which ones were already gone.
+ */
+export async function reserveTickers(
+  symbols: string[],
+  reason = "namespace"
+): Promise<{ reserved: string[]; alreadyClaimed: string[] }> {
+  const wanted = [...new Set(symbols.map(canonicalTicker).filter(isValidTicker))];
+  const reserved: string[] = [];
+  const alreadyClaimed: string[] = [];
+  const taken = db.prepare("SELECT 1 FROM tickers WHERE symbol = ?");
+  const put = db.prepare("INSERT OR IGNORE INTO reserved_tickers (symbol, reason) VALUES (?, ?)");
+  db.transaction(() => {
+    for (const sym of wanted) {
+      if (taken.get(sym)) {
+        alreadyClaimed.push(sym);
+        continue;
+      }
+      put.run(sym, reason);
+      reserved.push(sym);
+    }
+  })();
+  return { reserved, alreadyClaimed };
+}
+
+/**
+ * Release names back to the namespace — the path that makes this a temporary
+ * measure rather than a permanent enclosure. Returns how many were let go.
+ */
+export async function releaseTickers(symbols: string[]): Promise<number> {
+  const wanted = [...new Set(symbols.map(canonicalTicker).filter(isValidTicker))];
+  if (!wanted.length) return 0;
+  const placeholders = wanted.map(() => "?").join(",");
+  const res = db
+    .prepare(`DELETE FROM reserved_tickers WHERE symbol IN (${placeholders})`)
+    .run(...wanted);
+  return res.changes;
 }
 
 export interface TickerHit {

@@ -45,6 +45,9 @@ import {
   getNym,
   getNyms,
   getTickerSupply,
+  isReservedTicker,
+  releaseTickers,
+  reserveTickers,
   listTickers,
   resolveTickers,
   searchTickers,
@@ -67,6 +70,7 @@ async function post(content: string, parentId?: number) {
 const lastId = () => (db.prepare("SELECT MAX(id) as id FROM posts").get() as { id: number }).id;
 
 beforeEach(() => {
+  db.exec("DELETE FROM reserved_tickers");
   db.exec("DELETE FROM nyms");
   db.exec("DELETE FROM tickers");
   db.exec("DELETE FROM payouts");
@@ -565,5 +569,62 @@ describe("$Nym — a public name is an ordinary ticker claim", () => {
     expect(map[a.pubkey]).toBe("ALPHA");
     expect(map[b.pubkey]).toBe("BETA");
     expect(Object.keys(map)).toHaveLength(2);
+  });
+});
+
+describe("reserved names — insurance, not censorship", () => {
+  // Claiming the common vocabulary costs ~$2 once inscription exists, so the
+  // namespace can be cornered by whoever scripts it first. Reserving holds names
+  // open for nothing. The difference between this and a landgrab is the RELEASE
+  // path, so that is tested as carefully as the reservation.
+
+  it("stops a post from claiming a reserved name", async () => {
+    await reserveTickers(["Water"]);
+    expect((await post("thoughts on $Water")).ok).toBe(true);
+    expect(await resolveTickers(["WATER"])).toEqual({});
+  });
+
+  it("still publishes the post — a reservation is not a word filter", async () => {
+    await reserveTickers(["Water"]);
+    const res = await post("thoughts on $Water");
+    expect(res.ok).toBe(true);
+    const row = db.prepare("SELECT content FROM posts WHERE id = ?").get(lastId()) as {
+      content: string;
+    };
+    expect(row.content).toBe("thoughts on $Water");
+  });
+
+  it("claims the unreserved names in the same post", async () => {
+    // A post naming one held name and one free one must still found the free one.
+    await reserveTickers(["Water"]);
+    expect((await post("$Water and $Fire together")).ok).toBe(true);
+    expect(await resolveTickers(["WATER"])).toEqual({});
+    expect(await resolveTickers(["FIRE"])).toMatchObject({ FIRE: expect.anything() });
+  });
+
+  it("refuses to reserve a name somebody already holds", async () => {
+    await post("claiming $Mine first");
+    const out = await reserveTickers(["Mine", "Unclaimed"]);
+    expect(out.alreadyClaimed).toEqual(["MINE"]);
+    expect(out.reserved).toEqual(["UNCLAIMED"]);
+    // The existing claim is untouched — first-claim-wins cannot be revised later.
+    expect(await resolveTickers(["MINE"])).toMatchObject({ MINE: expect.anything() });
+  });
+
+  it("releases a name back so it can be claimed again", async () => {
+    await reserveTickers(["Water"]);
+    await post("first go at $Water");
+    expect(await resolveTickers(["WATER"])).toEqual({});
+
+    expect(await releaseTickers(["Water"])).toBe(1);
+    expect(await isReservedTicker("Water")).toBe(false);
+    expect((await post("second go at $Water")).ok).toBe(true);
+    expect(await resolveTickers(["WATER"])).toMatchObject({ WATER: expect.anything() });
+  });
+
+  it("ignores junk rather than reserving nonsense", async () => {
+    const out = await reserveTickers(["", "  ", "1bad", "$"]);
+    expect(out.reserved).toEqual([]);
+    expect(await releaseTickers([])).toBe(0);
   });
 });
