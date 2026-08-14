@@ -800,6 +800,68 @@ The supply that matters is per-thread and should fall out of the pricing curve (
 rises as a thread fills), not be picked as a round number first. **Not built; nothing depends on
 a number yet, so this can stay open without blocking anything.**
 
+## We are ANCHORING posts, not inscribing them (established 2026-08-14)
+
+Asked directly: *"are we 'inscribing' every single post?"* **No.** Checked, not assumed —
+`src/services/bsv/onchain.ts` builds `OP_FALSE OP_RETURN <json>` (the envelope in
+`src/lib/onchain-record.ts`). That is a **provably unspendable data output**: a permanent,
+timestamped, signature-carrying RECORD of the post.
+
+A 1Sat Ordinal inscription is a different thing — content inscribed into a P2PKH script on a
+**1-satoshi output that is owned by an address and can be transferred**.
+
+**So the honest position today: a post is a token in the database and in the UI, with an
+independent on-chain audit trail beside it. It is not yet a token ON-CHAIN.** Nobody can transfer
+or sell one, because there is no on-chain object to transfer. This is not a gap to paper over —
+the wallet copy already says exactly this ("there's nowhere to trade them yet").
+
+### ⚠ The sequencing this reveals: inscription, minting and paid posting are ONE milestone
+
+They cannot sensibly ship apart, and noticing that resolves several open questions at once:
+
+- **You cannot afford to inscribe for free.** An inscription costs more than an OP_RETURN (a
+  1-sat output plus the envelope), and today the SERVER funds anchoring — there is a daily spend
+  ceiling precisely because of that. Inscribing every free post puts an unbounded cost on the
+  operator.
+- **You cannot sell what was never inscribed.** The market needs on-chain objects.
+- **Paid posting is what pays for the inscription.** The user funds their own token at the moment
+  they mint it, which is also the moment the anchor stops being free — the rule that has governed
+  every other decision here.
+
+**Therefore: do not build inscription before paid posting, and do not build paid posting without
+inscription.** One without the other is either an unfunded cost or an unsellable asset.
+
+## Bitcoin Schema — what it gives us, and the one thing to be careful of (reviewed 2026-08-14)
+
+bitcoinschema.org defines: Like, Follow, Friend, Post, Reply, Repost, Message, **Tags**,
+Attachments, Payment, Function/Function Call, Registry Item, Ord — over MAP, AIP, B, BAP and 1Sat.
+
+**`Tags` is the right primitive for something we cannot currently do: naming an EXISTING post.**
+There is no mechanism to select a post and tag it with a `$ticker` — a ticker is only claimed by
+writing it at post time. Retro-tagging is not a small change, for two reasons:
+
+1. **A claim RE-ROOTS its post** (it becomes the root of its own thread). Retro-tagging someone
+   else's post would MOVE it out of the thread it is sitting in.
+2. **The post signature covers CONTENT ONLY.** A ticker added later cannot appear in that post's
+   immutable on-chain record, so the chain and the database would disagree about what the post is
+   called.
+
+A separate, separately-signed Tag record — pointing AT a post rather than being part of it —
+solves both: the post is untouched and unmoved, and the tag carries its own author and its own
+anchor. It also cleanly separates *who wrote this* from *who named it*, which is the existing
+open question "who may name someone else's post" in a form that can actually be built.
+
+**⚠ Be careful with Like.** We already have the boost, and the boost's entire point is that
+attention COSTS something. A free like is a second approval signal that costs nothing — it will
+cannibalise boosting, and if it ever feeds ranking or allocation it breaks the anchor outright
+(*anything free that confers value destroys the anchor*). If Like ships at all it should be
+display-only and visibly lesser than a boost, or not at all.
+
+**Repost/branching.** The owner notes Twetch did share-then-collect-on-later-branching and that
+it was "correct". That is the same shape as the citation model already settled here — a quote
+mints a unit to the quoter — so Bitcoin Schema's Repost is a compatible on-chain representation
+of it rather than a competing idea. Same gate applies: not before paid posting.
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,
