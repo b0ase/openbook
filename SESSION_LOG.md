@@ -38,6 +38,23 @@
   name = 2 units. Plus the live nym join, including a post written BEFORE the claim.
 - Bug caught in passing: backticks around a table name inside the `POST_SELECT` **template
   literal** terminated the string. Fixed; `tsc` caught it.
+- **The wallet and the feed now use ONE denominator.** The Tokens panel showed `$Memeplex 2/2
+  100%` while the feed showed `(25%)` for the same ticker: `getHoldings` aggregated THREAD
+  MEMBERSHIP while the feed counted MENTIONS. Root cause is that **a claim re-roots its post**, so
+  only the FIRST post naming a ticker joins that ticker's thread — thread size froze at 2 while
+  mentions climbed to 4. Named holdings now count mentions (`ticker_mentions`), which the edge
+  table built earlier this session made cheap.
+- **`Holding.kind`: `"name" | "post"`.** The panel was listing two incomparable things in one
+  column: a share of a contested NAME, and an unnamed post whose "100%" only ever meant "I wrote
+  it". Post-tokens now render as `1-of-1` with **no percentage**, and show their text instead of a
+  raw txid (the txid moves to the hover title — it is still the true identifier).
+  - Post-tokens include REPLIES. A first cut filtered to `p.id = p.root_id` and would have dropped
+    tokens the user owns; one post, one token.
+  - `NOT EXISTS (… ticker_mentions …)` stops a post appearing twice, once as a post and once under
+    the name it gave.
+- ⚠ **`getThreadShare` still counts thread membership** and is used by the thread header. That is a
+  different question ("how much of this conversation is mine") and was left alone — but if the
+  header ever needs to agree with a ticker percentage, this is the seam.
 
 ## 2026-08-14 (tagging) — the tag model, and what a post-token's ID actually is
 

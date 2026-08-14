@@ -826,9 +826,22 @@ export async function getThreadStats(rootId: number): Promise<{ tokens: number; 
 }
 
 export interface Holding {
+  /**
+   * `"name"` — a `$Ticker` you hold units of, measured as a share of every post
+   * that named it. `"post"` — a post of yours that carries no name: a 1-of-1,
+   * with no share to report.
+   *
+   * ⚠ THE TWO ARE NOT COMPARABLE, which is why they are labelled rather than
+   * merged. Listing them in one column under one percentage is what made this
+   * panel read as inconsistent: a named token's "50%" answered "how much of this
+   * name is mine", while an unnamed post's "100%" only ever meant "I wrote it".
+   */
+  kind: "name" | "post";
   root_id: number;
-  /** Ticker ancestry, root-first. Empty when the token was never named. */
+  /** Ticker ancestry, root-first. Empty for a post-token. */
   path: string[];
+  /** Post-tokens only — so an unnamed token is recognisable as something you wrote. */
+  excerpt: string | null;
   /**
    * The on-chain txid of the token's genesis post — its DEFAULT NAME.
    *
@@ -842,9 +855,9 @@ export interface Holding {
    * Null until the anchor lands (see `anchor-sweep`), where the row id stands in.
    */
   tx_id: string | null;
-  /** Tokens this author holds in it — one per post they made. */
+  /** Units this author holds — for a name, how many of their posts named it. */
   mine: number;
-  /** Tokens issued in it so far — one per post. */
+  /** Units issued — for a name, how many posts named it in total. */
   total: number;
 }
 
@@ -861,41 +874,59 @@ export interface Holding {
  */
 export async function getHoldings(pubkey: string): Promise<Holding[]> {
   if (!pubkey || typeof pubkey !== "string") return [];
-  const rows = db
+
+  // ── Named tokens ──
+  // Share of MENTIONS — the same denominator the feed prints beside a ticker and
+  // that /tickers ranks on.
+  //
+  // ⚠ THIS USED TO COUNT THREAD MEMBERSHIP (`root_id`), AND THAT IS WHY THE
+  // WALLET AND THE FEED DISAGREED. A claim RE-ROOTS its post, so only the very
+  // first post to name a ticker joins that ticker's thread; every later post
+  // naming it stays its own root. Thread size therefore froze while the mention
+  // count kept climbing — the feed said `$MEMEPLEX (25%)` off four mentions
+  // while the wallet said `2/2 100%` off two thread members. Both were
+  // internally correct and they measured different things.
+  const namedRows = db
     .prepare(
-      `SELECT p.root_id AS root_id,
-              SUM(CASE WHEN p.pubkey = ? THEN 1 ELSE 0 END) AS mine,
+      `SELECT m.symbol AS symbol,
+              SUM(CASE WHEN m.pubkey = ? THEN 1 ELSE 0 END) AS mine,
               COUNT(*) AS total,
-              MAX(CASE WHEN p.id = p.root_id THEN p.tx_id END) AS tx_id
-         FROM posts p
-        WHERE p.root_id IN (
-                SELECT DISTINCT root_id FROM posts
-                 WHERE pubkey = ? AND root_id IS NOT NULL
-              )
-        GROUP BY p.root_id
+              t.root_id AS root_id,
+              (SELECT p.tx_id FROM posts p WHERE p.id = t.root_id) AS tx_id
+         FROM ticker_mentions m
+         JOIN tickers t ON t.symbol = m.symbol
+        WHERE m.symbol IN (SELECT DISTINCT symbol FROM ticker_mentions WHERE pubkey = ?)
+        GROUP BY m.symbol
         ORDER BY mine DESC, total DESC
         LIMIT 50`
     )
     .all(pubkey, pubkey) as {
-    root_id: number;
+    symbol: string;
     mine: number;
     total: number;
+    root_id: number;
     tx_id: string | null;
   }[];
-  if (!rows.length) return [];
 
-  // Names for the threads that have one, in a single lookup. A thread with no
-  // ticker is normal — most posts are unnamed — and renders by its content.
-  const placeholders = rows.map(() => "?").join(",");
-  const named = db
+  // ── Post tokens ──
+  // Posts of yours that carry no name at all. A post IS a token, so these belong
+  // in the wallet — but they are 1-of-1s, and `NOT EXISTS (… ticker_mentions …)`
+  // keeps a post that DID name something from appearing twice, once here and
+  // once under the name it gave.
+  const postRows = db
     .prepare(
-      `SELECT root_id, symbol FROM tickers
-        WHERE root_id IN (${placeholders})
-        ORDER BY post_id ASC, symbol ASC`
+      // EVERY post they wrote, replies included — one post, one token. Filtering
+      // to thread roots would silently drop tokens the user owns.
+      `SELECT p.id AS root_id, p.tx_id AS tx_id, p.content AS content
+         FROM posts p
+        WHERE p.pubkey = ?
+          AND NOT EXISTS (SELECT 1 FROM ticker_mentions m WHERE m.post_id = p.id)
+        ORDER BY p.id DESC
+        LIMIT 50`
     )
-    .all(...rows.map((r) => r.root_id)) as { root_id: number; symbol: string }[];
-  const symbolFor = new Map<number, string>();
-  for (const n of named) if (!symbolFor.has(n.root_id)) symbolFor.set(n.root_id, n.symbol);
+    .all(pubkey) as { root_id: number; tx_id: string | null; content: string }[];
+
+  if (!namedRows.length && !postRows.length) return [];
 
   // Ancestry walk, memoised across rows: sibling threads share ancestors, so the
   // same parent chain would otherwise be re-walked once per holding.
@@ -921,16 +952,31 @@ export async function getHoldings(pubkey: string): Promise<Holding[]> {
     return path;
   };
 
-  return rows.map((r) => {
-    const symbol = symbolFor.get(r.root_id);
-    return {
-      root_id: r.root_id,
-      path: symbol ? pathFor(symbol) : [],
-      tx_id: r.tx_id,
-      mine: r.mine,
-      total: r.total,
-    };
-  });
+  const names: Holding[] = namedRows.map((r) => ({
+    kind: "name",
+    root_id: r.root_id,
+    path: pathFor(r.symbol),
+    excerpt: null,
+    tx_id: r.tx_id,
+    mine: r.mine,
+    total: r.total,
+  }));
+
+  const posts: Holding[] = postRows.map((r) => ({
+    kind: "post",
+    root_id: r.root_id,
+    path: [],
+    // Shown INSTEAD of the txid, which identified the token honestly but told
+    // the holder nothing about which of their posts it was.
+    excerpt: r.content.trim().slice(0, 80),
+    tx_id: r.tx_id,
+    mine: 1,
+    total: 1,
+  }));
+
+  // Names first: a share of something other people also named is the holding a
+  // reader is looking for, and a 1-of-1 post is the long tail.
+  return [...names, ...posts];
 }
 
 /**

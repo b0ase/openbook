@@ -38,7 +38,7 @@ vi.mock("next/headers", () => ({
 
 import { db } from "@/lib/db";
 import { ROOT_TICKER } from "@/lib/ticker";
-import { createPost, getHoldings, getThreadShare } from "./actions";
+import { createPost, getHoldings, getThreadShare, getTickerSupply } from "./actions";
 
 /** A stable author, so several posts attribute to the same holder. */
 function author(name: string) {
@@ -105,7 +105,16 @@ describe("getThreadShare", () => {
 });
 
 describe("getHoldings", () => {
-  it("lists every thread the author appears in, largest holding first", async () => {
+  /**
+   * ⚠ SUPERSEDED SEMANTICS. This used to aggregate THREAD MEMBERSHIP (`root_id`),
+   * which is why the wallet and the feed printed different percentages for the
+   * same ticker: a claim re-roots its post, so only the first post to name a
+   * ticker joins that ticker's thread while every later mention stays its own
+   * root. Named holdings now count MENTIONS — the denominator the feed and
+   * /tickers already use — and an unnamed post is reported as the 1-of-1 it is
+   * rather than as "100%" of a thread of one.
+   */
+  it("reports every unnamed post as a 1-of-1 post token, replies included", async () => {
     const alice = author("anon_alic");
     const bob = author("anon_bobb");
 
@@ -119,12 +128,16 @@ describe("getHoldings", () => {
     await alice.post("alice drops in", t2);
 
     const held = await getHoldings(alice.pubkey);
-    expect(held.map((h) => h.root_id)).toEqual([t1, t2]);
-    expect(held[0]).toMatchObject({ root_id: t1, mine: 2, total: 3 });
-    expect(held[1]).toMatchObject({ root_id: t2, mine: 1, total: 2 });
+    // Her three posts — the root, her reply in her own thread, and her reply in
+    // bob's. Bob's two posts are his tokens, not hers.
+    expect(held).toHaveLength(3);
+    expect(held.every((h) => h.kind === "post")).toBe(true);
+    expect(held.every((h) => h.mine === 1 && h.total === 1)).toBe(true);
+    expect(held.map((h) => h.excerpt)).toEqual(["alice drops in", "me again", "first thread"]);
+    expect(held.map((h) => h.root_id)).not.toContain(t2); // bob wrote that one
   });
 
-  it("omits threads the author never posted in", async () => {
+  it("omits posts the author did not write", async () => {
     const alice = author("anon_alic");
     const bob = author("anon_bobb");
     await alice.post("alice's thread");
@@ -132,6 +145,35 @@ describe("getHoldings", () => {
 
     const held = await getHoldings(alice.pubkey);
     expect(held).toHaveLength(1);
+  });
+
+  it("counts a named holding by MENTIONS, so the wallet agrees with the feed", async () => {
+    const alice = author("anon_alic");
+    const bob = author("anon_bobb");
+
+    // Four posts name $MEMEPLEX. Only the first joins its thread (a claim
+    // re-roots), so thread membership would have said 1-of-1 = 100% while the
+    // feed printed 25% per unit off four mentions.
+    await alice.post("$Memeplex");
+    await alice.post("$Memeplex again");
+    await alice.post("$Memeplex once more");
+    await bob.post("$Memeplex from bob");
+
+    const held = await getHoldings(alice.pubkey);
+    const meme = held.find((h) => h.path.at(-1) === "MEMEPLEX");
+    expect(meme).toMatchObject({ kind: "name", mine: 3, total: 4 });
+
+    // The exact figure the feed derives for one unit of the same ticker.
+    expect((await getTickerSupply(["MEMEPLEX"])).MEMEPLEX).toBe(4);
+  });
+
+  it("does not list a post twice — once as a post and once under the name it gave", async () => {
+    const alice = author("anon_alic");
+    await alice.post("naming $Solo here");
+
+    const held = await getHoldings(alice.pubkey);
+    expect(held).toHaveLength(1);
+    expect(held[0].kind).toBe("name");
   });
 
   it("names a thread by its ticker ancestry", async () => {

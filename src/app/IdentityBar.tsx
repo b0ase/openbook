@@ -1700,7 +1700,7 @@ export function IdentityChip(): React.JSX.Element | null {
                         className="flex items-center justify-between gap-2 text-[11px]"
                       >
                         <span className="truncate text-zinc-400">
-                          {h.path.length ? (
+                          {h.kind === "name" ? (
                             h.path.map((seg, i) => (
                               <span key={seg}>
                                 {i > 0 && <span className="text-zinc-700">/</span>}
@@ -1714,23 +1714,32 @@ export function IdentityChip(): React.JSX.Element | null {
                               </span>
                             ))
                           ) : (
-                            // An UNNAMED token, shown under the name it actually
-                            // has: its on-chain txid. Truncated because it is
-                            // unreadable by nature — that unreadability is the
-                            // point, and the argument for claiming a $Ticker.
-                            <span className="font-mono text-zinc-600" title={h.tx_id ?? undefined}>
-                              {h.tx_id
-                                ? `${h.tx_id.slice(0, 8)}…${h.tx_id.slice(-4)}`
-                                : `unanchored #${h.root_id}`}
+                            // An UNNAMED token, shown by what it SAYS. The txid
+                            // is still its true identifier and stays on hover —
+                            // but a wallet full of hashes told the holder
+                            // nothing about which of their posts each one was.
+                            <span className="text-zinc-500" title={h.tx_id ?? undefined}>
+                              {h.excerpt || `unanchored #${h.root_id}`}
                             </span>
                           )}
                         </span>
-                        <span className="flex shrink-0 items-center gap-2 font-mono tabular-nums">
-                          <span className="text-zinc-600">
-                            {h.mine}/{h.total}
+                        {/* ⚠ A SHARE IS PRINTED ONLY FOR NAMES. An unnamed post
+                            is a 1-of-1, so "100%" there never meant a holding —
+                            it meant "I wrote this", sitting in the same column
+                            as a real share of a contested name. That collision
+                            is what made this panel read as inconsistent. */}
+                        {h.kind === "name" ? (
+                          <span className="flex shrink-0 items-center gap-2 font-mono tabular-nums">
+                            <span className="text-zinc-600">
+                              {h.mine}/{h.total}
+                            </span>
+                            <span className="text-amber-400">{formatShare(h.mine, h.total)}</span>
                           </span>
-                          <span className="text-amber-400">{formatShare(h.mine, h.total)}</span>
-                        </span>
+                        ) : (
+                          <span className="shrink-0 font-mono tabular-nums text-zinc-600">
+                            1-of-1
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
