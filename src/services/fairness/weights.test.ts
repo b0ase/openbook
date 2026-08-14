@@ -1,7 +1,17 @@
 import { PrivateKey } from "@bsv/sdk";
 import Database from "better-sqlite3";
-import { beforeEach, describe, expect, it } from "vitest";
-import { _clearWeightsCache, calculateWeights } from "./weights";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { FAIRNESS_CONFIG } from "./config";
+import {
+  _clearWeightsCache,
+  type ContributorWeight,
+  calculateWeights,
+  getWeightSource,
+  postActivityWeightSource,
+  resetWeightSource,
+  setWeightSource,
+  type WeightSource,
+} from "./weights";
 
 function createTestDb() {
   const db = new Database(":memory:");
@@ -204,5 +214,129 @@ describe("calculateWeights", () => {
     expect(weights).toHaveLength(1);
     expect(weights[0].pubkey).toBe(key.pubkey);
     expect(weights[0].postCount).toBe(1); // only the post-launch post
+  });
+});
+
+// --- WeightSource registry: the seam a token-backed source would plug into ---
+
+describe("WeightSource registry", () => {
+  let db: ReturnType<typeof Database>;
+
+  beforeEach(() => {
+    resetWeightSource();
+    _clearWeightsCache();
+    db = createTestDb();
+  });
+
+  afterEach(() => {
+    // Never leak a stub source into another test file — the registry is
+    // process-global, same as the weight cache.
+    resetWeightSource();
+  });
+
+  /** Minimal stub source that records how it was called. */
+  function makeStubSource(rows: ContributorWeight[] = []) {
+    const calls: string[] = [];
+    let cleared = 0;
+    const source: WeightSource = {
+      name: "stub",
+      calculate: (_db, launchTs) => {
+        calls.push(launchTs);
+        return rows;
+      },
+      clearCache: () => {
+        cleared += 1;
+      },
+    };
+    return {
+      source,
+      calls,
+      clearedCount: () => cleared,
+    };
+  }
+
+  it("defaults to the post-activity source", () => {
+    expect(getWeightSource()).toBe(postActivityWeightSource);
+    expect(getWeightSource().name).toBe("post-activity");
+  });
+
+  it("routes calculateWeights through the registered source", () => {
+    const key = makeKey();
+    const stubRow: ContributorWeight = {
+      pubkey: key.pubkey,
+      address: key.address,
+      weight: 42,
+      postCount: 7,
+      totalBoots: 3,
+    };
+    const stub = makeStubSource([stubRow]);
+    setWeightSource(stub.source);
+
+    // The DB has a real post, but the stub source ignores it entirely —
+    // proving the weight vector comes from the source, not the posts table.
+    addPost(db, makeKey().pubkey);
+    expect(calculateWeights(db, PAST)).toEqual([stubRow]);
+  });
+
+  it("passes launchTs through to the source", () => {
+    const stub = makeStubSource();
+    setWeightSource(stub.source);
+
+    calculateWeights(db, "2026-06-01 00:00:00");
+    expect(stub.calls).toEqual(["2026-06-01 00:00:00"]);
+  });
+
+  it("defaults launchTs to the configured launch epoch", () => {
+    const stub = makeStubSource();
+    setWeightSource(stub.source);
+
+    calculateWeights(db);
+    expect(stub.calls).toEqual([FAIRNESS_CONFIG.launchTs]);
+  });
+
+  it("clears both sources' caches on swap, so no stale cross-strategy weights", () => {
+    const key = makeKey();
+    addPost(db, key.pubkey);
+    // Warm the default source's cache.
+    expect(calculateWeights(db, PAST)).toHaveLength(1);
+
+    const stub = makeStubSource();
+    setWeightSource(stub.source);
+    // Incoming source was cleared on the way in.
+    expect(stub.clearedCount()).toBe(1);
+
+    // Swapping back must not serve the stub's results, nor the default's stale cache.
+    resetWeightSource();
+    expect(calculateWeights(db, PAST)).toHaveLength(1);
+  });
+
+  it("is a no-op when setting the already-active source", () => {
+    const stub = makeStubSource();
+    setWeightSource(stub.source);
+    expect(stub.clearedCount()).toBe(1);
+
+    setWeightSource(stub.source);
+    expect(stub.clearedCount()).toBe(1); // unchanged — no redundant clear
+  });
+
+  it("_clearWeightsCache targets the active source", () => {
+    const stub = makeStubSource();
+    setWeightSource(stub.source);
+    const before = stub.clearedCount();
+
+    _clearWeightsCache();
+    expect(stub.clearedCount()).toBe(before + 1);
+  });
+
+  it("resetWeightSource restores post-activity behaviour", () => {
+    setWeightSource(makeStubSource().source);
+    resetWeightSource();
+
+    const key = makeKey();
+    addPost(db, key.pubkey);
+    const weights = calculateWeights(db, PAST);
+    expect(getWeightSource()).toBe(postActivityWeightSource);
+    expect(weights).toHaveLength(1);
+    expect(weights[0].pubkey).toBe(key.pubkey);
   });
 });
