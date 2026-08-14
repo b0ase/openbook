@@ -57,3 +57,10 @@ certificates
 console
 console.*
 *.console.log
+
+# Key material — belt and braces. Nothing here should ever exist inside the repo,
+# but a stray copy must not be committable. WIFs are spendable secrets.
+*server-key*.txt
+*.wif
+*keypair*.txt
+openbook-server-key*
