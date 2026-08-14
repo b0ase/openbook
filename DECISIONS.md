@@ -904,3 +904,38 @@ shares is the cheaper side of that trade.
 **Claiming `$OpenBooks` is still an ordinary registration.** Routing no longer depends on whether
 the root happens to be claimed — which is the property that made the old rule fragile in the first
 place.
+
+## Inline agents are NOT token-scoped — invocation is the unit, the thread is the context (2026-08-15)
+
+**Question raised by the owner:** one agent per `$Ticker` (its own runtime and `meaning.md`, scoped
+to a thread), or agents as free-standing things (the platform agent, plus external ones)?
+
+**Answer: not token-scoped.** Start with the platform agent invoked inline (`/agent`); treat
+per-token agents as a later, opt-in upgrade on a specific thread.
+
+**The owner's own strategy rules out one-agent-per-token.** DIRECTION.md plans to mint the common
+vocabulary — ~20,000 names for $2. One runtime per token means twenty thousand runtimes for words
+nobody will ever hold a conversation in. Most tickers are a single post (`$SPAM`, `$CLICKME`);
+provisioning an agent per name is provisioning for the tail.
+
+**And the owner's public/private observation is the real reason, not the cost.** Scoping an agent
+to a financial instrument makes sense where there are *parties to a contract* — a private room, an
+AGM, a mediator with a defined job. But a token in a PUBLIC thread has just been settled as a
+**receipt, not an investment** (flat cost-plus pricing, no appreciation): it is deliberately not a
+negotiable instrument, so **there is no negotiation for an agent to mediate.** The mediator role
+that justifies token-scoping is exactly the role the receipt decision removed from public threads.
+
+**The refinement worth keeping: agents are INVOKED, threads are CONTEXT.** An agent called in a
+thread reads that thread — which is the per-thread behaviour token-scoping was reaching for, with
+nothing provisioned. `meaning.md` survives as thread-derived context rather than a per-token
+artifact. If a specific thread later wants a persistent agent (a contract room, an AGM), that is a
+paid opt-in on that thread, not a default on every name.
+
+**Addressing: reuse the ticker namespace, do not invent a second one.** `$` already means "a name
+somebody claimed". An external agent should be addressable as its own `$Name`, obeying the same
+first-claim-wins PRIMARY KEY as every other symbol. A separate agent registry would need its own
+uniqueness rule, its own squatting story and its own parse rule — three more things to keep in step
+with `ticker.ts`, which is the argument already made for `$Nym`.
+
+**Deferred, not rejected:** `$TickerAgents`. Revisit when a thread exists that genuinely has
+parties rather than readers.
