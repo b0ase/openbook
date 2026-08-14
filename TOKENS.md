@@ -436,6 +436,46 @@ But it means the honest framing of this fork is **not** "adding a token to a tok
 system." It is: *a permanent claim already exists and exactly one party holds it; the
 question is whether others get one too.*
 
+## Is a domain a token? (asked 2026-08-14)
+
+The intuition: a domain and a ticker are both unique names in a namespace, claimed
+first-come, transferable, and valuable because they are memorable. That much is real. The
+proposal it led to — `openbooks.space` as a place where users launch their own openbooks,
+each on its own subdomain — is **not** recommended, for three reasons in increasing order of
+weight.
+
+**A domain is rented, not owned.** Its uniqueness is enforced by ICANN and a registry billing
+annually, and it can be taken back. If the domain IS the token, the ownership layer sits on
+rented land — which is the opposite of the argument this fork exists to make.
+
+**Per-idea deployments were already traded away, on purpose.** See *The shape*: everything
+happens inside ONE deployment, no provisioning, no multi-tenancy, and the platform controls
+issuance rather than trying to charge for something anyone may fork. "Users launch their own
+openbooks" is the thing that was given up, and what replaced it is already built — **a thread
+with a ticker IS someone's own openbook**: its own page, its own URL, its own supply, its own
+children.
+
+**Subdomains would strand every user's identity, and this is decisive.** The WIF lives in
+`localStorage`, which is scoped PER ORIGIN. `$test.openbooks.space` and `openbooks.space` are
+different origins, so clicking from one to the other delivers the user as a brand-new
+anonymous person — no name, no history, no funds — and silently generates a second key they
+might then deposit against. Cookie bridges and `postMessage` can paper over it, at the cost
+of real complexity welded onto the most safety-critical path in the app, to buy a difference
+that is purely cosmetic.
+
+**So: paths, not subdomains.** `openbooks.space/$test/$branch` already reads as a token
+address, keeps one origin and one identity, and preserves real client IPs for the per-IP caps.
+
+**Where the idea does hold is the ROOT.** `openbooks.space` ↔ `$OpenBook` is a genuine
+correspondence: the root token has a real-world name and every other token hangs off it as a
+path. Renaming the site to it is cheap — `ONCHAIN_APP` stays `opencook` regardless and
+nothing on-chain moves.
+
+**The plural is an accepted mismatch.** The domain is `openbooks.space` because no `openbook`
+domain was available, while the root token is `$OpenBook`. The owner has decided not to
+resolve or explain this. Recorded so it is not repeatedly rediscovered as a problem — it
+isn't one.
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,
