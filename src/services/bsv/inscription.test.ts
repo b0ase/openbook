@@ -24,7 +24,7 @@ describe("buildInscriptionScript", () => {
     expect(INSCRIPTION_SATS).toBe(1);
   });
 
-  it("STARTS with an ordinary P2PKH lock, byte for byte", () => {
+  it("ENDS with an ordinary P2PKH lock, byte for byte", () => {
     // The load-bearing assertion. If the lock is not a plain P2PKH the author
     // cannot spend their own inscription, and "you own what you post" is false.
     const plain = new P2PKH().lock(ADDRESS);
@@ -34,23 +34,31 @@ describe("buildInscriptionScript", () => {
       data: json({ hello: "world" }),
     });
 
-    const prefix = inscribed.toHex().slice(0, plain.toHex().length);
-    expect(prefix).toBe(plain.toHex());
+    expect(inscribed.toHex().endsWith(plain.toHex())).toBe(true);
   });
 
-  it("appends the envelope AFTER OP_CHECKSIG, so it never executes", () => {
+  it("puts the ENVELOPE FIRST and the lock after it", () => {
+    // ⚠ REGRESSION GUARD. This file originally built the script the other way
+    // round — lock first, envelope after OP_CHECKSIG. BOTH ORDERS ARE
+    // SPENDABLE, because `OP_0 OP_IF` skips to `OP_ENDIF` wherever it sits, so
+    // no shape test caught it. But indexers look for the envelope at the START,
+    // and the reversed script would have been a perfectly valid transaction
+    // that no ordinals indexer recognised. Verified against the reference
+    // implementation (js-1sat-ord), which builds the envelope ASM and then
+    // appends the P2PKH lock's ASM to it.
     const inscribed = buildInscriptionScript({
       address: ADDRESS,
       contentType: "text/plain",
       data: Utils.toArray("hi", "utf8"),
     });
     const ops = inscribed.chunks.map((c) => c.op);
-    const checksig = ops.indexOf(OP.OP_CHECKSIG);
-    const envelope = ops.indexOf(OP.OP_IF);
 
-    expect(checksig).toBeGreaterThan(-1);
-    expect(envelope).toBeGreaterThan(checksig);
-    expect(ops[ops.length - 1]).toBe(OP.OP_ENDIF);
+    expect(ops.indexOf(OP.OP_IF)).toBeLessThan(ops.indexOf(OP.OP_CHECKSIG));
+    expect(ops.indexOf(OP.OP_ENDIF)).toBeLessThan(ops.indexOf(OP.OP_CHECKSIG));
+    // The reference's exact opening sequence.
+    expect(inscribed.toASM().startsWith("OP_0 OP_IF 6f7264 OP_1 ")).toBe(true);
+    // ...and the lock is the tail, so OP_CHECKSIG is last.
+    expect(ops[ops.length - 1]).toBe(OP.OP_CHECKSIG);
   });
 
   it("round-trips content type and payload through serialization", () => {

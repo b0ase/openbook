@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatShare } from "@/lib/share";
-import { tickerHref, titleCaseTicker } from "@/lib/ticker";
+import { leaderboardHref, tickerHref, titleCaseTicker } from "@/lib/ticker";
 import { searchTickers, type TickerHit } from "../actions";
 
 /**
@@ -107,7 +107,7 @@ export function TickerDirectory({ initial }: { initial: TickerHit[] }) {
                 </span>
               </a>
               <a
-                href={`/leaderboard/${h.path.map((s) => `$${s.toLowerCase()}`).join("/")}`}
+                href={leaderboardHref(h.path)}
                 title={`Who holds $${titleCaseTicker(h.symbol)}`}
                 className="shrink-0 text-right hover:text-amber-400 transition-colors"
               >

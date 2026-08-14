@@ -11,18 +11,21 @@
  * ordinary transaction. See TOKENS.md, *We are ANCHORING posts, not inscribing
  * them*.
  *
- * ⚠ UNVERIFIED AGAINST A LIVE INDEXER. The envelope below follows the 1Sat
- * Ordinals convention — a standard P2PKH lock with the inscription appended:
+ * ⚠ THE ENVELOPE COMES FIRST, THEN THE LOCK. Verified against the reference
+ * implementation (`js-1sat-ord`, which builds
+ * `OP_0 OP_IF <ord> OP_1 <content-type> OP_0 <data> OP_ENDIF` and then appends
+ * the P2PKH lock's ASM):
  *
+ *     OP_0 OP_IF "ord" OP_1 <content-type> OP_0 <content> OP_ENDIF
  *     OP_DUP OP_HASH160 <pkh> OP_EQUALVERIFY OP_CHECKSIG
- *     OP_FALSE OP_IF "ord" OP_1 <content-type> OP_0 <content> OP_ENDIF
  *
- * The envelope sits AFTER `OP_CHECKSIG`, so it never executes and cannot affect
- * spendability; it is data an indexer reads, not script the miner runs. The
- * tests below pin that structure, but a passing test proves we wrote what we
- * meant — NOT that GorillaPool or any other indexer will index it. **Broadcast
- * one inscription and confirm a public indexer shows it before turning paid
- * posting on for real users.**
+ * An earlier version of this file had the two the other way round, with the
+ * envelope after `OP_CHECKSIG`. **Both orders are spendable** — `OP_0 OP_IF`
+ * skips straight to `OP_ENDIF` either way — which is exactly why the mistake
+ * was invisible to a shape test. But indexers look for the envelope at the
+ * START of the script, so the reversed version would have been a perfectly
+ * valid transaction that no ordinals indexer ever recognised. It would have
+ * cost real money to discover that by broadcasting.
  */
 
 import { OP, P2PKH, Script, Utils } from "@bsv/sdk";
@@ -54,14 +57,12 @@ export function buildInscriptionScript({ address, contentType, data }: Inscripti
   if (!address) throw new Error("inscription requires an owner address");
   if (!contentType) throw new Error("inscription requires a content type");
 
-  // The lock comes FIRST and is a plain P2PKH. Anything else would make the
-  // output non-standard, and a post nobody can spend is not ownership.
-  const lock = new P2PKH().lock(address);
-
   const script = new Script();
-  for (const chunk of lock.chunks) script.chunks.push(chunk);
 
-  script.writeOpCode(OP.OP_FALSE);
+  // The envelope, first. `OP_0 OP_IF` is a branch that never executes, so it
+  // cannot affect spendability — it is data an indexer reads, not script a
+  // miner runs.
+  script.writeOpCode(OP.OP_0);
   script.writeOpCode(OP.OP_IF);
   script.writeBin(Utils.toArray(ORD_MARKER, "utf8"));
   script.writeOpCode(OP.OP_1);
@@ -69,6 +70,11 @@ export function buildInscriptionScript({ address, contentType, data }: Inscripti
   script.writeOpCode(OP.OP_0);
   script.writeBin(data);
   script.writeOpCode(OP.OP_ENDIF);
+
+  // Then an ordinary P2PKH lock. Anything else would make the output
+  // non-standard, and a post nobody can spend is not ownership.
+  const lock = new P2PKH().lock(address);
+  for (const chunk of lock.chunks) script.chunks.push(chunk);
 
   return script;
 }

@@ -183,6 +183,18 @@ export function tickerHref(path: string[]): string {
   return `/${path.map(tickerSlug).join("/")}`;
 }
 
+/**
+ * Link to a token's holder leaderboard.
+ *
+ * ⚠ Unlike `tickerHref`, the ROOT is NOT collapsed to `/`. The root token has a
+ * real holder list, so `/leaderboard/$openbooks` is a page — whereas `/` is the
+ * board itself. Kept beside `tickerHref` so the two cannot drift when URL shape
+ * changes again.
+ */
+export function leaderboardHref(path: string[]): string {
+  return `/leaderboard/${path.map(tickerSlug).join("/")}`;
+}
+
 /** Parse `/$openbook/$test` → `["OPENBOOK","TEST"]`. Non-ticker segments are ignored. */
 export function parseTickerPath(pathname: string): string[] {
   return pathname
