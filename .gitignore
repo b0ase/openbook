@@ -53,3 +53,7 @@ seed/genesis.db-shm
 .claude/
 
 certificates
+# Local debugging dumps (browser console exports, etc.) — never commit
+console
+console.*
+*.console.log

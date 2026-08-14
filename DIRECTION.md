@@ -1,6 +1,15 @@
 # Direction
 
 > Where this project is going and why. Read this before suggesting features or architecture changes.
+>
+> **OpenBook is a fork of OpenCook, and it diverges on economics.** This document is
+> upstream's direction, kept because most of it still holds and because the reasoning is
+> worth preserving. Three sections are now superseded and say so inline: *Onboarding
+> Philosophy* (posting is paid), *Yeah, we pump* (there IS a token), and *The Recursive
+> Model* (spawning is driven by supply exhaustion, not by traction alone). The token model
+> lives in [TOKENS.md](TOKENS.md); thread structure in [THREADS.md](THREADS.md).
+>
+> Where this file says "OpenCook" it means the upstream project and the shared foundation.
 
 ## The Vision
 
@@ -89,19 +98,44 @@ Once this model is proven on OpenCook, any idea posted here can spawn its own pr
 
 ## Onboarding Philosophy
 
-The biggest barrier to crypto adoption is complexity. We eliminate it:
+**SUPERSEDED for OpenBook (2026-08-14) — posting is paid.** The upstream position is kept
+below because what survives of it is most of it.
 
-- Visit site → see a text box → type idea → click Post → done
-- BSV keypair generated automatically behind the scenes
-- No wallet downloads. No seed phrases. No "buy crypto first."
-- Server pays for on-chain transactions (~$0.0005 per post)
-- Target: ~15% conversion vs industry ~0.3% (50x improvement)
+**Still true, and still the hard part:**
+
+- Visit site → see a text box → type → post. No separate onboarding flow.
+- BSV keypair generated automatically behind the scenes.
+- No wallet downloads. No seed phrases. No third-party wallet to install.
+
+**No longer true:** *"no buy crypto first"*, the server covering the ~$0.0005 per post, and
+the **~15% conversion vs industry ~0.3%** target that rested on both. Under OpenBook's token
+model every post is a purchase — you pay to post and receive the thread's tokens as a
+tradable receipt (see TOKENS.md, *Supply and dilution*). A first-time user must have funded
+their address before their first post.
+
+**This is a deliberate trade, not an oversight.** The bet: fewer users who are actually
+buying something, over more users whose contribution is counted but not owned. It is the
+fork's entire thesis, and it costs the single biggest number in this document. Anyone
+quoting the 50x conversion figure for OpenBook is quoting a claim that no longer applies.
+
+**What replaces it as the onboarding problem:** getting a first-time user funded without
+reintroducing the friction the keypair generation removed. That problem is unsolved and is
+the thing to design against.
 
 ## The Recursive Model
 
 Once the platform works, any post can become its own project. Someone posts an idea, it gets booted (economic signal), and if it gains enough traction it spawns into its own platform with the same contribution tracking, fairness agent, and model.
 
 "Every idea is a seed. Every seed can grow into a forest."
+
+**AMENDED for OpenBook (2026-08-14) — spawning has a mechanism now, not just traction.** A
+thread's token supply depletes as people post into it, and **when it is minted out the thread
+closes**. The natural continuation of a closed thread is a child thread, which mints its own
+token and gives the parent a share.
+
+So branching stops being something users have to be persuaded to do and becomes what the
+economics push toward: threads fill up, and the conversation continues in a child that pays
+its parent. The forest grows because the seeds run out of room. See TOKENS.md *Closure*.
 
 ### What could be built
 
@@ -124,11 +158,33 @@ The person who spawns a project becomes the project owner. They can:
 
 ### Yeah, we pump. We pump real value.
 
-There's no OpenCook token. No presale. No "buy our coin." The value IS the contribution. You earn by doing, not by speculating.
+**SUPERSEDED for OpenBook (2026-08-14) — there IS a token, and it is the point.** Upstream's
+position is preserved verbatim below, because it is the strongest argument against what this
+fork is doing and deleting it would be self-serving.
 
-If a project owner wants to issue their own token on their spawned project — loyalty points, governance tokens, whatever — that's their choice. But the base layer is always: real work → real payment. The fairness system pays in real money (BSV), not promises.
+> There's no OpenCook token. No presale. No "buy our coin." The value IS the contribution.
+> You earn by doing, not by speculating.
+>
+> If a project owner wants to issue their own token on their spawned project — loyalty
+> points, governance tokens, whatever — that's their choice. But the base layer is always:
+> real work → real payment. The fairness system pays in real money (BSV), not promises.
 
-You can sit on the platform and talk. You can share ideas. You can contribute code. You can just have vibes. It's all signal. The system tracks what matters and the money follows.
+**OpenBook's position.** Every post is a purchase: you pay to post, and you receive the
+thread's tokens as a tradable receipt on a supply that depletes. Tokens are still not sold in
+a presale and still not a governance instrument — they are minted by the act of contributing,
+priced by what you write, and the payment *is* the proof of contribution. But calling this
+"no token" would be false, so it is not called that.
+
+**What survives from upstream's argument, and matters more here than there:** real work →
+real payment. The boot-fee revenue split is unchanged and still pays in BSV, not promises.
+The token sits alongside it, not instead of it.
+
+**What upstream is right about, on the record:** this design increases speculation and
+securities exposure, and its own competitive table (below) names the failure mode. See
+TOKENS.md *Risks and honest counter-arguments*, which does not dismiss them.
+
+You can sit on the platform and talk. You can share ideas. You can contribute code. It is all
+signal. The difference is that now you own a piece of the thread you signalled in.
 
 ## Open Source Strategy
 
@@ -150,8 +206,16 @@ OpenCook combines elements that exist separately elsewhere, but nobody has put t
 | **SourceCred** | Algorithmic contribution scoring | Synthetic tokens not real money, organization dissolved | Real BSV micropayments, sustainable revenue from boot fees |
 | **Coordinape** | Peer-based contribution allocation | Subjective, political, doesn't scale | AI removes human politics from distribution |
 | **Twetch** | BSV on-chain social with micropayments | Required wallet upfront, killed onboarding | 2-click onboarding, identity generated silently |
-| **Friend.tech/DeSo** | Social tokens, speculation on creators | Pure speculation, no intrinsic value, bubbles pop | Rewards actual contribution, not speculation |
+| **Friend.tech/DeSo** | Social tokens, speculation on creators | Pure speculation, no intrinsic value, bubbles pop | Rewards actual contribution, not speculation — **but see the note below: OpenBook's token model moves toward this row, not away from it** |
 | **Botto** | AI + community + value distribution | Token-weighted voting (plutocracy risk), aesthetic not contribution | AI evaluates contribution quality, inverted agency model |
+
+**Where OpenBook must be honest about this table.** The Friend.tech row indicts
+early-buyer-advantage on assets nobody can evaluate. OpenBook's model — pay to post, tokens
+cheaper early, on a name whose thread has not happened yet — is structurally closer to that
+row than upstream is. The claimed difference is that the token is minted by contributing
+rather than bought from a bonding curve on a person, and that a thread's supply is finite and
+closes. Whether that difference holds is the open question, not a settled advantage. Recorded
+here so the table is not quoted as if the fork inherited its answers.
 
 ### What makes OpenCook possible (and why nobody else did it)
 
