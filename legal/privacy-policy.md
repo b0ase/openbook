@@ -1,6 +1,6 @@
 <!-- DRAFT — not legal advice — [LAWYER] review required before launch. -->
 
-# OpenCook — Privacy Policy (DRAFT)
+# OpenBook — Privacy Policy (DRAFT)
 
 > **This is a working draft for attorney review. It is not legal advice and is not yet in force.**
 > Effective date: **[TODO: EFFECTIVE DATE]**
@@ -9,9 +9,9 @@
 
 ## We deliberately collect almost nothing
 
-OpenCook is built to collect as little personal data as possible. **There is no email, no name, no phone number, and no account signup.** Your identity is a cryptographic keypair generated and stored in your own browser — we never ask who you are.
+OpenBook is built to collect as little personal data as possible. **There is no email, no name, no phone number, and no account signup.** Your identity is a cryptographic keypair generated and stored in your own browser — we never ask who you are.
 
-That said, OpenCook works by writing posts to a **public blockchain**, and on-chain data is permanent and public. This policy explains exactly what data exists, **where it lives**, and what we can and cannot do about it. The most important thing to understand is at the end: **anything written to the blockchain cannot be erased by us — or by anyone.**
+That said, OpenBook works by writing posts to a **public blockchain**, and on-chain data is permanent and public. This policy explains exactly what data exists, **where it lives**, and what we can and cannot do about it. The most important thing to understand is at the end: **anything written to the blockchain cannot be erased by us — or by anyone.**
 
 ---
 
@@ -67,7 +67,7 @@ Using the Service causes data to be shared with third parties that help operate 
 
 ## 3. Cookies, local storage & tracking
 
-At launch, OpenCook uses **browser localStorage** to store your identity and preferences on your device (described in Section 1.B). **The Service does not use tracking cookies and does not run third-party analytics at launch.**
+At launch, OpenBook uses **browser localStorage** to store your identity and preferences on your device (described in Section 1.B). **The Service does not use tracking cookies and does not run third-party analytics at launch.**
 
 `[LAWYER: Confirm this remains accurate at launch and whether any localStorage/essential-storage disclosure or consent is required under the ePrivacy Directive / PECR. If analytics or any non-essential storage is added later, this section and a consent mechanism must be revisited.]`
 
@@ -76,7 +76,7 @@ At launch, OpenCook uses **browser localStorage** to store your identity and pre
 Depending on where you live, you may have rights under laws such as the GDPR or CCPA/CPRA, including rights to access, correct, delete, or restrict processing of your personal data, and to object or opt out.
 
 **What the operator can do:**
-- The operator can **remove content from the OpenCook app feed** and can **remove copies from its own database**.
+- The operator can **remove content from the OpenBook app feed** and can **remove copies from its own database**.
 
 **What the operator CANNOT do:**
 - The operator **cannot erase data from the blockchain.** On-chain data — including post content, your public key/address, signature, and timestamp — is permanent and outside the operator's control. Independent nodes, explorers, and indexers replicate it. A removal from the app and database does **not** remove anything from the chain, and the content may remain visible through other tools.

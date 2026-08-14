@@ -1,6 +1,6 @@
 <!-- DRAFT — not legal advice — [LAWYER] review required before launch. -->
 
-# OpenCook — Terms of Service (DRAFT)
+# OpenBook — Terms of Service (DRAFT)
 
 > **This is a working draft for attorney review. It is not legal advice and is not yet in force.**
 > Effective date: **[TODO: EFFECTIVE DATE]**
@@ -9,7 +9,7 @@
 
 ## 1. Acceptance & Eligibility
 
-By accessing or using OpenCook (the "Service"), you agree to these Terms of Service ("Terms"). If you do not agree, do not use the Service.
+By accessing or using OpenBook (the "Service"), you agree to these Terms of Service ("Terms"). If you do not agree, do not use the Service.
 
 You must be at least **[TODO: MIN AGE]** years old to use the Service. By using the Service you represent that you meet this minimum age and that you have the legal capacity to enter into these Terms.
 
@@ -17,7 +17,7 @@ You must be at least **[TODO: MIN AGE]** years old to use the Service. By using 
 
 ## 2. What the Service Is
 
-OpenCook is an **experimental, beta** anonymous public message board. It is provided for early testing and may change, break, or be discontinued at any time.
+OpenBook is an **experimental, beta** anonymous public message board. It is provided for early testing and may change, break, or be discontinued at any time.
 
 When you submit a post, the Service records it **on the BSV blockchain** as an `OP_RETURN` output. The post content, your public key/address, your cryptographic signature, and a timestamp are written to a public, distributed ledger. The Service also stores a copy in its own database to render the app feed.
 
@@ -28,9 +28,9 @@ The Service does not require an email address, phone number, real name, or accou
 **This is the most important section of these Terms.**
 
 - **Every post you make is permanent and public.** When you post, your content is broadcast to the BSV blockchain and becomes part of a public, distributed, append-only ledger.
-- **Your posts are readable by anyone, forever.** Anyone in the world — not just OpenCook users — can read on-chain data using public block explorers and other tools.
+- **Your posts are readable by anyone, forever.** Anyone in the world — not just OpenBook users — can read on-chain data using public block explorers and other tools.
 - **The operator cannot delete, edit, or recall your posts from the blockchain.** Once a post is broadcast, it is out of the operator's control. No one — not the operator, not you — can remove it from the chain.
-- **Third parties replicate and index the chain.** Independent nodes, explorers, archives, and indexers copy and re-publish on-chain data. Even if OpenCook stops showing a post in its own feed, those third parties may continue to display it.
+- **Third parties replicate and index the chain.** Independent nodes, explorers, archives, and indexers copy and re-publish on-chain data. Even if OpenBook stops showing a post in its own feed, those third parties may continue to display it.
 - **Do not post personal data or anything you may later want removed.** Do not post your real name, address, contact details, anyone else's personal data, secrets, or anything sensitive. Treat everything you post as a permanent public broadcast.
 
 `[LAWYER: This section is the linchpin of the immutability-vs-erasure tension. Confirm the disclosure is sufficient to establish informed assumption of risk, and that it is consistent with the Privacy Policy's GDPR/CCPA erasure-limit language. The operator literally cannot honor an on-chain erasure request — this needs to be airtight and consistent across all three documents and the pre-first-post gate.]`
@@ -69,9 +69,9 @@ Prohibited content **may be screened by an automated filter before publication**
 The operator's moderation is limited and best-effort. Specifically:
 
 - **Pre-publication filter (best-effort).** Before a post is broadcast, the Service runs an automated, best-effort screen for clearly illegal content. **This filter is not comprehensive and will miss things.** It is not a guarantee, and it does not constitute review of every post.
-- **Declining to display / hiding from the feed.** The operator may decline to broadcast a post, or may **hide a post from the OpenCook app feed** so that it is no longer shown within the app.
+- **Declining to display / hiding from the feed.** The operator may decline to broadcast a post, or may **hide a post from the OpenBook app feed** so that it is no longer shown within the app.
 
-**What moderation CANNOT do:** Hiding a post from the OpenCook feed does **not** remove it from the blockchain. On-chain data is permanent. A hidden post is simply **no longer shown in the OpenCook app** — it remains on-chain and may still be visible through other explorers and tools. The operator cannot delete, erase, or take down on-chain content.
+**What moderation CANNOT do:** Hiding a post from the OpenBook feed does **not** remove it from the blockchain. On-chain data is permanent. A hidden post is simply **no longer shown in the OpenBook app** — it remains on-chain and may still be visible through other explorers and tools. The operator cannot delete, erase, or take down on-chain content.
 
 `[LAWYER: Confirm the moderation description does not over-promise a capability the operator does not have, and does not inadvertently create a duty (e.g., a representation of comprehensive screening) the operator cannot meet. The "best-effort, not comprehensive" framing is intentional — verify it is defensible and consistent with the CSAM/illegal-content analysis in Section 6.]`
 
@@ -109,7 +109,7 @@ You agree to indemnify and hold harmless the operator and its affiliates from an
 ## 12. Changes & Termination
 
 - The operator may modify or discontinue the Service, and may update these Terms, at any time. Continued use after changes take effect constitutes acceptance.
-- **The operator may terminate or restrict your access to the OpenCook app** at any time.
+- **The operator may terminate or restrict your access to the OpenBook app** at any time.
 - **The operator CANNOT terminate your on-chain presence.** Posts already broadcast to the blockchain remain on-chain permanently, regardless of any termination of app access. Termination removes access to the app — it does not remove anything from the chain.
 
 ## 13. Governing Law, Disputes & Severability

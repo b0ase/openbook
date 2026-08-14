@@ -13,7 +13,7 @@ const wif = key.toWif();
 const address = key.toPublicKey().toAddress().toString();
 
 console.log("");
-console.log("=== OpenCook Server Wallet ===");
+console.log("=== OpenBook Server Wallet ===");
 console.log("");
 console.log("WIF (add to .env.local as BSV_SERVER_WIF):");
 console.log(wif);
