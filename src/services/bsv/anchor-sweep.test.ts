@@ -8,6 +8,14 @@ vi.mock("./onchain", () => ({
 
 import { sweepOrphans } from "./anchor-sweep";
 
+/**
+ * ⚠ This fixture DUPLICATES the real schema rather than running the migrations,
+ * so it drifts silently: when the sweep started selecting `parent_id`, the query
+ * threw, `sweepOrphans` swallowed it, and the "leaves the post pending" test
+ * still passed — because a post that was never read also never gets a tx_id.
+ * Keep the columns the sweep reads in sync here, or prefer the migration-backed
+ * `anchor-sweep-roundtrip.integration.test.ts` for new cases.
+ */
 function makeDb() {
   const db = new Database(":memory:");
   db.exec(`CREATE TABLE posts (
@@ -17,6 +25,8 @@ function makeDb() {
     signature TEXT,
     pubkey TEXT,
     tx_id TEXT,
+    parent_id INTEGER REFERENCES posts(id),
+    root_id INTEGER REFERENCES posts(id),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
   return db;

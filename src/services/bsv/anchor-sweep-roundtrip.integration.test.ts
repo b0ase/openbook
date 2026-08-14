@@ -50,6 +50,17 @@ function insertOrphanPost(label: string): number {
   return r.lastInsertRowid as number;
 }
 
+/** Insert a backdated un-anchored REPLY to `parentId` (THREADS.md). */
+function insertOrphanReply(label: string, parentId: number): number {
+  const r = db
+    .prepare(
+      `INSERT INTO posts (content, author_name, signature, pubkey, tx_id, parent_id, root_id, created_at)
+       VALUES (?, ?, ?, ?, NULL, ?, ?, datetime('now', '-5 minutes'))`
+    )
+    .run(`Orphan reply: ${label}`, "anon_sweep", "fakesig", "fakepubkey", parentId, parentId);
+  return r.lastInsertRowid as number;
+}
+
 /** Insert a fresh post (created_at = now, below 90s min-age). */
 function insertFreshPost(label: string): number {
   const r = db
@@ -140,6 +151,36 @@ describe("anchor sweep roundtrip — integration", () => {
     mockLogPostOnChain.mockResolvedValue("txid_sweep_b");
     await sweepOrphans(db);
     expect(pendingAnchorCount(db)).toBe(0);
+  });
+
+  it("forwards a swept post's id and parent to the on-chain record", async () => {
+    // ⚠ The sweep is the ONLY path that anchors a post whose inline broadcast
+    // failed. An OP_RETURN is immutable, so if the sweep drops parent_id, that
+    // reply is unthreadable from the chain forever — there is no second attempt.
+    const rootId = insertOrphanPost("thread-root");
+    db.prepare("UPDATE posts SET root_id = id WHERE id = ?").run(rootId);
+    const replyId = insertOrphanReply("a reply", rootId);
+    // Anchor the root first so the sweep (oldest id first, one per call) reaches
+    // the reply on the next pass.
+    db.prepare("UPDATE posts SET tx_id = 'txid_root' WHERE id = ?").run(rootId);
+
+    mockLogPostOnChain.mockResolvedValue("txid_reply");
+    await sweepOrphans(db);
+
+    expect(mockLogPostOnChain).toHaveBeenCalledWith(
+      expect.objectContaining({ id: replyId, parent: rootId })
+    );
+  });
+
+  it("forwards parent: null for a swept root", async () => {
+    const rootId = insertOrphanPost("lone-root");
+    mockLogPostOnChain.mockResolvedValue("txid_lone");
+
+    await sweepOrphans(db);
+
+    expect(mockLogPostOnChain).toHaveBeenCalledWith(
+      expect.objectContaining({ id: rootId, parent: null })
+    );
   });
 
   it("createPost path: post is initially inserted with tx_id=NULL", () => {

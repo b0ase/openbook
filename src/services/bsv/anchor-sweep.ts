@@ -26,6 +26,13 @@ interface OrphanRow {
   author_name: string;
   signature: string | null;
   pubkey: string | null;
+  /**
+   * ⚠ MUST be selected and forwarded. The sweep is the ONLY path that anchors a
+   * post whose inline broadcast failed, and an OP_RETURN is immutable — a reply
+   * swept without its parent is unthreadable from the chain forever, with no
+   * second chance to correct it.
+   */
+  parent_id: number | null;
 }
 
 // Only sweep posts old enough that their inline first attempt (up to a 30s
@@ -52,7 +59,7 @@ export async function sweepOrphans(db: DB = defaultDb): Promise<void> {
   try {
     const rows = db
       .prepare(
-        `SELECT id, content, author_name, signature, pubkey
+        `SELECT id, content, author_name, signature, pubkey, parent_id
          FROM posts
          WHERE tx_id IS NULL AND created_at < datetime('now', ?)
          ORDER BY id ASC
@@ -64,10 +71,12 @@ export async function sweepOrphans(db: DB = defaultDb): Promise<void> {
     for (const row of rows) {
       if (now < (nextAttemptAt.get(row.id) ?? 0)) continue; // backoff not elapsed
       const txid = await logPostOnChain({
+        id: row.id,
         content: row.content,
         author: row.author_name,
         signature: row.signature,
         pubkey: row.pubkey,
+        parent: row.parent_id,
       });
       if (txid) {
         db.prepare("UPDATE posts SET tx_id = ? WHERE id = ?").run(txid, row.id);

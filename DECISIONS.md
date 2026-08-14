@@ -491,3 +491,90 @@
   - **DEFERRED (no invariant weakened):** rate-limiter LRU key-cap (store self-cleans), persisting the agent daily counter (in-memory, matches existing design), prompt `cache_control` (needs a stable-prefix refactor first; post-launch cost pass). The user-funded posting escape valve stays deferred — at a 200/day block it only bites abuse, but it's the eventual companion so a blocked user always has a paid route on-chain.
   - **Forward-compat (future idea-attribution):** a rare duplicate on-chain post record (Wave 1 timeout re-sweep) is SAFE for any future "pay the idea for its contribution" mechanism — it must key on EARLIEST on-chain timestamp + dedupe by idea (content/signature), NOT naively sum on-chain occurrences. Same author (pubkey/sig), later timestamp → the original is canonical, the duplicate ignored. ("First to say it on-chain" wins.)
   - **Deploy (OBS-3/OBS-4):** per-IP caps require a trusted proxy setting `x-forwarded-for`/`x-real-ip`; without one, header-less requests share a `postIp:unknown` bucket (fails toward REFUSED — an availability cliff, not a money hole). New env vars `SERVER_DAILY_SPEND_SATS` + `ONCHAIN_POST_IP_LIMIT` documented in `.env.example`. **DO NOT** make the refuse-gates run after the insert (would store off-chain), and **DO NOT** add the ≥3 gate to the payout split without an explicit economic-policy decision.
+
+## Threading — `parent_id` + denormalised `root_id` (built 2026-08-14, server side; UI not built)
+
+Full spec and rationale live in THREADS.md; this records the decisions that are settled and
+the two places the build deviated from the spec.
+
+- **Threading exists to serve the token model, not to add a comment feature.** TOKENS.md's
+  shape is: a thread is marked with a ticker and minted, and a parent token takes a stake in
+  each child. That requires a thread to be a *thing* with an identity. `posts` was flat, so
+  there was nothing for a ticker to attach to. Threading is the prerequisite, which is why
+  it was built before any of the token layer.
+
+- **Store `root_id` as well as `parent_id`, denormalised.** `parent_id` alone gives the tree
+  but makes "every post in this thread" a `WITH RECURSIVE` walk — a query that would sit on
+  the token-allocation path and run per mint and per payout. Denormalising the thread root
+  onto every row makes it one indexed lookup. A root carries `root_id = id` (self-rooted),
+  set by an `UPDATE` immediately after insert **inside the same transaction**, because a
+  root's id cannot be known before the row exists. The cost is one column and one write-time
+  rule; the existing 2,006 posts were backfilled in `db.ts` so no query ever needs the
+  `root_id IS NULL OR id = ?` compatibility form.
+
+- **Two indexes, not three — corrected by measurement.** The spec called for a partial
+  `idx_posts_roots ON posts(id DESC) WHERE parent_id IS NULL` to serve the root feed.
+  `EXPLAIN QUERY PLAN` over 50 roots + 2,000 replies shows SQLite never chooses it: `id` is
+  `INTEGER PRIMARY KEY` (the rowid), so an index on `(parent_id)` physically stores
+  `(parent_id, rowid)` and walking its `parent_id IS NULL` span backwards already yields
+  `ORDER BY id DESC` with no sort step. The partial index would add write cost on every
+  insert and buy nothing. Dropped, with a test asserting it stays dropped.
+
+- **The parent is looked up, never trusted.** `parent_id` arrives from the client and is
+  **not** covered by the post signature (which signs content only). A parent id pointing at
+  nothing would create a post that can never be rendered — excluded from the feed for having
+  a parent, and absent from every thread view for pointing at a root that isn't there. So
+  `createPost` resolves the parent from the DB and returns `invalid_parent` if it does not
+  exist. **DO NOT** take `root_id` from the client; derive it from the looked-up parent.
+
+- **The feed is roots-only, via one shared `ROOTS_ONLY` constant.** Every feed read filters
+  `p.parent_id IS NULL`. Missing it on a single query leaks replies into the feed out of
+  context and duplicated under their own thread — worst on `getNewPosts`, polled every 5s,
+  where a reply would pop into every open feed live. Cursor pagination is unaffected:
+  `Feed.tsx` pages on `id < before` / `id > after`, and filtering rows out cannot break a
+  cursor while the column stays monotonic and unique. What *does* change is that id gaps
+  grow — **do not introduce code that infers "how many posts exist" from an id delta.**
+
+- **Arbitrary reply depth, rendered flat.** Capping at depth 1 was the simpler option and
+  sufficient for the token model, but it destroys information irreversibly. Arbitrary depth
+  costs one extra column read given `root_id`, and preserves the option of a "replying to"
+  chip later.
+
+- **Boot counts stay PER-POST for now.** Thread-aggregated boot counts (a root's count
+  summing every boot in its thread) is probably what the token model eventually wants, but it
+  changes `weights.ts` engagement scoring and the `bootboard` spotlight semantics
+  simultaneously. Shipped per-post so that a feed regression and a payout regression cannot
+  arrive in the same commit. Thread aggregation is a separate change with its own tests.
+
+- **`weights.ts` deliberately unchanged.** Replies are posts with a `pubkey`, so they earn
+  contribution weight automatically under the existing query. That is the correct default —
+  a reply is a contribution — and it is recorded here so nobody "fixes" it. No file under
+  `src/services/fairness/` changes for threading, and `bootboard` / `boot_grants` /
+  `payouts` all still key on `posts.id`, which still means the same thing.
+
+- **On-chain: `id` travels with `parent` (deviation from the spec).** THREADS.md specified
+  adding `parent` alone to the post OP_RETURN. But a post record carried no identifier of its
+  own, so `parent: 41` would have named a row no chain reader could locate — leaving the
+  thread graph reconstructible only from SQLite, which is the one thing that step exists to
+  fix. The record now carries the post's own rowid too, matching the convention `boot_split`
+  already uses (`post_id`, keyed as `(app, post_id)`). `parent` is written as an explicit
+  `null` for roots rather than omitted, so a root written by a threading-aware writer is
+  distinguishable from a pre-threading record. Both are additive optional fields, so **`v`
+  stays 1** per the reader contract in `lib/onchain-record.ts` — bumping it would orphan
+  readers of the 2,006 already-anchored genesis records.
+
+- **`anchor-sweep.ts` must forward both fields.** The sweep is the ONLY path that anchors a
+  post whose inline broadcast failed, and an OP_RETURN is immutable — a reply swept without
+  its parent is unthreadable from the chain forever, with no second attempt. The record shape
+  is pinned by `onchain.test.ts` and the sweep's forwarding by
+  `anchor-sweep-roundtrip.integration.test.ts`, because this is the one part of the codebase
+  where a mistake cannot be corrected by a later deploy.
+
+- **Nothing is user-visible yet.** No UI passes `parent_id`, so every post created today is a
+  root and the roots-only filter is a no-op over the existing feed. THREADS.md step 4 (thread
+  view + reply composer) is the remaining work.
+
+- **Open question, carried from TOKENS.md and NOT settled here:** does ordinary posting become
+  paid? Paying to *mint a ticker* is a founding act and a natural fee. Paying to *post* is a
+  different thing and would end the zero-friction onboarding DIRECTION.md's conversion claim
+  rests on. Separate these explicitly before either is built.

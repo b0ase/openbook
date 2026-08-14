@@ -3,7 +3,10 @@
 > Build spec for thread structure on `posts` — the prerequisite for the token tree in
 > [TOKENS.md](TOKENS.md). A token attaches to a thread root, so there must be thread roots.
 >
-> **Status: spec, not built.** Nothing here is implemented.
+> **Status: server side BUILT (steps 1–3, 5). UI (step 4) not built.** A reply can be
+> created, validated, rooted, read as a thread, and anchored on-chain — but nothing in the
+> UI can yet produce or display one, so the running site is unchanged. Sections below are
+> kept as written and annotated where the build corrected them.
 >
 > Last updated: 2026-08-14
 
@@ -179,23 +182,42 @@ chain rather than only from SQLite — the audit trail is the point. In
 `onchain.ts`'s body:
 
 ```ts
-{ ...existing, parent: parentId ?? null }
+{ ...existing, id: postId, parent: parentId ?? null }
 ```
+
+**`id` was added during the build; the spec called for `parent` alone.** A post record
+carried no identifier of its own, so `parent: 41` would have named a row no chain reader
+could locate — leaving the thread graph reconstructible only from SQLite, the exact thing
+this step exists to fix. Writing the post's own rowid makes the pointer resolvable, and
+matches the convention `boot_split` already uses (`post_id`, keyed as `(app, post_id)`).
+
+`parent` is emitted as an explicit `null` for roots rather than omitted, so a root written
+by a threading-aware writer is distinguishable from a pre-threading record.
 
 Per the reader contract in `src/lib/onchain-record.ts`: **additive optional fields do not
 bump `v`.** Readers ignore unknown fields, so existing consumers are unaffected and this
-stays `v: 1`.
+stays `v: 1` — which matters, since bumping it would orphan readers of the 2,006 already
+anchored genesis records.
+
+**Both fields must also be forwarded by `anchor-sweep.ts`**, which is the only path that
+anchors a post whose inline broadcast failed. An OP_RETURN is immutable: a reply swept
+without its parent is unthreadable from the chain forever, with no second attempt.
 
 ## Build order
 
-1. Migration + indexes + backfill (`db.ts`).
-2. `createPost(parentId?)` with parent-exists validation and `root_id` resolution.
-3. Read-query filters + `getThread`.
-4. UI: thread view, reply composer, root-feed unchanged.
-5. On-chain `parent` field.
+1. ✅ Migration + indexes + backfill (`db.ts`).
+2. ✅ `createPost(parentId?)` with parent-exists validation and `root_id` resolution.
+3. ✅ Read-query filters + `getThread` (and `getReplyCounts`, added so the feed can show
+   "N replies" without loading any reply bodies).
+4. ⬜ UI: thread view, reply composer, root-feed unchanged.
+5. ✅ On-chain `id` + `parent` fields (`onchain.ts` **and** `anchor-sweep.ts`).
 
 Steps 1–3 are independently testable against an in-memory SQLite database using the
-existing `weights.test.ts` fixture pattern, before any UI exists.
+existing `weights.test.ts` fixture pattern, before any UI exists — which is how they were
+built and how they are covered (`actions-threading.integration.test.ts`).
+
+**Nothing is user-visible until step 4.** No UI passes `parent_id`, so every post created
+today is a root and the feed's roots-only filter is a no-op over the existing 2,006 posts.
 
 ## Open question carried from TOKENS.md
 

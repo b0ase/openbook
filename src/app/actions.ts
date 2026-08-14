@@ -42,7 +42,31 @@ export interface CreatePostResult {
     | "daily_limit"
     | "paused"
     | "invalid_signature"
-    | "rejected_content";
+    | "rejected_content"
+    | "invalid_parent";
+}
+
+/**
+ * Resolve a reply's thread root, or null if the parent does not exist.
+ *
+ * ⚠ THE PARENT MUST BE LOOKED UP, NOT TRUSTED. `parent_id` arrives from the
+ * client and is NOT part of the signed message (the signature covers post
+ * content only). A parent id pointing at nothing would create a post that
+ * belongs to no thread and can never be rendered — invisible in the root feed
+ * because it has a parent, and absent from every thread view because its root
+ * points nowhere.
+ *
+ * Returns the root to store: the parent's own root, or the parent itself if the
+ * parent is a root. That is what keeps a reply five levels down carrying the
+ * same `root_id` as the thread's first post, so thread reads stay a single
+ * indexed lookup instead of a recursive walk.
+ */
+function resolveThreadRoot(parentId: number): number | null {
+  const parent = db.prepare("SELECT id, root_id FROM posts WHERE id = ?").get(parentId) as
+    | { id: number; root_id: number | null }
+    | undefined;
+  if (!parent) return null;
+  return parent.root_id ?? parent.id;
 }
 
 export async function createPost(formData: FormData): Promise<CreatePostResult> {
@@ -104,22 +128,71 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   if (isServerSpendDisabled()) return { ok: false, reason: "paused" };
   if (!hasDailyBudget(POST_LOG_COST_SATS)) return { ok: false, reason: "paused" };
 
-  const result = db
-    .prepare("INSERT INTO posts (content, author_name, signature, pubkey) VALUES (?, ?, ?, ?)")
-    .run(
-      content.trim(),
-      authorName,
-      typeof signature === "string" ? signature : null,
-      typeof pubkey === "string" ? pubkey : null
-    );
+  // Threading (THREADS.md). A reply carries its parent and the thread root; a new
+  // thread is its own root, which cannot be known until the row exists — hence the
+  // insert-then-update inside one transaction below.
+  const rawParent = formData.get("parent_id");
+  let parentId: number | null = null;
+  if (typeof rawParent === "string" && rawParent.trim() !== "") {
+    const n = Number(rawParent);
+    if (!Number.isInteger(n) || n <= 0) return { ok: false, reason: "invalid_parent" };
+    parentId = n;
+  }
+
+  let rootId: number | null = null;
+  if (parentId !== null) {
+    rootId = resolveThreadRoot(parentId);
+    if (rootId === null) return { ok: false, reason: "invalid_parent" };
+  }
+
+  // One transaction: a root post's own id is its root, so the row must exist
+  // before root_id can be set. Splitting these would leave a window where a
+  // crash yields a permanently unrooted post — the exact state the migration's
+  // backfill had to clean up once already.
+  const insertPost = db.transaction(
+    (args: {
+      content: string;
+      author: string;
+      sig: string | null;
+      pk: string | null;
+      parent: number | null;
+      root: number | null;
+    }): number => {
+      const res = db
+        .prepare(
+          "INSERT INTO posts (content, author_name, signature, pubkey, parent_id, root_id) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .run(args.content, args.author, args.sig, args.pk, args.parent, args.root);
+      const id = res.lastInsertRowid as number;
+      if (args.root === null) {
+        db.prepare("UPDATE posts SET root_id = id WHERE id = ?").run(id);
+      }
+      return id;
+    }
+  );
+
+  const postId = insertPost({
+    content: content.trim(),
+    author: authorName,
+    sig: typeof signature === "string" ? signature : null,
+    pk: typeof pubkey === "string" ? pubkey : null,
+    parent: parentId,
+    root: rootId,
+  });
 
   // Fire-and-forget: log on-chain, update tx_id if successful
-  const postId = result.lastInsertRowid as number;
   const trimmedContent = content.trim();
   const sigStr = typeof signature === "string" ? signature : null;
   const pkStr = typeof pubkey === "string" ? pubkey : null;
 
-  logPostOnChain({ content: trimmedContent, author: authorName, signature: sigStr, pubkey: pkStr })
+  logPostOnChain({
+    id: postId,
+    content: trimmedContent,
+    author: authorName,
+    signature: sigStr,
+    pubkey: pkStr,
+    parent: parentId,
+  })
     .then((txid) => {
       if (txid) {
         db.prepare("UPDATE posts SET tx_id = ? WHERE id = ?").run(txid, postId);
@@ -212,18 +285,75 @@ const POST_SELECT = `
     ON lp.url_hash = p.preview_hash
 `;
 
+/**
+ * The feed shows THREAD ROOTS ONLY. Replies are read inside a thread.
+ *
+ * ⚠ EVERY FEED READ NEEDS THIS. Miss it on one and replies leak into the feed as
+ * though they were top-level posts — out of context, and duplicated under their
+ * own thread. Worst on `getNewPosts`, which the client polls every 5 seconds, so
+ * one reply would pop into everyone's live feed.
+ *
+ * Cursor pagination is unaffected: Feed.tsx pages on `id < before` / `id > after`,
+ * and filtering rows out cannot break a cursor while the column stays monotonic
+ * and unique — which `id` (INTEGER PRIMARY KEY) is. The windows simply span a
+ * wider id range.
+ */
+const ROOTS_ONLY = "p.parent_id IS NULL";
+
 export async function getPosts(beforeId?: number): Promise<Post[]> {
   if (beforeId !== undefined) {
     return db
-      .prepare(`${POST_SELECT} WHERE p.id < ? ORDER BY p.id DESC LIMIT 100`)
+      .prepare(`${POST_SELECT} WHERE ${ROOTS_ONLY} AND p.id < ? ORDER BY p.id DESC LIMIT 100`)
       .all(beforeId) as Post[];
   }
-  return db.prepare(`${POST_SELECT} ORDER BY p.id DESC LIMIT 100`).all() as Post[];
+  return db
+    .prepare(`${POST_SELECT} WHERE ${ROOTS_ONLY} ORDER BY p.id DESC LIMIT 100`)
+    .all() as Post[];
 }
 
 export async function getNewPosts(sinceId: number): Promise<Post[]> {
   if (!Number.isInteger(sinceId) || sinceId < 0) return [];
-  return db.prepare(`${POST_SELECT} WHERE p.id > ? ORDER BY p.id DESC`).all(sinceId) as Post[];
+  return db
+    .prepare(`${POST_SELECT} WHERE ${ROOTS_ONLY} AND p.id > ? ORDER BY p.id DESC`)
+    .all(sinceId) as Post[];
+}
+
+/**
+ * Every post in a thread, oldest first — the root and its replies at any depth.
+ *
+ * ONE indexed lookup on `root_id`, not a recursive walk, because the migration
+ * denormalises the root onto every row (THREADS.md). This is also the query the
+ * token-allocation path would run per mint, which is why the root is stored
+ * rather than derived.
+ *
+ * Deliberately NOT filtered by `parent_id`: a root carries `root_id = id`, so it
+ * is included and appears first.
+ */
+export async function getThread(rootId: number): Promise<Post[]> {
+  if (!Number.isInteger(rootId) || rootId <= 0) return [];
+  return db
+    .prepare(`${POST_SELECT} WHERE p.root_id = ? ORDER BY p.id ASC LIMIT 500`)
+    .all(rootId) as Post[];
+}
+
+/**
+ * Reply counts for a set of thread roots, so the feed can show "N replies"
+ * without loading any reply bodies.
+ *
+ * `parent_id IS NOT NULL` excludes the root from its own count — a thread with
+ * no replies should read 0, not 1.
+ */
+export async function getReplyCounts(rootIds: number[]): Promise<Record<number, number>> {
+  if (!rootIds.length) return {};
+  const placeholders = rootIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(`
+      SELECT root_id, COUNT(*) as n FROM posts
+      WHERE root_id IN (${placeholders}) AND parent_id IS NOT NULL
+      GROUP BY root_id
+    `)
+    .all(...rootIds) as { root_id: number; n: number }[];
+  return Object.fromEntries(rows.map((r) => [r.root_id, r.n]));
 }
 
 /**
@@ -249,14 +379,16 @@ export async function getOlderPosts(beforeId: number): Promise<Post[]> {
 
 /** Oldest 100 posts, ascending (id 1 first) — the ORIGIN window. */
 export async function getOldestPosts(): Promise<Post[]> {
-  return db.prepare(`${POST_SELECT} ORDER BY p.id ASC LIMIT 100`).all() as Post[];
+  return db
+    .prepare(`${POST_SELECT} WHERE ${ROOTS_ONLY} ORDER BY p.id ASC LIMIT 100`)
+    .all() as Post[];
 }
 
 /** Next 100 posts NEWER than afterId, ascending — ORIGIN mode reads forward. */
 export async function getForwardPosts(afterId: number): Promise<Post[]> {
   if (!Number.isInteger(afterId) || afterId < 0) return [];
   return db
-    .prepare(`${POST_SELECT} WHERE p.id > ? ORDER BY p.id ASC LIMIT 100`)
+    .prepare(`${POST_SELECT} WHERE ${ROOTS_ONLY} AND p.id > ? ORDER BY p.id ASC LIMIT 100`)
     .all(afterId) as Post[];
 }
 
