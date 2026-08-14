@@ -414,30 +414,43 @@ export async function getThreadShare(
  * rather than by two queries that could disagree.
  */
 /**
- * How many tokens each named ticker has issued — its thread's post count.
+ * How many units of each ticker exist — one per post that NAMES it.
  *
- * ⚠ ONE QUERY FOR EVERY TICKER ON SCREEN, not one per ticker. A feed can hold a
- * hundred posts and several of them may name the same token, so a per-mention
- * lookup would turn scrolling into a query storm for a figure rendered in
- * brackets. The feed collects the symbols it is showing and asks once.
+ * ⚠ MENTIONS, NOT THREAD SIZE. An earlier version counted posts in the ticker's
+ * own thread, which produced (100%) on every mention of a single-post token —
+ * including on a post that merely CITES it and is therefore in a different
+ * thread holding none of it. Two posts saying `$branch` both read 100%, which is
+ * both arithmetically impossible and the opposite of what the model says.
  *
- * A ticker nobody has claimed is simply absent from the result — the renderer
- * shows the name with no figure rather than inventing a zero.
+ * Counting mentions is the settled citation model made visible: a post is a
+ * 1-of-1 that becomes a 1-of-2 when quoted, and the QUOTER holds the new unit
+ * (TOKENS.md). Two posts naming `$branch` → two units → 50% each.
+ *
+ * ⚠ DISPLAY ONLY. Nothing is minted here and this must NEVER feed allocation:
+ * mentions are free, and anything free that confers value destroys the anchor.
+ * Real minting stays gated on paid posting. This shows what the supply WOULD be,
+ * from data that already exists.
+ *
+ * ⚠ THE LIKE IS A PREFILTER, NOT THE ANSWER. `%$BRANCH%` also matches `$BRANCHES`
+ * and `x$BRANCH`, so every candidate is re-checked with `distinctTickers` — the
+ * same matcher that decides what gets CLAIMED. A count that disagreed with the
+ * parse rule would attribute one token's supply to another's name.
  */
 export async function getTickerSupply(symbols: string[]): Promise<Record<string, number>> {
   const wanted = [...new Set(symbols.map(canonicalTicker).filter(isValidTicker))].slice(0, 200);
   if (!wanted.length) return {};
-  const placeholders = wanted.map(() => "?").join(",");
-  const rows = db
-    .prepare(
-      `SELECT t.symbol AS symbol, COUNT(p.id) AS tokens
-         FROM tickers t
-         JOIN posts p ON p.root_id = t.root_id
-        WHERE t.symbol IN (${placeholders})
-        GROUP BY t.symbol`
-    )
-    .all(...wanted) as { symbol: string; tokens: number }[];
-  return Object.fromEntries(rows.map((r) => [r.symbol, r.tokens]));
+
+  const out: Record<string, number> = {};
+  const stmt = db.prepare("SELECT content FROM posts WHERE UPPER(content) LIKE ? LIMIT 500");
+  for (const sym of wanted) {
+    const rows = stmt.all(`%$${sym}%`) as { content: string }[];
+    // One unit per POST, not per mention: writing `$branch $branch` in one post
+    // is one contribution, and counting the repetition would let anyone inflate
+    // a figure readers treat as significance just by typing.
+    const n = rows.filter((r) => distinctTickers(r.content).includes(sym)).length;
+    if (n > 0) out[sym] = n;
+  }
+  return out;
 }
 
 export async function getThreadStats(rootId: number): Promise<{ tokens: number; replies: number }> {

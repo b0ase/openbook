@@ -37,7 +37,7 @@ vi.mock("next/headers", () => ({
 
 import { db } from "@/lib/db";
 import { ROOT_TICKER } from "@/lib/ticker";
-import { createPost, getThread, getTickerPath, resolveTickers } from "./actions";
+import { createPost, getThread, getTickerPath, getTickerSupply, resolveTickers } from "./actions";
 
 async function post(content: string, parentId?: number) {
   const key = PrivateKey.fromRandom();
@@ -365,5 +365,44 @@ describe("the root ticker is claimable like any other", () => {
   it("puts a top-level claim under the root, named or not", async () => {
     await post("an ordinary idea, $Zulu");
     expect(await getTickerPath("ZULU")).toEqual([ROOT_TICKER, "ZULU"]);
+  });
+});
+
+describe("token supply is counted from mentions", () => {
+  // The bug this pins: supply used to be "posts in the ticker's own thread", so
+  // TWO posts naming $Branch both rendered (100%) — arithmetically impossible,
+  // and 100% was shown on a post that holds none of it because it sits in a
+  // different thread. Mentions are what the citation model counts.
+
+  it("gives two mentions two units, not one each", async () => {
+    await post("claiming $Branch");
+    await post("citing $Branch back");
+    expect(await getTickerSupply(["BRANCH"])).toEqual({ BRANCH: 2 });
+  });
+
+  it("counts a post once however many times it repeats the name", async () => {
+    // Otherwise anyone can inflate a figure readers treat as significance just
+    // by typing the same word twice.
+    await post("$Branch $Branch $Branch all in one post");
+    expect(await getTickerSupply(["BRANCH"])).toEqual({ BRANCH: 1 });
+  });
+
+  it("does not let $Branch absorb $Branches", async () => {
+    // The SQL prefilter is `%$BRANCH%`, which matches both — every candidate is
+    // re-checked against the real parse rule for exactly this reason.
+    await post("about $Branches only");
+    expect(await getTickerSupply(["BRANCH"])).toEqual({});
+    expect(await getTickerSupply(["BRANCHES"])).toEqual({ BRANCHES: 1 });
+  });
+
+  it("ignores a $ that is not a ticker at all", async () => {
+    await post("it cost $50 and US$20, and foo$Branch is not a mention");
+    expect(await getTickerSupply(["BRANCH"])).toEqual({});
+  });
+
+  it("omits an unmentioned name rather than reporting zero", async () => {
+    // The renderer draws no figure when a symbol is absent; a 0% would read as
+    // "worthless" instead of "not a token yet".
+    expect(await getTickerSupply(["NOBODYSAIDTHIS"])).toEqual({});
   });
 });
