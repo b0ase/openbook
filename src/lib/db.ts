@@ -115,6 +115,34 @@ export function applyThreadingMigration(database: Db): void {
  * `root_id` rather than `post_id` is what a reader wants: the ticker names a
  * THREAD, and the claiming post is just where it was first said.
  */
+/**
+ * `nyms` — which ticker an identity has adopted as its public name.
+ *
+ * ⚠ A NYM IS AN ORDINARY TICKER CLAIM, and this table only records WHICH of an
+ * identity's claims is the one it goes by. Keeping it separate is what stops a
+ * nym from being a privileged kind of name: `$Harry` is claimed by posting, obeys
+ * first-claim-wins through the same PRIMARY KEY as every other symbol, and can be
+ * cited and minted into like any other. If nyms lived in their own namespace they
+ * would need their own uniqueness rule, their own squatting story, and their own
+ * parse rule — three more things to keep in step with `ticker.ts`.
+ *
+ * `pubkey` is the primary key: one identity, one public name at a time, and
+ * adopting a different one is an UPDATE rather than an accumulation. `symbol` is
+ * UNIQUE so two identities cannot both go by `$Harry` — which the tickers table
+ * already prevents at claim time, but this makes it true of the display name
+ * independently, since a symbol can change hands later.
+ */
+export function applyNymMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS nyms (
+      pubkey     TEXT PRIMARY KEY,
+      symbol     TEXT NOT NULL UNIQUE,
+      claimed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  database.exec("CREATE INDEX IF NOT EXISTS idx_nyms_symbol ON nyms(symbol)");
+}
+
 export function applyTickerMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS tickers (
@@ -334,6 +362,7 @@ try {
 
   // Ticker registry — first claim wins.
   applyTickerMigration(db);
+  applyNymMigration(db);
 
   // Boot grants — free boot tracking per user (no custody)
   db.exec(`

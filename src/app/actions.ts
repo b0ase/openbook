@@ -436,6 +436,102 @@ export async function getThreadShare(
  * same matcher that decides what gets CLAIMED. A count that disagreed with the
  * parse rule would attribute one token's supply to another's name.
  */
+export type NymResult =
+  | { ok: true; symbol: string }
+  | { ok: false; reason: "invalid" | "taken" | "post_failed" };
+
+/**
+ * Adopt a `$Nym` — a public name for an identity.
+ *
+ * ⚠ CLAIMING A NYM POSTS IT, and that is the whole design. A ticker's row carries
+ * `post_id`/`root_id` NOT NULL because a ticker names a THREAD; letting a nym be
+ * registered from a settings screen would mean either relaxing that invariant or
+ * inventing a second kind of ticker that has no content behind it. Posting the
+ * claim keeps one rule: **every name on this board was claimed by somebody
+ * writing something.** It also means a nym's thread IS that person's profile —
+ * the place their name points at — for free, with no new concept.
+ *
+ * It follows that a nym obeys first-claim-wins through the same PRIMARY KEY as
+ * every other symbol, is anchored on-chain like every other post, and can be
+ * cited and minted into by anyone. A name you go by is not a privileged object.
+ *
+ * The post is signed by the caller exactly as any post is — this delegates to
+ * `createPost`, so the signature check, the content screen, the rate limits and
+ * the on-chain anchoring are the ones already in place rather than a second copy.
+ */
+export async function claimNym(formData: FormData): Promise<NymResult> {
+  const raw = formData.get("symbol");
+  if (typeof raw !== "string") return { ok: false, reason: "invalid" };
+  const symbol = canonicalTicker(raw.trim().replace(/^\$+/, ""));
+  if (!isValidTicker(symbol)) return { ok: false, reason: "invalid" };
+
+  const pubkey = formData.get("pubkey");
+  if (typeof pubkey !== "string" || !pubkey) return { ok: false, reason: "invalid" };
+
+  // Cheap pre-check so the common failure costs nothing. It is NOT the guard —
+  // two people can pass this at once. The PRIMARY KEY below is what decides.
+  const existing = db.prepare("SELECT symbol FROM tickers WHERE symbol = ?").get(symbol);
+  if (existing) return { ok: false, reason: "taken" };
+
+  // The claim goes through the ordinary post path, so the content the user signed
+  // must be exactly what gets posted. The caller signs this same string.
+  const result = await createPost(formData);
+  if (!result.ok) return { ok: false, reason: "post_failed" };
+
+  // The post may not have won the name — another claim can land in between, and
+  // `registerTickers` uses INSERT OR IGNORE. Read back who actually holds it.
+  const owner = db.prepare("SELECT pubkey FROM tickers WHERE symbol = ?").get(symbol) as
+    | { pubkey: string | null }
+    | undefined;
+  if (!owner || owner.pubkey !== pubkey) return { ok: false, reason: "taken" };
+
+  // One identity, one public name: adopting a new one replaces the old rather
+  // than accumulating. The old ticker is still owned — only the display changes.
+  //
+  // ⚠ BOTH CONSTRAINTS HAVE TO BE HANDLED, not just the pubkey one. `nyms` is
+  // unique on symbol as well, and an upsert keyed on pubkey alone throws a raw
+  // SQLite error the moment that symbol is already recorded against SOMEBODY
+  // ELSE — which is reachable, because a ticker can change hands while the old
+  // holder's nym row still points at it. A test hit exactly that. The caller's
+  // ownership of the ticker was verified above, so clearing a stale row for the
+  // symbol is the correct resolution rather than a failure; doing both in one
+  // transaction stops a crash in between leaving an identity with no name at all.
+  db.transaction(() => {
+    db.prepare("DELETE FROM nyms WHERE symbol = ? AND pubkey <> ?").run(symbol, pubkey);
+    db.prepare(
+      `INSERT INTO nyms (pubkey, symbol) VALUES (?, ?)
+         ON CONFLICT(pubkey) DO UPDATE SET symbol = excluded.symbol`
+    ).run(pubkey, symbol);
+  })();
+
+  return { ok: true, symbol };
+}
+
+/** The public name an identity goes by, or null if it is still anonymous. */
+export async function getNym(pubkey: string): Promise<string | null> {
+  if (!pubkey) return null;
+  const row = db.prepare("SELECT symbol FROM nyms WHERE pubkey = ?").get(pubkey) as
+    | { symbol: string }
+    | undefined;
+  return row?.symbol ?? null;
+}
+
+/**
+ * Public names for many identities at once — for rendering a feed.
+ *
+ * One query for every author on screen, for the same reason `getTickerSupply`
+ * takes a list: a lookup per post would turn scrolling into a query storm.
+ */
+export async function getNyms(pubkeys: string[]): Promise<Record<string, string>> {
+  const wanted = [...new Set(pubkeys.filter(Boolean))].slice(0, 200);
+  if (!wanted.length) return {};
+  const placeholders = wanted.map(() => "?").join(",");
+  const rows = db
+    .prepare(`SELECT pubkey, symbol FROM nyms WHERE pubkey IN (${placeholders})`)
+    .all(...wanted) as { pubkey: string; symbol: string }[];
+  return Object.fromEntries(rows.map((r) => [r.pubkey, r.symbol]));
+}
+
 export interface TickerHit {
   symbol: string;
   /** Ancestry, root-first — the same path the thread header renders. */

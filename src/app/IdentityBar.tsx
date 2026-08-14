@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatedBalance } from "@/components/AnimatedBalance";
 import { ChangePassphraseModal } from "@/components/ChangePassphraseModal";
+import { NymModal } from "@/components/NymModal";
 import { EarningsSparkline } from "@/components/EarningsSparkline";
 import { FirstEarningToast } from "@/components/FirstEarningToast";
 import { InstallPitch } from "@/components/InstallPitch";
@@ -23,7 +24,7 @@ import {
 } from "@/services/bsv/backup-template";
 import { encryptWif } from "@/services/bsv/crypto";
 import { getStoredAnonName, isEffectivelyProtected, unlockIdentity } from "@/services/bsv/identity";
-import { getHoldings, type Holding } from "./actions";
+import { getHoldings, getNym, type Holding } from "./actions";
 import { FundAddress } from "./FundAddress";
 
 const BACKED_UP_KEY = "opencook_identity_backed_up";
@@ -133,6 +134,9 @@ export function IdentityChip(): React.JSX.Element | null {
 
   // Threads this identity holds a share of. See `getHoldings` — this is the
   // contribution record, not a minted balance.
+  /** The public name this identity goes by, or null while still anonymous. */
+  const [nym, setNym] = useState<string | null>(null);
+  const [showNymModal, setShowNymModal] = useState(false);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [holdingsExpanded, setHoldingsExpanded] = useState(false);
 
@@ -267,6 +271,19 @@ export function IdentityChip(): React.JSX.Element | null {
   // somebody posts, which is far slower than the 30s earnings cadence, and this
   // is a DB aggregate rather than a cached summary — polling it would be the
   // most expensive query in the panel refreshing to show the same numbers.
+  useEffect(() => {
+    if (!identity?.pubkey) return;
+    let live = true;
+    void getNym(identity.pubkey)
+      .then((n: string | null) => {
+        if (live) setNym(n);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [identity?.pubkey]);
+
   useEffect(() => {
     if (!open || !identity?.pubkey) return;
     let live = true;
@@ -605,6 +622,15 @@ export function IdentityChip(): React.JSX.Element | null {
           }}
         />
       )}
+      {/* Mounted beside the other identity modals so it sits above the You panel
+          rather than inside it — the panel closes on tab blur, and a claim in
+          flight must not be torn down with it. */}
+      <NymModal
+        open={showNymModal}
+        onClose={() => setShowNymModal(false)}
+        current={nym}
+        onClaimed={(symbol) => setNym(symbol)}
+      />
       {showChangePassModal && identity && (
         <ChangePassphraseModal
           isOpen={showChangePassModal}
@@ -1583,6 +1609,37 @@ export function IdentityChip(): React.JSX.Element | null {
                   })}
                 </div>
               )}
+            </div>
+
+            {/* ── Your name ──
+                Placed ABOVE Tokens deliberately: it is the thing a new arrival
+                looks for first, and the owner asked for it to be obvious rather
+                than buried in settings. Claiming POSTS it — see NymModal. */}
+            <div className="px-3 py-2.5 border-b border-amber-400/10">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">
+                  Your name
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowNymModal(true)}
+                  className="relative -my-2 py-2 text-[11px] text-zinc-100 font-medium underline underline-offset-2 decoration-zinc-600 hover:decoration-amber-400/60 transition-colors"
+                >
+                  {nym ? "Change" : "Choose one"}
+                </button>
+              </div>
+              <p className="mt-1 text-[13px]">
+                {nym ? (
+                  <span className="text-amber-400 font-medium">${titleCaseTicker(nym)}</span>
+                ) : (
+                  <span className="text-zinc-500">
+                    {identity?.name ?? "anon"}{" "}
+                    <span className="text-zinc-600">
+                      &mdash; pick a name people can find you by
+                    </span>
+                  </span>
+                )}
+              </p>
             </div>
 
             {/* ── Tokens ──

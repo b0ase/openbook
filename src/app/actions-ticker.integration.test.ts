@@ -38,9 +38,12 @@ vi.mock("next/headers", () => ({
 import { db } from "@/lib/db";
 import { ROOT_TICKER } from "@/lib/ticker";
 import {
+  claimNym,
   createPost,
   getThread,
   getTickerPath,
+  getNym,
+  getNyms,
   getTickerSupply,
   listTickers,
   resolveTickers,
@@ -64,6 +67,7 @@ async function post(content: string, parentId?: number) {
 const lastId = () => (db.prepare("SELECT MAX(id) as id FROM posts").get() as { id: number }).id;
 
 beforeEach(() => {
+  db.exec("DELETE FROM nyms");
   db.exec("DELETE FROM tickers");
   db.exec("DELETE FROM payouts");
   db.exec("DELETE FROM bootboard");
@@ -481,5 +485,85 @@ describe("the index — searchTickers / listTickers", () => {
     const all = await listTickers();
     expect(all[0]?.symbol).toBe("LOUD");
     expect(all.map((t) => t.symbol)).toContain("QUIET");
+  });
+});
+
+describe("$Nym — a public name is an ordinary ticker claim", () => {
+  // The design point these pin: a nym is NOT a privileged kind of name. It is
+  // claimed by POSTING, obeys first-claim-wins through the same PRIMARY KEY as
+  // every other symbol, and the `nyms` table only records which of an identity's
+  // claims is the one it goes by.
+
+  async function claim(symbol: string, name = "anon_nym1") {
+    const key = PrivateKey.fromRandom();
+    const content = `I'm $${symbol}`;
+    const fd = new FormData();
+    fd.set("symbol", symbol);
+    fd.set("content", content);
+    fd.set("author", name);
+    fd.set("pubkey", key.toPublicKey().toString());
+    fd.set(
+      "signature",
+      key.sign(Array.from(new TextEncoder().encode(content))).toDER("hex") as string
+    );
+    return { res: await claimNym(fd), pubkey: key.toPublicKey().toString() };
+  }
+
+  it("claims the name and records it as the identity's nym", async () => {
+    const { res, pubkey } = await claim("Harry");
+    expect(res).toEqual({ ok: true, symbol: "HARRY" });
+    expect(await getNym(pubkey)).toBe("HARRY");
+    // ...and it is a real ticker, resolvable like any other.
+    expect(await resolveTickers(["HARRY"])).toMatchObject({ HARRY: expect.anything() });
+  });
+
+  it("refuses a name somebody already holds", async () => {
+    await claim("Harry");
+    const second = await claim("Harry", "anon_nym2");
+    expect(second.res).toEqual({ ok: false, reason: "taken" });
+    expect(await getNym(second.pubkey)).toBeNull();
+  });
+
+  it("refuses names the ticker rule refuses, so there is one parse rule", async () => {
+    for (const bad of ["", "  ", "1abc", "$", "waytoolongtobeanameatall"]) {
+      const fd = new FormData();
+      fd.set("symbol", bad);
+      expect(await claimNym(fd)).toEqual({ ok: false, reason: "invalid" });
+    }
+  });
+
+  it("replaces the old name rather than accumulating", async () => {
+    const key = PrivateKey.fromRandom();
+    const pubkey = key.toPublicKey().toString();
+    async function adopt(symbol: string) {
+      const content = `I'm $${symbol}`;
+      const fd = new FormData();
+      fd.set("symbol", symbol);
+      fd.set("content", content);
+      fd.set("author", "anon_nym3");
+      fd.set("pubkey", pubkey);
+      fd.set(
+        "signature",
+        key.sign(Array.from(new TextEncoder().encode(content))).toDER("hex") as string
+      );
+      return claimNym(fd);
+    }
+    expect(await adopt("First")).toEqual({ ok: true, symbol: "FIRST" });
+    expect(await adopt("Second")).toEqual({ ok: true, symbol: "SECOND" });
+    // One identity, one public name — and the first name is still THEIR ticker.
+    expect(await getNym(pubkey)).toBe("SECOND");
+    expect(db.prepare("SELECT COUNT(*) n FROM nyms WHERE pubkey = ?").get(pubkey)).toEqual({
+      n: 1,
+    });
+    expect(await resolveTickers(["FIRST"])).toMatchObject({ FIRST: expect.anything() });
+  });
+
+  it("looks up many names at once for a feed", async () => {
+    const a = await claim("Alpha", "anon_nyma");
+    const b = await claim("Beta", "anon_nymb");
+    const map = await getNyms([a.pubkey, b.pubkey, "02notanybody"]);
+    expect(map[a.pubkey]).toBe("ALPHA");
+    expect(map[b.pubkey]).toBe("BETA");
+    expect(Object.keys(map)).toHaveLength(2);
   });
 });
