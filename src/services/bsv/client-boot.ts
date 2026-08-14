@@ -54,7 +54,7 @@ interface WocUtxo {
 
 /** Extended UTXO with optional sourceTransaction for 0-conf chaining.
  * Pending change entries leave `height` undefined since they're not yet indexed. */
-interface ClientUtxo extends Omit<WocUtxo, "height"> {
+export interface ClientUtxo extends Omit<WocUtxo, "height"> {
   height?: number;
   sourceTransaction?: import("@bsv/sdk").Transaction;
 }
@@ -63,7 +63,7 @@ interface ClientUtxo extends Omit<WocUtxo, "height"> {
 
 let _bsvSdkPromise: Promise<typeof import("@bsv/sdk")> | null = null;
 
-function getBsvSdk(): Promise<typeof import("@bsv/sdk")> {
+export function getBsvSdk(): Promise<typeof import("@bsv/sdk")> {
   if (!_bsvSdkPromise) {
     _bsvSdkPromise = import("@bsv/sdk");
   }
@@ -76,7 +76,7 @@ function getBsvSdk(): Promise<typeof import("@bsv/sdk")> {
 
 let _txMutexChain: Promise<void> = Promise.resolve();
 
-function acquireTxMutex(): Promise<() => void> {
+export function acquireTxMutex(): Promise<() => void> {
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -117,13 +117,13 @@ const _spent = loadSpentSet();
 /** Change outputs from recent broadcasts, immediately spendable */
 const _pendingChange: ClientUtxo[] = [];
 
-function utxoKey(txHash: string, txPos: number): string {
+export function utxoKey(txHash: string, txPos: number): string {
   return `${txHash}:${txPos}`;
 }
 
 // ── WhatsOnChain helpers ────────────────────────────────────
 
-async function fetchUtxos(address: string, neededSats?: number): Promise<ClientUtxo[]> {
+export async function fetchUtxos(address: string, neededSats?: number): Promise<ClientUtxo[]> {
   // If pending change covers our needs, skip the WoC fetch entirely
   if (neededSats !== undefined && _pendingChange.length > 0) {
     const pendingTotal = _pendingChange.reduce((sum, u) => sum + u.value, 0);
@@ -172,7 +172,7 @@ async function fetchUtxos(address: string, neededSats?: number): Promise<ClientU
   return all;
 }
 
-async function fetchSourceTxHex(txHash: string): Promise<string> {
+export async function fetchSourceTxHex(txHash: string): Promise<string> {
   // Proxy through our server to avoid CORS on WoC /tx/hex endpoint
   const res = await fetch(`/api/tx-hex?txid=${txHash}`);
   if (!res.ok) {
@@ -290,6 +290,52 @@ function selectUtxos(
   }
 
   return null; // Insufficient funds
+}
+
+/**
+ * Post-broadcast UTXO bookkeeping, shared with the paid-post path.
+ *
+ * ⚠ THE WALLET STATE BELOW IS MODULE-LEVEL AND MUST STAY THAT WAY. Posts and
+ * boosts spend the SAME UTXO set, so a second module with its own `_spent` /
+ * `_pendingChange` / mutex would let the two paths hand out the same UTXO twice
+ * — a double-spend, not a race we could tune away. ES modules are singletons, so
+ * importing from here is what keeps one view of the wallet.
+ *
+ * ⚠ `clientSideBoot` still does this inline, and the two copies must stay in
+ * step. Switching boot over is deliberately NOT done here: this file has no test
+ * coverage, and rewriting an audited money path blind is worse than the
+ * duplication. See ROADMAP "Refactor clientSideBoot".
+ */
+export function recordBroadcast(args: {
+  spent: ClientUtxo[];
+  txid: string;
+  changeIndex: number | null;
+  changeSats: number | null;
+  tx: unknown;
+}): void {
+  const spentKeys = new Set(args.spent.map((u) => utxoKey(u.tx_hash, u.tx_pos)));
+  for (const sk of spentKeys) _spent.add(sk);
+
+  for (let i = _pendingChange.length - 1; i >= 0; i--) {
+    const key = utxoKey(_pendingChange[i].tx_hash, _pendingChange[i].tx_pos);
+    if (spentKeys.has(key)) _pendingChange.splice(i, 1);
+  }
+
+  if (args.changeIndex !== null && args.changeSats && args.changeSats > 0) {
+    _pendingChange.push({
+      tx_hash: args.txid,
+      tx_pos: args.changeIndex,
+      value: args.changeSats,
+      sourceTransaction: args.tx as ClientUtxo["sourceTransaction"],
+    });
+    while (_pendingChange.length > 50) _pendingChange.shift();
+    while (_spent.size > 500) {
+      const first = _spent.values().next().value;
+      if (first) _spent.delete(first);
+    }
+  }
+
+  saveSpentSet(_spent);
 }
 
 // ── Main entry point ────────────────────────────────────────
