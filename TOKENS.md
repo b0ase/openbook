@@ -918,6 +918,88 @@ buying a post can buy a namespace), or names are pinned to the claiming PUBKEY a
 **Not built.** Inscription, minting and paid posting remain one milestone (see above), and nothing
 mints before posting costs money.
 
+## "Objects, not contracts" — where the argument holds and where it doesn't (2026-08-14)
+
+Owner's position, recorded because it is theirs to make: a post is an **object** — a lighter,
+cheaper NFT. Posts can generate real excitement and real money. Selling one therefore does sell
+potential future revenue, and that is accepted. Their argument for why it is not a security:
+*"a security is selling a contract, a breakable one — that's why it's regulated. Here we're
+selling objects, not contracts, and users should NOT be able to break that contract, removing the
+need for regulation."*
+
+**The unbreakability point has real force.** A large part of why these instruments are regulated
+is COUNTERPARTY risk: the issuer can fail to perform, misreport, dilute, or simply disappear. If
+performance is enforced by script rather than by promise, that entire category of risk is gone.
+This is the strongest form of "the code is the contract" and it is not hand-waving.
+
+**But object-vs-contract is not the test that gets applied.** The US test (Howey) asks whether
+there is money invested in a common enterprise with an expectation of profit **derived from the
+efforts of others**, and it looks at economic reality rather than form — which is precisely why
+"it's an object, not a contract" has not historically been a defence for tokenised things.
+
+**So the better version of the owner's own argument is the "efforts of others" prong, not the
+object framing.** If the payout is a mechanical split that nobody manages, curates or can
+withhold, that prong genuinely weakens. The weakest point runs the other way: a buyer would
+plausibly be buying a post *expecting future boost revenue*, and this platform builds and
+maintains the machinery that produces it.
+
+### ⚠ THE DECISIVE GAP IS TECHNICAL, NOT LEGAL — and we do not have it yet
+
+**The argument only holds if the payout is enforced BY SCRIPT. Today it is not.**
+`services/fairness/weights.ts` computes the split on our server, `split.ts` shapes it, and
+`boot-orchestrator.ts` has our server build and broadcast the transaction. **That is breakable —
+by us.** We could change the weights, stop running the sweep, or simply not pay. Every property
+the "no regulation needed" argument leans on is currently a promise we are making, not a rule the
+chain is enforcing.
+
+To make *"users should NOT be able to break that contract"* actually true, the split has to move
+into a **covenant** — the construction this document already describes for supply. Until then,
+the honest description is: an object with a payout that this operator administers.
+
+**Recommendation: the design can proceed on this basis, but get a real opinion before the MARKET
+ships** — not before the tokens exist, before they become tradable for money. `legal/*.md` already
+carries `[LAWYER]` markers for exactly this class of question. Nothing in this file is legal
+advice and it should not be relied on as any.
+
+## Bitcoin Schema — adopt the PROTOCOLS, ration the SCHEMAS (reviewed 2026-08-14)
+
+Owner: *"seems like we should also implement all of these."* Recommendation is to split that in
+two, because one half is nearly free and the other half is a pile of product decisions.
+
+**Adopt the protocols for what we ALREADY emit — this is the high-value half.** We are already
+doing Post, Reply, Attachments and Payment; we just express them in a bespoke envelope
+(`lib/onchain-record.ts`, `{v, app, type, …}`). Nothing about our behaviour changes if those are
+expressed as **MAP** attributes with **AIP** signatures and **B** for content — but our board
+becomes readable by every other Bitcoin Schema application, for free, without shipping a single
+new feature. **Interoperability is the point of the fork's whole argument: a contribution record
+nobody else can read is a record only we can verify.**
+
+Two caveats before anyone starts:
+
+- **Old records stay as they are.** OP_RETURNs are immutable, so any reader has to handle both the
+  bespoke envelope (2,000+ existing records) and the standard one. `onchain-record.ts` already
+  documents that contract; bump `v` when the shape changes.
+- **`ONCHAIN_APP` is still `opencook`.** There is a documented partial-sweep hazard around
+  renaming it. Settle that before or with any format change, not after.
+
+**Ration the social schemas — they are features, not formats:**
+
+- **Tags** — the one genuinely worth building. It is the only way to name an EXISTING post (see
+  the Bitcoin Schema section above), and it separates *who wrote this* from *who named it*.
+- **Repost** — a compatible on-chain shape for the citation model already settled. Same gate:
+  not before paid posting.
+- **Like** — ⚠ **be careful.** It is a second approval signal that costs nothing, competing with
+  a boost whose entire point is that attention costs something. Display-only and visibly lesser,
+  or not at all.
+- **Follow / Friend** — a follow graph turns a board into a feed-of-people. That is a different
+  product with different dynamics, and it should be a deliberate decision rather than a schema we
+  adopted because it was on a list.
+- **Function / Function Call / Registry Item** — out of scope. These are for distributing software
+  as inscriptions; nothing here needs them.
+
+**Sequence: protocols first (no new features, immediate interoperability), then Tags, then
+Repost with the mint. Like and Follow are product decisions to take on their merits.**
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,
