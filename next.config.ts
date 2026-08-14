@@ -87,6 +87,16 @@ const nextConfig: NextConfig = {
               "media-src 'self' https: blob:",
               "connect-src 'self' https://api.whatsonchain.com https://arc.taal.com https://arc.gorillapool.io",
               "font-src 'self'",
+              // ⚠ AN ALLOWLIST, NOT `https:` LIKE img-src AND media-src ABOVE.
+              // Those two accept any host because posted media lives wherever
+              // the poster put it, and the trade is safe because an image or a
+              // video CANNOT EXECUTE SCRIPT. A frame can. So framing is limited
+              // to the finite set of hosts we actually embed, and adding one is
+              // a deliberate decision rather than a consequence of somebody
+              // pasting a link. Without any frame-src the directive falls back
+              // to `default-src 'self'` and every embed is silently blocked —
+              // which is what happened before this line existed.
+              "frame-src https://www.youtube-nocookie.com https://www.youtube.com",
               "frame-ancestors 'none'",
             ].join("; "),
           },

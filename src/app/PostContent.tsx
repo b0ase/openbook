@@ -1,11 +1,12 @@
 "use client";
 
 import { LinkPreviewCard } from "@/components/LinkPreviewCard";
-import { MediaEmbed } from "@/components/MediaEmbed";
+import { MediaEmbed, YouTubeEmbed } from "@/components/MediaEmbed";
 import { findUrls } from "@/lib/linkify";
 import { firstMedia } from "@/lib/media";
 import { titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
+import { firstYouTube } from "@/lib/youtube";
 import type { Post } from "@/types";
 import { PostText } from "./PostText";
 
@@ -33,13 +34,19 @@ export function PostContent({
   /** Tokens issued per ticker — see PostText. */
   tickerSupply?: Record<string, number>;
 }) {
-  const media = firstMedia(findUrls(post.content).map((u) => u.url));
+  const urls = findUrls(post.content).map((u) => u.url);
+  const media = firstMedia(urls);
+  // A YouTube link has no file extension, so it is invisible to `firstMedia`
+  // and used to fall through to the unfurl card — a thumbnail of a video you
+  // then had to leave the board to watch.
+  const youtube = media ? null : firstYouTube(urls);
   // ⚠ When the post is NOTHING BUT the media link, the URL is not content — it
   // is plumbing, and printing a 100-character hash above the player is the
   // reason an uploaded video reads as "not surfaced". The text is suppressed
   // only in that exact case: any caption around the link is still the author's
   // writing and must survive.
-  const isBareMedia = media !== null && post.content.trim() === media.url;
+  const embedded = media?.url ?? youtube?.url ?? null;
+  const isBareMedia = embedded !== null && post.content.trim() === embedded;
 
   return (
     <>
@@ -101,7 +108,13 @@ export function PostContent({
       {/* A direct media link is SHOWN; anything else falls through to the unfurl
           card. Both never render for the same post — a media file is not HTML, so
           the unfurl records `not_html` and the card declines to draw. */}
-      {media ? <MediaEmbed url={media.url} kind={media.kind} /> : <LinkPreviewCard post={post} />}
+      {media ? (
+        <MediaEmbed url={media.url} kind={media.kind} />
+      ) : youtube ? (
+        <YouTubeEmbed id={youtube.id} />
+      ) : (
+        <LinkPreviewCard post={post} />
+      )}
     </>
   );
 }

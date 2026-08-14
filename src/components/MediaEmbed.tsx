@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { isSelfHostedMedia, type MediaKind } from "@/lib/media";
+import { youTubeEmbedUrl } from "@/lib/youtube";
 
 /**
  * Inline player for a post that links directly at an image, video or audio file.
@@ -19,6 +20,35 @@ import { isSelfHostedMedia, type MediaKind } from "@/lib/media";
  * No autoplay, ever. Media that plays itself in a feed is hostile, and on mobile
  * it is also a data charge the reader did not agree to.
  */
+/**
+ * A YouTube video, played in place.
+ *
+ * ⚠ `loading="lazy"` is doing the same job `preload="none"` does for a raw
+ * video file: a feed can hold a hundred posts, and framing every one of them on
+ * render would fire a hundred requests at YouTube before the reader had scrolled
+ * to any of them.
+ *
+ * The framed host is `youtube-nocookie.com` (see `youTubeEmbedUrl`) and the
+ * sandbox is the narrowest set that still lets a video play — notably WITHOUT
+ * `allow-top-navigation`, so a framed page cannot redirect the reader away from
+ * the board.
+ */
+export function YouTubeEmbed({ id }: { id: string }) {
+  return (
+    <div className="mt-2 aspect-video w-full overflow-hidden rounded-lg border border-zinc-800 bg-black">
+      <iframe
+        src={youTubeEmbedUrl(id)}
+        title="YouTube video"
+        loading="lazy"
+        allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+        sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+        referrerPolicy="strict-origin-when-cross-origin"
+        className="h-full w-full border-0"
+      />
+    </div>
+  );
+}
+
 export function MediaEmbed({ url, kind }: { url: string; kind: MediaKind }) {
   const [failed, setFailed] = useState(false);
   // Our own uploads may fetch a first frame — see `isSelfHostedMedia`. A
