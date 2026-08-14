@@ -132,8 +132,12 @@ export async function unfurl(rawUrl: string): Promise<UnfurlResult> {
           redirect: "manual",
           signal: controller.signal,
           headers: {
-            // Identify honestly, and ask for HTML.
-            "User-Agent": "OpenBookBot/1.0 (+https://openbook-jet.vercel.app)",
+            // Identify honestly, and ask for HTML. The URL is the point of the
+            // `+` convention — an operator who sees this bot in their logs must
+            // be able to reach a page explaining it, so it has to name the site
+            // the bot actually runs from. It named a Vercel preview URL that no
+            // longer serves anything.
+            "User-Agent": "OpenBookBot/1.0 (+https://openbooks.space)",
             Accept: "text/html,application/xhtml+xml",
           },
         });

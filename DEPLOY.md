@@ -96,48 +96,72 @@ can capture a torn state.
 
 ---
 
-## The Vercel project is a redirect, nothing more
+## The DNS cutover, and what it cost to get wrong (done 2026-08-14)
 
-`vercel.json` catches every path and forwards it to the Railway origin. The Next.js app still
-builds there (the build succeeds — only *runtime* DB access fails), but no request ever
-reaches a function, because Vercel applies redirects at the edge.
+`openbooks.space` and `www.openbooks.space` are served **directly by Railway**. Vercel is out of
+the request path entirely; `vercel.json` and its redirect layer have been deleted, because they
+existed only to forward the domain while it still resolved to Vercel.
 
-**Why a redirect and not a proxy.** A Vercel `rewrite` would keep the `*.vercel.app` URL in
-the address bar, which looks nicer and is the wrong trade. Every per-IP cap in this app — the
-200/day post cap, the free-boot cap, the agent rate limit — keys on `x-forwarded-for`. Put a
-second proxy in front and the app stops seeing real client IPs, so the caps stop separating
-users. Those caps are what stand between the server wallet and a drain, so a rewrite is a
-security regression dressed as a cosmetic improvement. See CLAUDE.md "Deployment Notes".
+The domain's **nameservers are still Vercel's** (`ns1/ns2.vercel-dns.com`), which is fine and
+unrelated: Vercel DNS is happy to serve records pointing anywhere. Records live there, traffic
+does not.
 
-**Two rules, and they must stay two.** The bare root needs its own entry: `/:path*` is
-zero-or-more so it reads as though it covers `/`, and it does not — the symptom is deep links
-forwarding correctly while the homepage keeps serving a stale ISR page from the edge.
+| name | type | value |
+|---|---|---|
+| `@` | ALIAS | `a441ru4w.up.railway.app` |
+| `_railway-verify` | TXT | `railway-verify=…` |
+| `www` | CNAME | `6tio00gy.up.railway.app` |
+| `_railway-verify.www` | TXT | `railway-verify=…` |
 
-**No comments inside a redirect object.** `vercel.json` is schema-validated *before* the
-build is provisioned, and a redirect accepts only `source`, `destination`, `permanent`,
-`statusCode`, `has`, `missing`. A `"//"` comment key — which is harmless in `package.json` —
-fails the whole deployment with **no build logs at all**, because it never reaches the build
-step. If a Vercel deploy shows `ERROR` with an empty log, suspect the config, not the code.
+**⚠ THE VERIFICATION TXT GOES AT `_railway-verify`, NOT AT THE APEX.** This cost hours. Railway's
+dashboard shows the TXT *value* in a panel whose "Name" column is ambiguous, and it reads as
+though the record belongs at the root. It does not. With the TXT at `@` the domain sits at
+*"Waiting for DNS update"* indefinitely while `dig` shows a TXT that looks perfect — the record
+exists, the value is byte-correct, and it is simply at the wrong name. Symptoms: Railway's edge
+answers, serves its `*.up.railway.app` **wildcard certificate** (so browsers show
+`ERR_CERT_COMMON_NAME_INVALID`) and returns **404**, because the edge routes by Host header and
+does not recognise a hostname it never verified.
 
-⚠ **NEVER point a redirect at a host that Vercel itself serves.** An attempt to forward the
-`*.vercel.app` URL to `openbooks.space` took the site down with a 307 loop: `openbooks.space`
-is served BY Vercel, so it matched the rule and was redirected to itself. Host conditions were
-supposed to prevent that, but `/:path*` does not match the bare root (see below), so `/` fell
-through to the unconditional rule. Every destination here must be the Railway origin until DNS
-moves — at which point Vercel stops seeing this domain at all and the question disappears.
+**Get the records from the CLI, not the dashboard.** `railway domain <host>` prints the exact
+type/name/value triples with no ambiguity, and `railway domain status <id>` prints them again for
+an existing domain. One command would have replaced every theory below.
 
-**The domain lives on the WRONG SIDE right now.** `openbooks.space` uses Vercel's nameservers
-and is served by Vercel, so it hits these redirects and bounces to the Railway URL. No Vercel
-config can fix that — Vercel cannot run this app at all (see above). **The fix is DNS:** add
-`openbooks.space` as a custom domain in Railway, then point the record at Railway's CNAME
-target from Vercel's DNS panel (Vercel's nameservers are perfectly happy to serve a record
-aimed elsewhere). Once traffic goes straight to Railway, the domain serves the app directly —
-no redirect, real client IPs, and the OG card comes from the app itself.
+**Things that are NOT the cause, ruled out with evidence — do not re-investigate:**
 
-Until then the first two rules keep `openbooks.space` working by forwarding it, and the last
-two send the old `*.vercel.app` URL to `openbooks.space` so the throwaway link points at the
-permanent home. After the DNS move Vercel never sees `openbooks.space` traffic and those first
-rules simply stop applying.
+- **CAA.** Vercel's default set already includes `letsencrypt.org`, which is what Railway issues
+  through. Adding another CAA record does nothing; adding a *restrictive* one would actively
+  block issuance.
+- **Apex vs CNAME.** A bare `CNAME` at an apex is illegal, so Vercel serves an `ALIAS` flattened
+  to an `A` record. This was my leading theory — that Railway's verifier could not find a literal
+  CNAME — and it is **wrong**. The apex verified within a minute once the TXT was moved. Both
+  hosts now work; apex-on-Railway is not a limitation.
+- **HSTS.** `Strict-Transport-Security` with `includeSubDomains; preload` means a browser will
+  NOT let you click through the certificate warning while this is broken. That is correct
+  behaviour and not a symptom of anything — it only means you cannot test by ignoring the error.
+
+**⚠ SET `SITE_ORIGIN` TO THE CANONICAL HOST.** Without it the app falls back to
+`RAILWAY_PUBLIC_DOMAIN`, so social cards *and upload URLs* carry the `*.up.railway.app` hostname.
+An upload URL is written into post text and anchored on-chain verbatim, so that one cannot be
+corrected afterwards. Set it in the **dashboard** — `railway variables --set` prints the entire
+variable table, including `BSV_SERVER_WIF`.
+
+### The redirect layer that used to live here
+
+Kept only as a warning, since the config is gone. While the domain pointed at Vercel, a
+`vercel.json` forwarded every path to the Railway origin. Two traps it taught:
+
+- **`/:path*` does not match the bare root.** It reads as zero-or-more and is not. The symptom is
+  deep links forwarding correctly while the homepage serves a stale edge page. An explicit `/`
+  rule was always required.
+- **Never point a redirect at a host the same platform serves.** Forwarding the `*.vercel.app`
+  URL to `openbooks.space` — then served BY Vercel — matched its own rule and took the site down
+  with a 307 loop.
+
+**Why a redirect and never a rewrite.** Recorded because it still applies to any future proxy:
+every per-IP cap in this app (the 200/day post cap, the free-boot cap, the agent rate limit) keys
+on `x-forwarded-for`. A second proxy in front means the app stops seeing real client IPs and the
+caps stop separating users. Those caps are what stand between the server wallet and a drain, so a
+rewrite is a security regression dressed as a cosmetic improvement.
 
 **Why 307 and not 308.** The destination is an auto-generated Railway subdomain that gets
 replaced the moment a real domain is attached. A permanent redirect is cached by browsers
