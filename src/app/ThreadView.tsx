@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { titleCaseTicker } from "@/lib/ticker";
+import { ROOT_TICKER, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
 import { getThread, getThreadTicker, getTickerPath } from "./actions";
@@ -182,16 +182,35 @@ export function ThreadView({
                 and "Thread" is only the fallback for unnamed ones. */}
             <h1 className="text-base font-semibold tracking-tight leading-none">
               {path.length ? (
-                path.map((seg, i) => (
-                  <span key={seg}>
-                    {i > 0 && <span className="text-zinc-600 mx-0.5">/</span>}
-                    {/* The leaf is this thread; ancestors are context, so they are
-                        dimmed rather than competing with it. */}
-                    <span className={i === path.length - 1 ? "text-amber-400" : "text-zinc-500"}>
-                      ${titleCaseTicker(seg)}
+                path.map((seg, i) => {
+                  const isLeaf = i === path.length - 1;
+                  return (
+                    <span key={seg}>
+                      {i > 0 && <span className="text-zinc-600 mx-0.5">/</span>}
+                      {/* The leaf is this thread — a link to where you already are
+                          is a dead control, so only ancestors are clickable. They
+                          are dimmed because they are context, not the subject. */}
+                      {isLeaf ? (
+                        <span className="text-amber-400">${titleCaseTicker(seg)}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // The main feed IS the root token's thread, so the root
+                            // crumb closes the overlay rather than opening a thread
+                            // that would duplicate the feed behind it.
+                            if (seg === ROOT_TICKER) onClose();
+                            else onOpenTicker?.(seg);
+                          }}
+                          className="text-zinc-500 hover:text-amber-300 transition-colors"
+                          title={`Go to $${titleCaseTicker(seg)}`}
+                        >
+                          ${titleCaseTicker(seg)}
+                        </button>
+                      )}
                     </span>
-                  </span>
-                ))
+                  );
+                })
               ) : ticker ? (
                 <span className="text-amber-400">${titleCaseTicker(ticker)}</span>
               ) : (
