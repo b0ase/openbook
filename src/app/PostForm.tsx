@@ -12,12 +12,31 @@ interface PostFormProps {
   onPostCreated?: (content: string, author: string, tempId: number) => void;
   onPostRejected?: (tempId: number, reason?: string) => void;
   agentHighlight?: boolean;
+  /**
+   * Post as a REPLY to this post rather than starting a new thread
+   * (THREADS.md). Undefined = a root post, which is the feed's compose box.
+   *
+   * The whole submit pipeline is shared deliberately: a reply is a post, so it
+   * gets the same signing, the same permanence gate, the same sign-in gate and
+   * the same on-chain anchoring. Forking a second composer would have meant two
+   * places to keep those in step.
+   */
+  parentId?: number;
+  /**
+   * Drop the footer row (install bookmark, Ask AI, keyboard hint). Those belong
+   * to the feed's primary compose box; inside a thread they are noise.
+   */
+  compact?: boolean;
+  placeholder?: string;
 }
 
 export function PostForm({
   onPostCreated,
   onPostRejected,
   agentHighlight,
+  parentId,
+  compact,
+  placeholder,
 }: PostFormProps): React.JSX.Element {
   const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -85,6 +104,9 @@ export function PostForm({
       const formData = new FormData(formRef.current);
       formData.set("author", currentIdentity.name);
       formData.set("content", content);
+      // Server-side this is looked up, never trusted — a parent that doesn't
+      // exist is rejected rather than stored (see createPost).
+      if (parentId !== undefined) formData.set("parent_id", String(parentId));
 
       const tempId = Date.now();
       onPostCreated?.(content, currentIdentity.name, tempId);
@@ -115,7 +137,7 @@ export function PostForm({
         }
       });
     },
-    [onPostCreated, onPostRejected, sign]
+    [onPostCreated, onPostRejected, sign, parentId]
   );
 
   function submitForm(): void {
@@ -189,7 +211,9 @@ export function PostForm({
           name="content"
           aria-label="Share an idea"
           placeholder={
-            !identity && !needsUnlock ? "Setting up your identity..." : "Share an idea..."
+            !identity && !needsUnlock
+              ? "Setting up your identity..."
+              : (placeholder ?? "Share an idea...")
           }
           maxLength={1000}
           disabled={!identity && !needsUnlock}
@@ -315,24 +339,26 @@ export function PostForm({
           visible after the user has saved + protected + minimised the sheet),
           the center cell collapses gracefully. Mobile (helper text hidden)
           uses a sm:hidden spacer to hold the left cell's shape. */}
-      <div className="grid grid-cols-3 items-center mt-1 ml-1 mr-1 max-h-12 overflow-visible opacity-100 transition-all duration-200 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:mt-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:max-h-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:opacity-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:overflow-hidden">
-        <div className="hidden sm:flex items-center gap-2">
-          <p className="text-[11px] text-zinc-600">Enter to post, Shift+Enter for new line</p>
-          <span
-            className={`text-[11px] text-green-500 transition-opacity duration-300 ${justPosted ? "opacity-100" : "opacity-0"}`}
-            aria-live="polite"
-          >
-            Posted
-          </span>
+      {!compact && (
+        <div className="grid grid-cols-3 items-center mt-1 ml-1 mr-1 max-h-12 overflow-visible opacity-100 transition-all duration-200 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:mt-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:max-h-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:opacity-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:overflow-hidden">
+          <div className="hidden sm:flex items-center gap-2">
+            <p className="text-[11px] text-zinc-600">Enter to post, Shift+Enter for new line</p>
+            <span
+              className={`text-[11px] text-green-500 transition-opacity duration-300 ${justPosted ? "opacity-100" : "opacity-0"}`}
+              aria-live="polite"
+            >
+              Posted
+            </span>
+          </div>
+          <div className="sm:hidden" />
+          <div className="flex justify-center relative z-10">
+            <InstallBookmark />
+          </div>
+          <div className="flex justify-end">
+            <AgentChat highlight={agentHighlight} />
+          </div>
         </div>
-        <div className="sm:hidden" />
-        <div className="flex justify-center relative z-10">
-          <InstallBookmark />
-        </div>
-        <div className="flex justify-end">
-          <AgentChat highlight={agentHighlight} />
-        </div>
-      </div>
+      )}
       {showPermanenceGate && (
         <PermanenceGate
           onConfirm={() => {

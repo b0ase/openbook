@@ -36,7 +36,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { createPost, getNewPosts, getPosts, getReplyCounts, getThread } from "./actions";
+import { createPost, getNewPosts, getPosts, getThread } from "./actions";
 
 async function post(content: string, parentId?: number) {
   const key = PrivateKey.fromRandom();
@@ -237,9 +237,9 @@ describe("getThread", () => {
   });
 });
 
-describe("getReplyCounts", () => {
+describe("reply_count on the feed row", () => {
   it("counts replies, excluding the root itself", async () => {
-    // A thread with no replies must read 0, not 1.
+    // A thread with no replies must read 0, not 1 — the root is not its own reply.
     await post("lonely root");
     const lonely = lastId();
     await post("busy root");
@@ -247,12 +247,32 @@ describe("getReplyCounts", () => {
     await post("r1", busy);
     await post("r2", busy);
 
-    const counts = await getReplyCounts([lonely, busy]);
-    expect(counts[busy]).toBe(2);
-    expect(counts[lonely]).toBeUndefined(); // no row → render as 0
+    const feed = await getPosts();
+    const byId = Object.fromEntries(feed.map((p) => [p.id, p.reply_count]));
+    expect(byId[busy]).toBe(2);
+    expect(byId[lonely]).toBe(0);
   });
 
-  it("returns an empty map for no input", async () => {
-    expect(await getReplyCounts([])).toEqual({});
+  it("counts nested replies, not just direct ones", async () => {
+    // reply_count keys on root_id, so a reply five levels down still counts
+    // toward the thread it belongs to.
+    await post("root");
+    const rootId = lastId();
+    await post("d1", rootId);
+    await post("d2", lastId());
+
+    const feed = await getPosts();
+    expect(feed.find((p) => p.id === rootId)?.reply_count).toBe(2);
+  });
+
+  it("rides along with the feed query — no second round-trip", async () => {
+    // The count comes from the POST_SELECT join, so it cannot drift from the
+    // row it is rendered beside.
+    await post("root");
+    const rootId = lastId();
+    await post("a reply", rootId);
+
+    const fresh = await getNewPosts(rootId - 1);
+    expect(fresh[0].reply_count).toBe(1);
   });
 });

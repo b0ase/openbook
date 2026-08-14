@@ -2,13 +2,12 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { BootIcon } from "@/components/icons/BootIcon";
-import { LinkPreviewCard } from "@/components/LinkPreviewCard";
 import { useBootContext } from "@/contexts/BootContext";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useBoot } from "@/hooks/useBoot";
-import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
 import { Manifesto } from "./Manifesto";
+import { PostContent } from "./PostContent";
 
 // ── Inline amber spinner (16px, Tailwind animate-spin) ───────────────────────
 
@@ -55,7 +54,7 @@ interface BootButtonProps {
   onFreeBootUsed?: () => void;
 }
 
-function BootButton({
+export function BootButton({
   postId,
   bootCount,
   postPubkey,
@@ -172,6 +171,56 @@ function BootButton({
   );
 }
 
+// ── Reply button ─────────────────────────────────────────────────────────────
+
+/**
+ * Opens the thread for a post. Reading a thread needs no identity — the
+ * sign-in gate lives on the reply composer inside the thread view, so tapping
+ * through to read never prompts anyone to sign in (same rule as the AI chat and
+ * scrolling; see the "transaction action requires sign-in" section in CLAUDE.md).
+ */
+function ReplyButton({
+  replyCount,
+  onOpenThread,
+}: {
+  replyCount: number;
+  onOpenThread: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center">
+      <button
+        type="button"
+        onClick={onOpenThread}
+        className={`relative -m-2 p-2 flex items-center gap-1 rounded-full transition-all border ${
+          replyCount > 0
+            ? "text-zinc-400 border-zinc-700 hover:border-zinc-600 hover:text-zinc-200 hover:bg-zinc-800/50"
+            : "text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300 hover:bg-zinc-800/50"
+        }`}
+        title={
+          replyCount === 0
+            ? "Open thread"
+            : `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`
+        }
+      >
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />
+        </svg>
+      </button>
+      {replyCount > 0 && <span className="text-[9px] text-zinc-600 mt-0.5">{replyCount}</span>}
+    </div>
+  );
+}
+
 // ── PostList ─────────────────────────────────────────────────────────────────
 
 interface PostListProps {
@@ -199,6 +248,8 @@ interface PostListProps {
   onFreeBootUsed?: () => void;
   bootPrice: number;
   freeBootsRemaining: number;
+  /** Open the thread rooted at this post (THREADS.md step 4). */
+  onOpenThread?: (rootId: number) => void;
 }
 
 export function PostList({
@@ -221,6 +272,7 @@ export function PostList({
   onFreeBootUsed,
   bootPrice,
   freeBootsRemaining,
+  onOpenThread,
 }: PostListProps) {
   // Re-render every 60s to keep timeAgo labels fresh
   const [, setTick] = useState(0);
@@ -286,60 +338,24 @@ export function PostList({
             >
               <div className="flex items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 text-xs text-zinc-500">
-                    <span className="font-medium text-zinc-300">{post.author_name}</span>
-                    {/* The very first post = topmost row when nothing older remains
-                        (ORIGIN always; LIVE once post #1 is reached). No server round-
-                        trip — derived from props PostList already has. */}
-                    {i === 0 && (mode === "origin" || (mode === "live" && !liveHasMore)) && (
-                      <span
-                        className="text-[9px] font-semibold uppercase tracking-wider text-amber-400/80 border border-amber-500/30 rounded px-1 py-px shrink-0"
-                        title="The first post — where OpenBook began"
-                      >
-                        Genesis
-                      </span>
-                    )}
-                    {post.signature && (
-                      <span
-                        className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0"
-                        title="Signed"
-                      />
-                    )}
-                    <span>·</span>
-                    <time suppressHydrationWarning>{timeAgo(post.created_at)}</time>
-                    {post.tx_id && (
-                      <a
-                        href={`https://whatsonchain.com/tx/${post.tx_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="View on chain"
-                        className="relative -m-3 p-3 inline-flex items-center text-emerald-500 hover:text-emerald-400 transition-colors"
-                      >
-                        <span className="sr-only">View on chain</span>
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
+                  <PostContent
+                    post={post}
+                    badge={
+                      /* The very first post = topmost row when nothing older remains
+                         (ORIGIN always; LIVE once post #1 is reached). No server round-
+                         trip — derived from props PostList already has. */
+                      i === 0 && (mode === "origin" || (mode === "live" && !liveHasMore)) ? (
+                        <span
+                          className="text-[9px] font-semibold uppercase tracking-wider text-amber-400/80 border border-amber-500/30 rounded px-1 py-px shrink-0"
+                          title="The first post — where OpenBook began"
                         >
-                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                        </svg>
-                      </a>
-                    )}
-                  </div>
-                  <p className="mt-1.5 text-[15px] leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">
-                    {post.content}
-                  </p>
-                  <LinkPreviewCard post={post} />
+                          Genesis
+                        </span>
+                      ) : undefined
+                    }
+                  />
                 </div>
-                <div className="shrink-0 self-center">
+                <div className="shrink-0 self-center flex flex-col items-center gap-3">
                   <BootButton
                     postId={post.id}
                     bootCount={post.boot_count}
@@ -349,6 +365,10 @@ export function PostList({
                     onBooted={onBooted}
                     onFundNeeded={onFundNeeded}
                     onFreeBootUsed={onFreeBootUsed}
+                  />
+                  <ReplyButton
+                    replyCount={post.reply_count ?? 0}
+                    onOpenThread={() => onOpenThread?.(post.id)}
                   />
                 </div>
               </div>

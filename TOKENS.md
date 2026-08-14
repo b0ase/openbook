@@ -36,6 +36,39 @@ a public GitHub repo (their ToS grants fork rights to everyone; bit-sign's `fork
 documents this in detail). In-app minting has no such problem, because the platform
 controls issuance.
 
+## The mint gesture — `$ticker` in the compose box
+
+Proposed 2026-08-14. The interaction, not the economics: you type your idea in the ordinary
+compose box, include a `$ticker` somewhere in it, and the **send button becomes a mint
+button**. Pressing it starts the thread and mints its token in one act.
+
+**Why this is the right gesture and not a gimmick.** It removes the entire "create a token"
+flow — no separate screen, no form, no mode to enter. The user does not decide to mint and
+then write; they write, and the act of naming a ticker *is* the decision. That is as close
+as this gets to DIRECTION.md's 2-click onboarding, applied to the founding act rather than
+to posting. It also makes the cost legible at exactly the moment it is incurred: the button
+changing is the disclosure.
+
+**What it commits us to.**
+
+- **The ticker is parsed from post content**, so the content and the token are not separable
+  — which is correct here (the post IS the token's charter) but means the parse rule is
+  consensus-critical and belongs on-chain in the post record, not only in the UI.
+- **The button must state the price.** A send button that silently spends is the one thing
+  this cannot be. Mint is paid (see *Supply and dilution* — payment is what gives issuance a
+  cost basis), so the button says what it costs before it is pressed.
+- **Posting must stay free.** The button only becomes Mint when a `$ticker` is present. A
+  post without one is exactly what it is today, at no cost. This is the *"paying to mint is
+  a founding act; paying to post is a different product"* line in the risks section, made
+  structural rather than a policy anyone has to remember.
+- **A failed mint must not silently become an ordinary post**, and an ordinary post must
+  never accidentally mint. `$` appears in normal prose ("$50", "$OpenBook" as a reference).
+  The parse rule needs a deliberate shape, and the ambiguous cases resolve toward NOT
+  minting.
+
+**Not built.** Nothing about minting exists yet — no ticker registry, no fee, no covenant.
+Building the button before the thing it triggers would be a button that lies.
+
 ## The attachment seam
 
 `split.ts` does not know where weights come from:
@@ -281,6 +314,40 @@ question is whether others get one too.*
    many.
 5. **What does `launchTs` mean for minting?** Pre-launch genesis posts are pool-excluded —
    can their threads mint?
+6. **How many tokens does one contribution mint?** Raised 2026-08-14 and completely open.
+   *Supply and dilution* settles that issuance is uncapped and paid-for, but not the rate.
+   A flat "N tokens per contribution" makes weight meaningless; scaling by the existing
+   `weights.ts` score reuses machinery that is already tested and already resistant to the
+   gaming analysed in FAIRNESS.md. That is the obvious first answer and it has not been
+   examined.
+7. **Is there an emission curve within a thread — should early contributors get more?**
+   Raised 2026-08-14. The intuition is sound and matches how the value actually arrives:
+   the person who replies to a thread of 3 took a real risk on an unproven idea; the person
+   who replies at 3,000 is joining something already working. A declining curve prices that
+   difference. Three things have to be weighed against it, and none is settled:
+   - **It converts a contribution reward into a timing reward.** The steeper the curve, the
+     more the optimal strategy is "post early in everything" rather than "post well". That
+     is the *free-post weight-farming* vector already logged as SECURITY_AUDIT **L8**, with
+     a new and much larger payoff attached.
+   - **It is the mechanism the upstream table indicts.** DIRECTION.md's Friend.tech row —
+     *"pure speculation, no intrinsic value, bubbles pop"* — describes early-buyer-advantage
+     curves specifically. A bonding curve makes the thread's token a bet on the thread's
+     growth, which is a different instrument from a claim on its revenue (open question 1),
+     and the two answers must agree.
+   - **It interacts with the parent's per-mint share.** If both the child curve and the
+     parent share are in play, the root's L1 concentration (see *Risks*) compounds with
+     early position, and the operator holds the root.
+
+   None of that says no. It says the curve's shape is an economic decision with a security
+   consequence, and it should be made after question 1, not before.
+
+**On hard-capping supply** — asked again 2026-08-14, and it is not open: see *Custody: why a
+fixed supply cannot work*. The objection is mechanical rather than economic. In a UTXO
+model a minted supply has to sit at an address, and whoever holds that key custodies it, so
+a cap does not buy scarcity — it buys a treasury and the counterparty risk that comes with
+it. Uncapped mint-on-allocation is what lets the design stay non-custodial. The scarcity
+intuition behind the question is real, but the place to express it is the emission rate
+(question 6) and the curve (question 7), not a ceiling.
 
 ## Build order
 

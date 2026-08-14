@@ -10,7 +10,7 @@ interface FeedPollingResult {
   // Authoritative boot counts for already-confirmed visible posts, so counts
   // update live from ANY boot source (Bootboard re-boot, other users, server
   // wallet) — not just this client's own optimistic +1.
-  counts?: { id: number; boot_count: number }[];
+  counts?: { id: number; boot_count: number; reply_count: number }[];
 }
 
 interface UseFeedPollingOptions {
@@ -60,12 +60,17 @@ export function useFeedPolling({
         url += `${separator}pending_tx=${pendingIds.join(",")}`;
       }
 
-      // Ask the server for authoritative boot counts on confirmed visible posts,
-      // so the displayed count tracks boots from any source (not just our own).
-      const countIds = postsRef.current
-        .filter((p) => !!p.tx_id)
-        .map((p) => p.id)
-        .slice(0, 100);
+      // Ask the server for authoritative boot + reply counts on visible posts, so
+      // the displayed counts track activity from any source, not just our own.
+      //
+      // Deliberately NOT filtered to `tx_id`-confirmed posts (it used to be).
+      // A post is replyable and bootable the instant it exists in the DB, which
+      // is well before it anchors on-chain — under that filter a fresh post's
+      // counts stayed frozen until its OP_RETURN landed, and stayed frozen
+      // forever whenever `BSV_SERVER_WIF` is unset (local dev, or a paused
+      // wallet). The ids are capped either way, so covering all visible posts
+      // costs nothing extra.
+      const countIds = postsRef.current.map((p) => p.id).slice(0, 100);
       if (countIds.length > 0) {
         const separator = url.includes("?") ? "&" : "?";
         url += `${separator}counts=${countIds.join(",")}`;
@@ -82,11 +87,11 @@ export function useFeedPolling({
         data.updated && data.updated.length > 0
           ? new Map(data.updated.map((p: Post) => [p.id, p.tx_id]))
           : null;
-      // Authoritative boot counts for confirmed visible posts
+      // Authoritative boot AND reply counts for confirmed visible posts. Reply
+      // counts have no other route to the client: a reply is not a root, so it
+      // never arrives via `posts`, and `updated` only carries tx_id gains.
       const countsMap =
-        data.counts && data.counts.length > 0
-          ? new Map(data.counts.map((c) => [c.id, c.boot_count]))
-          : null;
+        data.counts && data.counts.length > 0 ? new Map(data.counts.map((c) => [c.id, c])) : null;
 
       // Patch an existing post with any tx_id confirmation and/or count change.
       const patch = (p: Post): Post => {
@@ -97,7 +102,10 @@ export function useFeedPolling({
         }
         if (countsMap) {
           const c = countsMap.get(p.id);
-          if (c !== undefined && c !== p.boot_count) next = { ...next, boot_count: c };
+          if (c) {
+            if (c.boot_count !== p.boot_count) next = { ...next, boot_count: c.boot_count };
+            if (c.reply_count !== p.reply_count) next = { ...next, reply_count: c.reply_count };
+          }
         }
         return next;
       };

@@ -20,6 +20,7 @@ import { FundAddress } from "./FundAddress";
 import { Header } from "./Header";
 import { PostForm } from "./PostForm";
 import { PostList } from "./PostList";
+import { ThreadView } from "./ThreadView";
 
 // Landing scroll must run before paint (else a flash at the wrong position).
 // useLayoutEffect warns on the server; fall back to useEffect there.
@@ -79,6 +80,10 @@ function FeedContent({
   const [bootPrice, setBootPrice] = useState(1000);
   const [freeBootsRemaining, setFreeBootsRemaining] = useState(0);
   const [showFundModal, setShowFundModal] = useState(false);
+  // Open thread overlay (THREADS.md step 4). An overlay, NOT a third feed mode —
+  // the feed's scroll machinery is left completely untouched while it is open,
+  // so closing it needs no restoration. See ThreadView's header comment.
+  const [threadRootId, setThreadRootId] = useState<number | null>(null);
   const [userAddress, setUserAddress] = useState("");
   const [userBalance, setUserBalance] = useState<number | undefined>(undefined);
   // Network fee the boot tx needs on top of bootPrice (from the tx builder on an
@@ -518,6 +523,7 @@ function FeedContent({
             onFreeBootUsed={handleFreeBootUsed}
             bootPrice={bootPrice}
             freeBootsRemaining={freeBootsRemaining}
+            onOpenThread={setThreadRootId}
           />
 
           {/* Optimistic posts — appear at the bottom (newest), full opacity since server confirms in ~50ms */}
@@ -642,6 +648,27 @@ function FeedContent({
             setFundFee(undefined);
           }}
           onSecure={requestSaveRecovery}
+        />
+      )}
+
+      {/* Thread overlay — mounts OVER the feed, which keeps running underneath
+          (the 5s poll included). Keyed on the root id so switching threads
+          remounts with clean state rather than briefly showing the old one. */}
+      {threadRootId !== null && (
+        <ThreadView
+          key={threadRootId}
+          rootId={threadRootId}
+          bootPrice={bootPrice}
+          freeBootsRemaining={freeBootsRemaining}
+          onClose={() => setThreadRootId(null)}
+          onBooted={refresh}
+          onFundNeeded={(address, balance, fee) => {
+            setUserAddress(address);
+            setUserBalance(balance);
+            setFundFee(fee);
+            setShowFundModal(true);
+          }}
+          onFreeBootUsed={handleFreeBootUsed}
         />
       )}
 

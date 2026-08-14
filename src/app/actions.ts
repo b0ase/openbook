@@ -272,6 +272,7 @@ async function unfurlFirstLink(postId: number, content: string): Promise<void> {
 const POST_SELECT = `
   SELECT p.*,
          COALESCE(bc.boot_count, 0) as boot_count,
+         COALESCE(rc.reply_count, 0) as reply_count,
          lp.url         as preview_url,
          lp.title       as preview_title,
          lp.description as preview_description,
@@ -281,6 +282,10 @@ const POST_SELECT = `
   FROM posts p
   LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
     ON bc.post_id = p.id
+  LEFT JOIN (
+    SELECT root_id, COUNT(*) as reply_count FROM posts WHERE parent_id IS NOT NULL GROUP BY root_id
+  ) rc
+    ON rc.root_id = p.id
   LEFT JOIN link_previews lp
     ON lp.url_hash = p.preview_hash
 `;
@@ -337,26 +342,6 @@ export async function getThread(rootId: number): Promise<Post[]> {
 }
 
 /**
- * Reply counts for a set of thread roots, so the feed can show "N replies"
- * without loading any reply bodies.
- *
- * `parent_id IS NOT NULL` excludes the root from its own count — a thread with
- * no replies should read 0, not 1.
- */
-export async function getReplyCounts(rootIds: number[]): Promise<Record<number, number>> {
-  if (!rootIds.length) return {};
-  const placeholders = rootIds.map(() => "?").join(",");
-  const rows = db
-    .prepare(`
-      SELECT root_id, COUNT(*) as n FROM posts
-      WHERE root_id IN (${placeholders}) AND parent_id IS NOT NULL
-      GROUP BY root_id
-    `)
-    .all(...rootIds) as { root_id: number; n: number }[];
-  return Object.fromEntries(rows.map((r) => [r.root_id, r.n]));
-}
-
-/**
  * Get posts that have been updated since the client last saw them.
  * Currently this means posts that recently received a tx_id (on-chain confirmation).
  * Returns posts with id <= sinceId that have a tx_id (the client may have them without tx_id).
@@ -398,18 +383,36 @@ export async function getForwardPosts(afterId: number): Promise<Post[]> {
  * another user, a server-funded free boost — not just this client's optimistic
  * +1. Lightweight: returns only `id` + `boot_count`, no post bodies.
  */
-export async function getPostCounts(ids: number[]): Promise<{ id: number; boot_count: number }[]> {
+/**
+ * Live counts for posts the client already has on screen.
+ *
+ * ⚠ REPLY COUNTS *NEED* THIS CHANNEL — they cannot ride the normal feed poll.
+ * `getNewPosts` filters replies out (they are not roots), and `getUpdatedPosts`
+ * only returns posts that just gained a `tx_id`. So when someone replies, NOTHING
+ * else re-fetches the root's row, and its "N replies" would sit stale until a
+ * full page reload. Same reasoning that made boot counts live in the first place
+ * (DECISIONS "Live boot counts") — reply counts are the second instance of it.
+ */
+export async function getPostCounts(
+  ids: number[]
+): Promise<{ id: number; boot_count: number; reply_count: number }[]> {
   if (!ids.length) return [];
   const placeholders = ids.map(() => "?").join(",");
   return db
     .prepare(`
-    SELECT p.id, COALESCE(bc.boot_count, 0) as boot_count
+    SELECT p.id,
+           COALESCE(bc.boot_count, 0) as boot_count,
+           COALESCE(rc.reply_count, 0) as reply_count
     FROM posts p
     LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
       ON bc.post_id = p.id
+    LEFT JOIN (
+      SELECT root_id, COUNT(*) as reply_count FROM posts WHERE parent_id IS NOT NULL GROUP BY root_id
+    ) rc
+      ON rc.root_id = p.id
     WHERE p.id IN (${placeholders})
   `)
-    .all(...ids) as { id: number; boot_count: number }[];
+    .all(...ids) as { id: number; boot_count: number; reply_count: number }[];
 }
 
 export async function getBootboard(): Promise<BootboardData> {

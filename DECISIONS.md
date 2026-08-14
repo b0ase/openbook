@@ -570,9 +570,43 @@ the two places the build deviated from the spec.
   `anchor-sweep-roundtrip.integration.test.ts`, because this is the one part of the codebase
   where a mistake cannot be corrected by a later deploy.
 
-- **Nothing is user-visible yet.** No UI passes `parent_id`, so every post created today is a
-  root and the roots-only filter is a no-op over the existing feed. THREADS.md step 4 (thread
-  view + reply composer) is the remaining work.
+- **The thread view is an OVERLAY, not a third feed mode (step 4, 2026-08-14).** The feed's
+  LIVE/ORIGIN machinery — bottom-relative prepend anchoring, the landing effect, the two
+  IntersectionObserver sentinels, the unread watermark — each assume the scroll container
+  holds the root feed, and each was hard-won (see "Feed: LIVE/ORIGIN modes"). A third mode
+  would have put all of them in play for a feature that needs none of them. `ThreadView`
+  mounts OVER the feed with its own scroll container: the feed keeps polling underneath, its
+  scroll position is never touched, and closing restores nothing because nothing moved.
+  **DO NOT** convert this into a feed mode or a route — a route would remount the feed and
+  lose its scroll position, which is the same failure by a different path.
+
+- **The reply composer is `PostForm` with a `parentId`, not a second composer.** A reply is a
+  post, so it must get the same signing, the same one-time permanence gate, the same
+  `requireIdentity()` sign-in gate and the same on-chain anchoring. A separate composer would
+  have been two places to keep all four in step. `compact` drops the footer chrome (install
+  bookmark, Ask AI, keyboard hint) that belongs only to the feed's primary box.
+
+- **Replies target the ROOT, not the tapped post.** Arbitrary depth is stored and queried,
+  but the render is flat (settled above), and a per-reply reply button would silently
+  produce nesting the UI cannot show. Depth stays available for a future "replying to" chip.
+
+- **`reply_count` rides the feed query AND the live-count channel (both needed).** It is
+  computed by the `POST_SELECT` join like `boot_count` — one query, no second round-trip, and
+  it cannot drift from the row it is rendered beside. That covers first load. It does NOT
+  cover updates: **nothing re-fetches a root row when a reply lands**, because `getNewPosts`
+  filters replies out (they are not roots) and `getUpdatedPosts` only returns posts that
+  gained a `tx_id`, so the count sat stale until a reload. Caught in browser testing, not by
+  the tests. Fixed by extending `getPostCounts` — the existing "Live boot counts" channel —
+  to return `reply_count` too, in the same request. A short-lived `getReplyCounts` server
+  action written earlier the same day was DELETED as dead code once the join superseded it.
+
+- **Live counts are no longer gated on `tx_id`.** `useFeedPolling` used to request
+  authoritative counts only for posts that had already anchored on-chain. A post is
+  replyable and bootable the instant it exists in the DB, well before it anchors — under
+  that filter a fresh post's counts stayed frozen until its OP_RETURN landed, and stayed
+  frozen forever wherever `BSV_SERVER_WIF` is unset (local dev, or a paused wallet, which is
+  how the bug surfaced). The id list is capped at 100 either way, so covering all visible
+  posts costs nothing extra. This also fixes the same latent staleness for boot counts.
 
 - **Open question, carried from TOKENS.md and NOT settled here:** does ordinary posting become
   paid? Paying to *mint a ticker* is a founding act and a natural fee. Paying to *post* is a

@@ -330,7 +330,7 @@ Right-sized after an owner free-speech discussion (see DECISIONS.md "Thin-core c
 - [ ] Template system for new instances
 - [ ] Yours Wallet integration via @1sat/connect for power users
 
-## Threading (OpenBook fork) — SERVER SIDE COMPLETE, UI NOT BUILT
+## Threading (OpenBook fork) — COMPLETE
 
 > The prerequisite for the token tree in TOKENS.md — a token attaches to a thread root, so
 > there must be thread roots. Spec + rationale: THREADS.md. Decisions: DECISIONS.md "Threading".
@@ -339,7 +339,7 @@ Right-sized after an owner free-speech discussion (see DECISIONS.md "Thin-core c
 - [x] `createPost` accepts `parent_id` — parent looked up not trusted, root resolved, one transaction
 - [x] Feed reads filtered to roots only (shared `ROOTS_ONLY`); new `getThread` + `getReplyCounts`
 - [x] On-chain `id` + `parent` on the post OP_RETURN, forwarded by the anchor sweep too
-- [ ] **UI: thread view + reply composer** — the only remaining step; nothing is user-visible until it lands
+- [x] **UI: thread view + reply composer** — `ThreadView` overlay (not a third feed mode), reply affordance + live reply counts on every feed row; browser-verified end to end
 - [ ] Thread-aggregated boot counts (deliberately deferred — touches `weights.ts` + bootboard semantics)
 - [ ] Settle the carried question: does ordinary posting become paid? (minting a ticker vs posting)
 

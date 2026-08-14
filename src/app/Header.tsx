@@ -27,16 +27,16 @@ export function Header({
           {/* The wordmark IS the ticker (TOKENS.md: the root token is $OpenBook).
               The `$` carries the amber with "Open" so the lockup stays the same
               two-tone it has always been, rather than adding a third colour. */}
+          {/* No subtitle. "Agentic Fairness" described the payout engine, which
+              is not the point being made here — the fork is about what a user
+              can DO (start a thread, mark it, mint it), not about how the split
+              is computed. Left empty rather than guessed at: the replacement
+              line depends on token decisions that are still open (TOKENS.md
+              "Open questions"). The Genesis jump this text used to carry lives
+              on the header chevron, which shows whenever you are not at the top. */}
           <h1 className="text-lg font-semibold tracking-tight leading-none">
             <span className="text-amber-400">$Open</span>Book
           </h1>
-          <button
-            type="button"
-            onClick={onScrollToGenesis}
-            className="text-[11px] text-zinc-500 tracking-wide hover:text-amber-400 transition-colors duration-150"
-          >
-            Agentic Fairness
-          </button>
         </div>
 
         <div className="absolute left-1/2 -translate-x-1/2">

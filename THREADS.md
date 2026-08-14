@@ -3,10 +3,9 @@
 > Build spec for thread structure on `posts` — the prerequisite for the token tree in
 > [TOKENS.md](TOKENS.md). A token attaches to a thread root, so there must be thread roots.
 >
-> **Status: server side BUILT (steps 1–3, 5). UI (step 4) not built.** A reply can be
-> created, validated, rooted, read as a thread, and anchored on-chain — but nothing in the
-> UI can yet produce or display one, so the running site is unchanged. Sections below are
-> kept as written and annotated where the build corrected them.
+> **Status: BUILT.** Steps 1–5 complete — a reply can be created from the UI, validated,
+> rooted, read in a thread view, and anchored on-chain. Sections below are kept as written
+> and annotated where the build corrected them.
 >
 > Last updated: 2026-08-14
 
@@ -123,7 +122,7 @@ makes a thread the unit a ticker attaches to.
 | `getForwardPosts(afterId)` | add the filter |
 | `getOlderPosts(beforeId)` | none — delegates to `getPosts(beforeId)`, inherits it |
 | `getUpdatedPosts(knownIds)` | none — takes an explicit id list |
-| `getPostCounts(ids)` | none — explicit id list (but see *Boot counts* below) |
+| `getPostCounts(ids)` | **CHANGED during the build** — must also return `reply_count`; see *`reply_count` needed the live-count channel* below |
 | `getBootboard()` | none — boots target `posts.id`, unchanged |
 | **new** `getThread(rootId)` | `WHERE root_id = ? ORDER BY id ASC` |
 
@@ -209,15 +208,40 @@ without its parent is unthreadable from the chain forever, with no second attemp
 2. ✅ `createPost(parentId?)` with parent-exists validation and `root_id` resolution.
 3. ✅ Read-query filters + `getThread` (and `getReplyCounts`, added so the feed can show
    "N replies" without loading any reply bodies).
-4. ⬜ UI: thread view, reply composer, root-feed unchanged.
+4. ✅ UI: thread view (`ThreadView.tsx`, an OVERLAY — see below), reply composer
+   (`PostForm` with `parentId`), root feed unchanged.
 5. ✅ On-chain `id` + `parent` fields (`onchain.ts` **and** `anchor-sweep.ts`).
 
 Steps 1–3 are independently testable against an in-memory SQLite database using the
 existing `weights.test.ts` fixture pattern, before any UI exists — which is how they were
 built and how they are covered (`actions-threading.integration.test.ts`).
 
-**Nothing is user-visible until step 4.** No UI passes `parent_id`, so every post created
-today is a root and the feed's roots-only filter is a no-op over the existing 2,006 posts.
+### The thread view is an overlay, not a third feed mode
+
+The one significant design call in step 4. Every invariant listed under *Feed.tsx invariants
+to re-verify* above assumes the scroll container holds the root feed — a third mode would
+have put all four in play for a feature that needs none of them. `ThreadView` mounts OVER
+the feed with its own scroll container instead: the feed keeps polling underneath, its
+scroll position is never touched, and closing restores nothing because nothing moved. This
+is what makes "root-feed unchanged" literal rather than aspirational.
+
+**Replies target the ROOT, not the tapped post.** Depth is stored and queried, but the
+render is flat (the settled decision), and a per-reply reply button would silently produce
+nesting the UI cannot show. Depth stays available for a future "replying to" chip.
+
+### `reply_count` needed the live-count channel
+
+Caught in browser testing, not by the tests. `reply_count` rides the `POST_SELECT` join like
+`boot_count`, which is right for the first load — but **nothing re-fetches a root row when a
+reply lands**: `getNewPosts` filters replies out (they are not roots) and `getUpdatedPosts`
+only returns posts that gained a `tx_id`. The count sat stale until a reload. Fixed by
+extending `getPostCounts` (the existing "Live boot counts" channel) to return `reply_count`
+as well — same request, no extra round-trip.
+
+The same fix removed the `tx_id` filter on which posts get live counts. A post is replyable
+and bootable the moment it exists in the DB, well before it anchors; under that filter a
+fresh post's counts stayed frozen until its OP_RETURN landed — and frozen forever wherever
+`BSV_SERVER_WIF` is unset, which is how the bug surfaced in local dev.
 
 ## Open question carried from TOKENS.md
 

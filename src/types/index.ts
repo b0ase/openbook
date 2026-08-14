@@ -60,7 +60,17 @@ export interface PostPreviewFields {
   preview_status: string | null;
 }
 
-export type Post = PostRow & { boot_count: number } & Partial<PostPreviewFields>;
+/**
+ * `reply_count` counts posts whose `root_id` is this post, EXCLUDING the post
+ * itself — a thread with no replies reads 0, not 1. Like `boot_count` it is
+ * computed by the `POST_SELECT` join rather than fetched separately, so the feed
+ * never needs a second round-trip and the count can never drift from the row it
+ * is rendered beside.
+ */
+export type Post = PostRow & {
+  boot_count: number;
+  reply_count: number;
+} & Partial<PostPreviewFields>;
 
 // ── Bootboard ──────────────────────────────────────────────────────────────
 
