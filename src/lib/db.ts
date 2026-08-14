@@ -176,8 +176,29 @@ function repairTickerParents(database: Db): void {
     const parentOf = database.prepare("SELECT parent_id FROM posts WHERE id = ?");
     const update = database.prepare("UPDATE tickers SET parent_symbol = ? WHERE symbol = ?");
 
+    // ⚠ REPAIR root_id TOO, NOT JUST THE PARENT. Tickers claimed before the
+    // re-root rule existed still carry the ENCLOSING thread's root, so clicking
+    // them re-opens their parent — the exact bug the rule fixes, left frozen into
+    // existing rows. Fixing only `parent_symbol` would give a correct-looking
+    // path that still navigates to the wrong thread.
+    //
+    // A ticker claimed by a REPLY should own a thread rooted at that reply. Safe
+    // and idempotent: it moves a post to root itself, never merges threads, and
+    // re-running finds nothing left to change.
+    const rerootPost = database.prepare(
+      "UPDATE posts SET root_id = id WHERE id = ? AND root_id <> id"
+    );
+    const rerootTicker = database.prepare("UPDATE tickers SET root_id = ? WHERE symbol = ?");
+
     const run = database.transaction(() => {
       for (const t of tickers) {
+        if (t.symbol !== "OPENBOOK") {
+          const post = parentOf.get(t.post_id) as { parent_id: number | null } | undefined;
+          if (post?.parent_id != null) {
+            rerootPost.run(t.post_id);
+            rerootTicker.run(t.post_id, t.symbol);
+          }
+        }
         if (t.symbol === "OPENBOOK") {
           if (t.parent_symbol !== null) update.run(null, t.symbol);
           continue;
