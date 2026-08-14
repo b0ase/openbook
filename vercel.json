@@ -2,13 +2,25 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "redirects": [
     {
-      "source": "/",
-      "destination": "https://openbook-production-7dd5.up.railway.app/",
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "openbooks.space" }],
+      "destination": "https://openbook-production-7dd5.up.railway.app/:path*",
       "permanent": false
     },
     {
       "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.openbooks.space" }],
       "destination": "https://openbook-production-7dd5.up.railway.app/:path*",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "destination": "https://openbooks.space/",
+      "permanent": false
+    },
+    {
+      "source": "/:path*",
+      "destination": "https://openbooks.space/:path*",
       "permanent": false
     }
   ]

@@ -119,6 +119,19 @@ build is provisioned, and a redirect accepts only `source`, `destination`, `perm
 fails the whole deployment with **no build logs at all**, because it never reaches the build
 step. If a Vercel deploy shows `ERROR` with an empty log, suspect the config, not the code.
 
+**The domain lives on the WRONG SIDE right now.** `openbooks.space` uses Vercel's nameservers
+and is served by Vercel, so it hits these redirects and bounces to the Railway URL. No Vercel
+config can fix that — Vercel cannot run this app at all (see above). **The fix is DNS:** add
+`openbooks.space` as a custom domain in Railway, then point the record at Railway's CNAME
+target from Vercel's DNS panel (Vercel's nameservers are perfectly happy to serve a record
+aimed elsewhere). Once traffic goes straight to Railway, the domain serves the app directly —
+no redirect, real client IPs, and the OG card comes from the app itself.
+
+Until then the first two rules keep `openbooks.space` working by forwarding it, and the last
+two send the old `*.vercel.app` URL to `openbooks.space` so the throwaway link points at the
+permanent home. After the DNS move Vercel never sees `openbooks.space` traffic and those first
+rules simply stop applying.
+
 **Why 307 and not 308.** The destination is an auto-generated Railway subdomain that gets
 replaced the moment a real domain is attached. A permanent redirect is cached by browsers
 indefinitely, so a 308 would pin every visitor to a URL intended to be thrown away, with no
