@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { formatShare } from "@/lib/share";
-import { distinctTickers } from "@/lib/ticker";
-import { isRootTicker, titleCaseTicker } from "@/lib/ticker";
+import { distinctTickers, isRootTicker, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
 import {

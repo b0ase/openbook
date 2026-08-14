@@ -21,8 +21,8 @@ import {
   getForwardPosts,
   getOlderPosts,
   getOldestPosts,
-  getTickerSupply,
   getTickerPath,
+  getTickerSupply,
   resolveTickers,
 } from "./actions";
 import { Bootboard } from "./Bootboard";
