@@ -7,6 +7,7 @@ import { InAppPromptModal } from "@/components/InAppPromptModal";
 import { InstallPitch } from "@/components/InstallPitch";
 import { IosStorageToast } from "@/components/IosStorageToast";
 import { SignInModal } from "@/components/SignInModal";
+import { SupportAddress } from "@/components/SupportAddress";
 import { BootProvider, useBootContext } from "@/contexts/BootContext";
 import { IdentityProvider, useIdentityContext } from "@/contexts/IdentityContext";
 import { InstallProvider } from "@/contexts/InstallContext";
@@ -58,9 +59,11 @@ function pruneOptimistic(optimisticPosts: OptimisticPost[], serverPosts: Post[])
 function FeedContent({
   initialPosts,
   initialBootboard,
+  supportAddress,
 }: {
   initialPosts: Post[];
   initialBootboard: BootboardData;
+  supportAddress: string | null;
 }) {
   const { identity, requestSaveRecovery } = useIdentityContext();
   const { bootError } = useBootContext();
@@ -531,6 +534,12 @@ function FeedContent({
         onScrollToGenesis={handleGoOrigin}
       />
 
+      {/* Published funding address — see SupportAddress for why this reverses the
+          /api/health "never expose the address" rule, deliberately. */}
+      <div className="shrink-0">
+        <SupportAddress address={supportAddress} />
+      </div>
+
       {/* Pinned bootboard */}
       <div className="shrink-0 relative">
         <div className="mx-auto max-w-2xl px-4 pt-2 pb-3">
@@ -757,9 +766,11 @@ function FeedContent({
 function FeedOrWelcomeGate({
   initialPosts,
   initialBootboard,
+  supportAddress,
 }: {
   initialPosts: Post[];
   initialBootboard: BootboardData;
+  supportAddress: string | null;
 }) {
   const { awaitingWelcomeGate, acceptRestoredIdentity } = useIdentityContext();
 
@@ -767,15 +778,23 @@ function FeedOrWelcomeGate({
     return <HomeScreenWelcomeGate onRestore={acceptRestoredIdentity} />;
   }
 
-  return <FeedContent initialPosts={initialPosts} initialBootboard={initialBootboard} />;
+  return (
+    <FeedContent
+      initialPosts={initialPosts}
+      initialBootboard={initialBootboard}
+      supportAddress={supportAddress}
+    />
+  );
 }
 
 export function Feed({
   posts: initialPosts,
   bootboard: initialBootboard,
+  supportAddress,
 }: {
   posts: Post[];
   bootboard: BootboardData;
+  supportAddress: string | null;
 }) {
   return (
     <BootProvider>
@@ -783,7 +802,11 @@ export function Feed({
         <InstallProvider>
           <SignInModal />
           <InAppPromptModal />
-          <FeedOrWelcomeGate initialPosts={initialPosts} initialBootboard={initialBootboard} />
+          <FeedOrWelcomeGate
+            initialPosts={initialPosts}
+            initialBootboard={initialBootboard}
+            supportAddress={supportAddress}
+          />
         </InstallProvider>
       </IdentityProvider>
     </BootProvider>

@@ -133,6 +133,26 @@ export function applyTickerMigration(database: Db): void {
   // whole board reads as one tree: $OPENBOOK / $CHILD / $GRANDCHILD.
   addColumnIfMissing(database, "tickers", "parent_symbol", "parent_symbol TEXT");
   database.exec("CREATE INDEX IF NOT EXISTS idx_tickers_parent ON tickers(parent_symbol)");
+
+  // Backfill: tickers claimed BEFORE this column existed have no parent, so their
+  // path renders as a bare `$Test` instead of `$OpenBook/$Test`. Mirrors the
+  // runtime rule in `registerTickers` — the parent is the ticker of the thread the
+  // claim was made in, or the root when the claim was made in the main feed.
+  //
+  // Run unconditionally rather than only when the column was just added: a crash
+  // between the ADD COLUMN and this UPDATE would otherwise leave rows permanently
+  // parentless, and the `IS NULL` predicate makes a repeat run a no-op. Same
+  // reasoning as the threading backfill above.
+  database.exec(`
+    UPDATE tickers
+    SET parent_symbol = COALESCE(
+      (SELECT t2.symbol FROM tickers t2
+        WHERE t2.root_id = tickers.root_id AND t2.symbol <> tickers.symbol
+        ORDER BY t2.post_id ASC LIMIT 1),
+      'OPENBOOK'
+    )
+    WHERE parent_symbol IS NULL AND symbol <> 'OPENBOOK'
+  `);
   // Reverse lookup: "which tickers does this thread carry?" — used to show a
   // thread's own symbol, and by any future allocation that keys on the thread.
   database.exec("CREATE INDEX IF NOT EXISTS idx_tickers_root_id ON tickers(root_id)");

@@ -1,3 +1,4 @@
+import { getServerAddress } from "@/services/bsv/wallet";
 import { getBootboard, getPosts } from "../actions";
 import { Feed } from "../Feed";
 
@@ -23,10 +24,13 @@ export const revalidate = 10;
 
 export default async function TickerPage() {
   const [posts, bootboard] = await Promise.all([getPosts(), getBootboard()]);
+  // Derived from BSV_SERVER_WIF, never hardcoded — a key rotation must not leave a
+  // dead address published.
+  const supportAddress = getServerAddress();
 
   return (
     <div className="h-[100dvh] text-white overflow-hidden touch-pan-x touch-pan-y overscroll-none bg-black">
-      <Feed posts={posts} bootboard={bootboard} />
+      <Feed posts={posts} bootboard={bootboard} supportAddress={supportAddress} />
     </div>
   );
 }
