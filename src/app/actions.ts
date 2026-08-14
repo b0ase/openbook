@@ -436,6 +436,158 @@ export async function getThreadShare(
  * same matcher that decides what gets CLAIMED. A count that disagreed with the
  * parse rule would attribute one token's supply to another's name.
  */
+export interface TickerHit {
+  symbol: string;
+  /** Ancestry, root-first — the same path the thread header renders. */
+  path: string[];
+  root_id: number;
+  /** Units in circulation: posts that NAME this ticker. The economic weight. */
+  supply: number;
+  /** The claiming post's opening words, so a result is recognisable. */
+  excerpt: string;
+}
+
+/**
+ * Find tickers by name, ranked by economic weight.
+ *
+ * ⚠ THIS IS THE INDEX, AND IT DID NOT EXIST. Until now a `$Ticker` could be
+ * claimed, priced and linked, but never FOUND — no search by name, by popularity,
+ * or at all. A keyword index you cannot query is not an index, which is the gap
+ * between what this project is and what DIRECTION.md says it is for.
+ *
+ * ⚠ RANKED BY SUPPLY, NOT BY RECENCY OR TEXT SCORE. Supply is the number of posts
+ * that named a ticker — i.e. how many people paid attention to it — so ordering
+ * by it makes the ranking signal the ECONOMIC one rather than something inferred.
+ * That is the whole thesis: a signal that costs something to produce cannot be
+ * manufactured cheaply. Do not "improve" this by mixing in engagement heuristics
+ * that are free to generate.
+ *
+ * Prefix matches sort above interior matches AT EQUAL WEIGHT, because someone
+ * typing "fore" wants `$Forest` before `$Wildfore` — but weight comes first, so
+ * text shape can never outrank the economic signal.
+ */
+export async function searchTickers(query: string, limit = 30): Promise<TickerHit[]> {
+  const q = canonicalTicker(query.trim().replace(/^\$+/, ""));
+  if (!q) return [];
+  const capped = Math.min(Math.max(1, limit), 100);
+
+  const rows = db
+    .prepare(
+      `SELECT t.symbol AS symbol, t.root_id AS root_id, t.parent_symbol AS parent_symbol,
+              p.content AS content
+         FROM tickers t
+         LEFT JOIN posts p ON p.id = t.post_id
+        WHERE t.symbol LIKE ?
+        LIMIT 300`
+    )
+    .all(`%${q}%`) as {
+    symbol: string;
+    root_id: number;
+    parent_symbol: string | null;
+    content: string | null;
+  }[];
+  if (!rows.length) return [];
+
+  const supply = await getTickerSupply(rows.map((r) => r.symbol));
+
+  // Ancestry walk, memoised — sibling tickers share ancestors, so the same chain
+  // would otherwise be re-walked per hit.
+  const parentStmt = db.prepare("SELECT parent_symbol FROM tickers WHERE symbol = ?");
+  const cache = new Map<string, string[]>();
+  const pathFor = (symbol: string): string[] => {
+    const hit = cache.get(symbol);
+    if (hit) return hit;
+    const path: string[] = [symbol];
+    const seen = new Set([symbol]);
+    let cur = symbol;
+    for (let d = 0; d < 16; d++) {
+      const row = parentStmt.get(cur) as { parent_symbol: string | null } | undefined;
+      const parent = row?.parent_symbol;
+      if (!parent || seen.has(parent)) break;
+      path.unshift(parent);
+      seen.add(parent);
+      cur = parent;
+    }
+    cache.set(symbol, path);
+    return path;
+  };
+
+  return rows
+    .map((r) => ({
+      symbol: r.symbol,
+      path: pathFor(r.symbol),
+      root_id: r.root_id,
+      supply: supply[r.symbol] ?? 0,
+      excerpt: (r.content ?? "").slice(0, 140),
+    }))
+    .sort((a, b) => {
+      // ⚠ WEIGHT FIRST, PREFIX ONLY AS A TIEBREAK. An earlier version sorted
+      // prefix matches above everything, which meant an unknown `$Alpha` beat a
+      // heavily-held `$Beta` for the query "a" — text shape outranking the
+      // economic signal, which is the one thing this index is not supposed to
+      // do. A test caught it.
+      if (b.supply !== a.supply) return b.supply - a.supply;
+      const aPrefix = a.symbol.startsWith(q) ? 0 : 1;
+      const bPrefix = b.symbol.startsWith(q) ? 0 : 1;
+      if (aPrefix !== bPrefix) return aPrefix - bPrefix;
+      // Alphabetical last, so equal-weight results have a stable order rather
+      // than whatever the query planner happened to return.
+      return a.symbol.localeCompare(b.symbol);
+    })
+    .slice(0, capped);
+}
+
+/**
+ * Every claimed ticker, heaviest first — the directory behind `/tickers`.
+ *
+ * Capped, and the cap is honest: this is the front page of the index, not an
+ * export. `searchTickers` is how you reach past it.
+ */
+export async function listTickers(limit = 100): Promise<TickerHit[]> {
+  const capped = Math.min(Math.max(1, limit), 200);
+  const rows = db
+    .prepare(
+      `SELECT t.symbol AS symbol, t.root_id AS root_id, p.content AS content
+         FROM tickers t
+         LEFT JOIN posts p ON p.id = t.post_id
+        LIMIT 500`
+    )
+    .all() as { symbol: string; root_id: number; content: string | null }[];
+  if (!rows.length) return [];
+
+  const supply = await getTickerSupply(rows.map((r) => r.symbol));
+  const parentStmt = db.prepare("SELECT parent_symbol FROM tickers WHERE symbol = ?");
+  const cache = new Map<string, string[]>();
+  const pathFor = (symbol: string): string[] => {
+    const hit = cache.get(symbol);
+    if (hit) return hit;
+    const path: string[] = [symbol];
+    const seen = new Set([symbol]);
+    let cur = symbol;
+    for (let d = 0; d < 16; d++) {
+      const row = parentStmt.get(cur) as { parent_symbol: string | null } | undefined;
+      const parent = row?.parent_symbol;
+      if (!parent || seen.has(parent)) break;
+      path.unshift(parent);
+      seen.add(parent);
+      cur = parent;
+    }
+    cache.set(symbol, path);
+    return path;
+  };
+
+  return rows
+    .map((r) => ({
+      symbol: r.symbol,
+      path: pathFor(r.symbol),
+      root_id: r.root_id,
+      supply: supply[r.symbol] ?? 0,
+      excerpt: (r.content ?? "").slice(0, 140),
+    }))
+    .sort((a, b) => b.supply - a.supply || a.symbol.localeCompare(b.symbol))
+    .slice(0, capped);
+}
+
 export async function getTickerSupply(symbols: string[]): Promise<Record<string, number>> {
   const wanted = [...new Set(symbols.map(canonicalTicker).filter(isValidTicker))].slice(0, 200);
   if (!wanted.length) return {};

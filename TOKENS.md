@@ -1117,6 +1117,40 @@ rather than softening it).
 
 **Not built.** Same gate: nothing mints before posting costs money.
 
+## Mint price scales LINEARLY, and supply is unbounded (owner, 2026-08-14)
+
+*"Maybe the amount of dilution per token IS infinite, but the price to mint a new token scales.
+Cost price for the first, twice cost price for the second, three times for the third — linear, not
+exponential, otherwise keywords can't realistically be bought and proliferate."*
+
+**Linear is the right shape and doubling would have been fatal.** A doubling curve is absurd after
+about thirty mints; nobody could buy into a popular name at any price. Linear per-unit pricing
+means the TOTAL cost of N units is `C·N(N+1)/2` — quadratic overall, which is expensive enough to
+be a real bid and cheap enough that names proliferate. Inscription cost on BSV is a fraction of a
+cent, so `C` can be genuinely small, which is what makes the bottom of the curve accessible.
+
+### ⚠ THIS REPLACES CLOSURE — say so, do not leave two contradictory sections
+
+An earlier settled decision in this document (*Closure — a thread ends when its supply is minted
+out*) says a thread has a FINITE supply and **closes** when it is exhausted: fixed forever, held
+by the people who built it. **A linear price with no cap means supply is unbounded and a thread
+never closes.** The owner accepts this explicitly — *"the amount of dilution per token IS
+infinite"* — so this supersedes closure rather than sitting beside it. If closure is wanted back
+it needs a separate mechanism (a price ceiling, or an owner-triggered close), not the supply cap
+that has now been given up.
+
+### The property this buys, which is the anti-pump one
+
+**The mint curve is a PRICE CEILING on the secondary market.** If anyone can mint a fresh unit at
+`N·C`, nobody rationally pays more than `N·C` for a second-hand one. So the resale market cannot
+detach upward from the curve — **the structure caps pumping without anybody policing it.** That is
+a direct answer to *"crypto is geared towards pump and dumps"*: here the pump is bounded by
+arithmetic.
+
+The exception is the **genesis unit / issuer position**, which is unique and carries future mint
+revenue (see *revenue follows ownership*). That one can and should trade above the curve — it is
+a different object from an ordinary unit, which is the ambiguity already flagged there.
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,

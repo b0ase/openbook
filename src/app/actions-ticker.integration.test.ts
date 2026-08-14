@@ -37,7 +37,15 @@ vi.mock("next/headers", () => ({
 
 import { db } from "@/lib/db";
 import { ROOT_TICKER } from "@/lib/ticker";
-import { createPost, getThread, getTickerPath, getTickerSupply, resolveTickers } from "./actions";
+import {
+  createPost,
+  getThread,
+  getTickerPath,
+  getTickerSupply,
+  listTickers,
+  resolveTickers,
+  searchTickers,
+} from "./actions";
 
 async function post(content: string, parentId?: number) {
   const key = PrivateKey.fromRandom();
@@ -404,5 +412,74 @@ describe("token supply is counted from mentions", () => {
     // The renderer draws no figure when a symbol is absent; a 0% would read as
     // "worthless" instead of "not a token yet".
     expect(await getTickerSupply(["NOBODYSAIDTHIS"])).toEqual({});
+  });
+});
+
+describe("the index — searchTickers / listTickers", () => {
+  // Until this existed a ticker could be claimed, priced and linked but never
+  // FOUND. Ranking is by SUPPLY on purpose: that is attention somebody paid for,
+  // not a signal inferred from something free to manufacture (DIRECTION.md).
+
+  it("finds a ticker by a fragment of its name", async () => {
+    await post("claiming $Forestfire");
+    const hits = await searchTickers("orest");
+    expect(hits.map((h) => h.symbol)).toContain("FORESTFIRE");
+  });
+
+  it("tolerates a leading $ and any casing, like a user would type", async () => {
+    await post("claiming $Forestfire");
+    for (const q of ["$forestfire", "FORESTFIRE", "$FoReSt"]) {
+      expect((await searchTickers(q)).map((h) => h.symbol)).toContain("FORESTFIRE");
+    }
+  });
+
+  it("ranks by supply, so the heavier name wins", async () => {
+    await post("$Alpha starts");
+    await post("$Beta starts");
+    // Three posts name $Beta, one names $Alpha.
+    await post("more about $Beta");
+    await post("still more $Beta");
+
+    // "a" is a PREFIX of $Alpha and only an interior match in $Beta, so this
+    // also pins that weight outranks text shape — the earlier implementation
+    // sorted prefix first and put the unknown name on top.
+    const hits = await searchTickers("a");
+    const alpha = hits.findIndex((h) => h.symbol === "ALPHA");
+    const beta = hits.findIndex((h) => h.symbol === "BETA");
+    expect(beta).toBeGreaterThanOrEqual(0);
+    expect(beta).toBeLessThan(alpha);
+  });
+
+  it("puts a prefix match above an interior one AT EQUAL WEIGHT", async () => {
+    // Both named once, so weight ties and the prefix decides: someone typing
+    // "fore" wants $Forest before $Wildfore.
+    await post("$Forest here");
+    await post("$Wildfore here");
+    const hits = await searchTickers("fore");
+    expect(hits[0]?.symbol).toBe("FOREST");
+  });
+
+  it("carries the ancestry so a result links to the right path", async () => {
+    await post("$Parent starts");
+    const parentRoot = lastId();
+    await post("$Child inside it", parentRoot);
+    const child = (await searchTickers("child"))[0];
+    expect(child?.path).toEqual([ROOT_TICKER, "PARENT", "CHILD"]);
+  });
+
+  it("returns nothing for an empty or junk query rather than everything", async () => {
+    await post("$Something");
+    expect(await searchTickers("")).toEqual([]);
+    expect(await searchTickers("   ")).toEqual([]);
+    expect(await searchTickers("$")).toEqual([]);
+  });
+
+  it("lists every claimed name heaviest first", async () => {
+    await post("$Quiet once");
+    await post("$Loud once");
+    await post("$Loud twice");
+    const all = await listTickers();
+    expect(all[0]?.symbol).toBe("LOUD");
+    expect(all.map((t) => t.symbol)).toContain("QUIET");
   });
 });
