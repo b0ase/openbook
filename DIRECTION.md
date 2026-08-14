@@ -378,3 +378,55 @@ happens to be load-bearing for namespace fairness, and it is defeated by renting
 **This should be settled before `ALLOW_INDEXING` is turned on**, because the moment the index is
 publicly visible is the moment the landgrab becomes obviously worth doing.
 
+### Pre-claiming the namespace is INVENTORY, not rent (owner's correction, 2026-08-14)
+
+An earlier version of this document called the platform pre-claiming dictionary words
+"landlordism". **That imported a moral framing the owner does not share, and it was the wrong
+objection.** Corrected here rather than quietly edited, because the reasoning matters.
+
+**The owner's framing, which is sound:** a user-minted token at 100% of a supply of 1 is worth
+nothing and cost real money to create. Minting is not a gift being handed out, so pre-claiming is
+not a gift being withheld. Buying keywords ahead of customers is **capital outlay on inventory** —
+what a retailer does stocking shelves, or a publisher buying a back catalogue — for a business
+whose shape is not yet known. **Low-cost insurance against the landgrab costed above.**
+
+**The objection that actually stands is structural, not ethical.** Three things are true at once:
+
+1. the platform would own the genesis unit of every common word,
+2. **revenue follows ownership** (settled in TOKENS.md), and
+3. the platform sets the mint price.
+
+Together those mean *the operator sets the price of the inventory it holds and collects on every
+trade in it*. That is not wrongdoing — it is the conflict of interest that exchanges are normally
+structured to avoid. And it matters here for one specific reason: **the entire thesis on this page
+rests on the price signal being trustworthy.** An index whose prices are set by the largest holder
+is not obviously a better signal than the free ones it claims to improve on.
+
+**The resolution is already decided elsewhere in this project: the LINEAR curve.** A deterministic,
+public price rule means the operator cannot price at discretion — the curve does, identically for
+everyone. Fix the curve in code, disclose the platform's position plainly, and the conflict is
+largely neutralised. **The pricing decision made for other reasons turns out to be what makes
+platform inventory safe.**
+
+### Doing it on $2
+
+The owner holds roughly $5 of BSV and wants to spend at most $2. That is enough, and the shape of
+the answer matters more than the exact figure.
+
+```
+~300 sats per inscription
+$2 at ~$30/BSV ≈ 0.067 BSV ≈ 6,700,000 sats ≈ ~20,000 names
+```
+
+(Assumed rates — substitute real ones.) **$2 buys roughly the common vocabulary**, which is where
+the entire landgrab risk lives. Nobody is going to corner `$Sesquipedalian`. The long tail can be
+claimed by whoever actually wants it, which is the outcome this project should prefer anyway.
+
+**⚠ But none of it can happen yet.** We anchor, we do not inscribe (TOKENS.md), and inscription,
+minting and paid posting are one milestone. There is nothing to buy today.
+
+**The free version, available immediately: a reserved-words list.** Marking common words as
+unclaimable-by-others in the database costs nothing, is reversible, and removes the landgrab risk
+now — with the platform releasing or minting them properly once inscription ships. It buys the
+same insurance for £0 and does not require deciding the ownership question first.
+
