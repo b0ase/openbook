@@ -469,3 +469,35 @@ wins, permanently, and there is exactly one holder.
 the dictionary worth doing.** The same property that gives the index its value is the one that
 creates the exposure. That is the honest reason this reservation is not paranoia.
 
+### CORRECTION: the genesis is the mold, and we sell copies (owner, 2026-08-14)
+
+*"You are, for some inexplicable reason, assuming that the genesis tokens on our own platform do
+not belong to us. Why should we sell them? We sell copies of the things we have minted."*
+
+**They are right and the two sections above are wrong where they conflict with this.** I had
+assumed a reserved name must eventually be RELEASED to somebody — importing a norm from domain
+names and social handles, where a namespace is expected to end up distributed. Nothing in this
+project's model implies that.
+
+**The model is: the platform mints and KEEPS the genesis unit; users buy COPIES.** Genesis is the
+mold, copies are the product. A publisher keeps the plate and sells impressions; a foundry keeps
+the mold. There is no release policy to write, because nothing is waiting to be released.
+
+**What this dissolves.** My "reserving and land-grabbing are the same act, the release is the
+difference" framing was answering a question nobody asked. It is neither hoarding nor releasing —
+it is **manufacturing**. `reserveTickers` remains the right mechanism, because we cannot inscribe
+yet and names must be held until the platform can mint them properly, but it is **inventory
+pending minting, not insurance pending release**. `releaseTickers` stays as an option the operator
+may want, not a moral requirement the design depends on.
+
+**What survives and is coherent: the name is the platform's, the POSTS are the authors'.** Someone
+writing into `$Water` still gets their own post-token — that is the thing they own. The platform
+holds the name and sells copies of it. Users get the tradeable units; the platform holds the issuer
+position. Nobody is short-changed by the platform keeping what it made.
+
+**The one note that still stands**, recorded earlier and not re-argued: platform-holds-genesis plus
+revenue-follows-ownership plus platform-sets-price means the operator is the issuer of everything.
+The **linear curve** answers the half of that which matters — a deterministic, public price rule
+prices identically for everyone and leaves no discretion to abuse. The remainder is a business
+model, not a defect.
+
