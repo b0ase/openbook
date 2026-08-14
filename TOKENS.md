@@ -489,34 +489,36 @@ question is whether others get one too.*
 8. ~~**What happens when a thread's supply is exhausted?**~~ **ANSWERED 2026-08-14: the
    thread CLOSES.** Minted out means finished. See *Closure* below.
 
-9. **Should a ticker carry a share marker that dilutes as it is invoked?** Raised
-   2026-08-14: a new `$tokenname` shows `(100%)`, dropping to `50%`, `33.3%` as it is
-   invoked elsewhere. **Recommend NOT shipping the percentage**, for two reasons:
-   - **It measures typing, not value.** The quantity is `1/N` where N is how many times the
-     string was written. A thousand mentions make every mention `0.1%` without the idea
-     changing at all.
-   - **It is free to attack.** Mentions cost nothing — only POSTING INTO A THREAD costs. So
-     anyone can drive a claimer's `100%` to `1%` by typing the ticker 99 times, at no cost.
-     A percentage beside a token reads as ownership, so watching it fall reads as a stake
-     being taken.
+9. **A ticker's percentage as a NOVELTY INDICATOR — good, and worth building.**
 
-   **Does it interfere with allocation?** Only if a mention is allowed to confer value — and
-   then fatally. Allocation is "you pay to post in a thread, you receive that thread's
-   tokens"; mentions sit outside it. The moment a mention allocates anything, there is a FREE
-   minting path, which breaks *the payment is the proof of contribution* (see
-   *Pay-to-mint is these two composed*). **Anything free that confers value destroys the
-   anchor.**
+   Raised 2026-08-14. First recorded here as a recommendation AGAINST, on the reading that the
+   percentage was an ownership share. **That reading was wrong and the recommendation is
+   withdrawn.** The percentage is a *saturation gauge shown as you type*:
 
-   **The salvageable part is reach, expressed as a CITATION COUNT rather than a percentage** —
-   `$OPENBOOK · 12 threads`, not `$OPENBOOK (8.3%)`. It cannot be misread as ownership and it
-   rises as the idea spreads, which is the intuition the percentage was chasing. If it ever
-   feeds anything economic it must count DISTINCT threads or DISTINCT pubkeys, never raw
-   mentions, or the free-inflation problem returns.
+   - `$Something (100%)` — nobody has ever used this name. You are about to **CLAIM** it.
+   - `$OpenBook (0.0001%)` — heavily used and long claimed. You are **CITING** it.
 
-   **Settled by the same question:** invoking a ticker LINKS to the claiming thread, it never
-   starts a parallel one. Two threads sharing a name is the ambiguity BSV-21 leaves open by
-   design (`sym` is not unique); the app closes it with first-claim-wins, and a parallel
-   thread would reopen it. This half is BUILT.
+   Reframed that way the earlier objections dissolve:
+   - *"It measures typing, not value"* — measuring usage is precisely the point. Saturation is
+     the thing being displayed.
+   - *"It is free to grief"* — driving the number DOWN makes a ticker look MORE established,
+     which flatters the claimer rather than harming them. There is no stake to dilute.
+
+   **Why it is more than a nice touch.** Under the mint gesture, naming an unclaimed ticker is
+   a paid founding act and naming a claimed one is a citation — two very different actions
+   behind the same keystrokes. This indicator is the **disclosure that tells them apart BEFORE
+   the send button is pressed**, which is exactly what *The mint gesture* says the button owes
+   the user. The percentage is doing consent work, not decoration.
+
+   **What still holds from the earlier note:** the number must never FEED allocation. Mentions
+   are free, and anything free that confers value destroys the anchor (*the payment is the
+   proof of contribution*). Display only.
+
+   **Open on presentation, not on principle.** `1/N` reads well at the extremes — `100%` is
+   unmistakably "new" — but `0.0001%` is hard to parse and a percentage beside a token still
+   invites an ownership reading in a crypto-literate audience. A count (`1 of 12,000 uses`)
+   carries the same information without that ambiguity. The binary — claimed or not — is the
+   high-value half either way, and should be unmistakable at a glance.
 
 **On hard-capping supply** — asked 2026-08-14, initially answered "not open", then **resolved
 the other way the same day.** The original objection was mechanical: a minted supply has to
