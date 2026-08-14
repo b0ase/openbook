@@ -862,6 +862,62 @@ it was "correct". That is the same shape as the citation model already settled h
 mints a unit to the quoter — so Bitcoin Schema's Repost is a compatible on-chain representation
 of it rather than a competing idea. Same gate applies: not before paid posting.
 
+## Every post is a token in your wallet, and you can sell it (owner's direction, 2026-08-14)
+
+*"Users should be able to 'sell' their posts. Every post they have ought to be a token in their
+wallet."* This is the direction, and it is the natural conclusion of the anchoring-vs-inscribing
+finding above: to sell a post there has to be an on-chain object to sell, so each post becomes a
+**1Sat inscription minted to the author's own address** at post time. Their wallet then literally
+holds their posts.
+
+**The listing mechanism that fits without breaking the no-custody rule: OrdLock.** A 1Sat listing
+is a UTXO carrying a script anyone can spend by paying the seller — one transaction, no escrow,
+nothing held in between. That is the same property the boost split already has, and the same
+sentence already in the manifesto: *every satoshi leaves in the same transaction it arrived in*.
+**A marketplace that took custody would contradict the thing this project exists to argue.**
+
+### ⚠ WHAT IS AND IS NOT BEING SOLD — say this in the UI, not just here
+
+Selling a post transfers **the token**. It does not, and cannot, transfer:
+
+- **Authorship.** The post is signed by the original key and anchored on-chain. That is permanent
+  and unpurchasable. Nobody can buy having said a thing.
+- **The content.** It stays in the feed, unchanged, still attributed to whoever wrote it.
+- **The right to remove it.** Nothing here can be unwritten by anyone, buyer or seller.
+
+A buyer gets the on-chain object, its provenance, and whatever the holder later attaches to it.
+**"Sell your post" must never be presented as selling your words** — that is a misreading a user
+could plausibly make, and it would be our fault for allowing it.
+
+### ⚠ THE QUESTION THAT DECIDES THE LEGAL SHAPE — unanswered
+
+**Does selling a post transfer its FUTURE BOOST EARNINGS?**
+
+- **Yes** → the token becomes a claim on someone's future revenue stream. That is much closer to
+  a security nearly everywhere, and it directly contradicts the clause already doing legal work
+  in this document: *a token confers NOTHING unless the holder builds something contractually
+  binding in script.*
+- **No** → you sell the object and its provenance. Value is subjective, exactly as the owner
+  described `$Nym` ("what value it has is totally subjective"). Payouts keep following the
+  signing pubkey (`services/fairness/weights.ts` attributes that way today), and anyone who wants
+  earnings to follow a sale can write that into a script themselves.
+
+**Recommendation: NO by default.** It keeps every token uniform — confers nothing until someone
+chooses to make it confer something — and it is the only answer consistent with the rest of the
+model. Making earnings follow automatically would silently reclassify every post on the board.
+
+### Second-order question, worth settling before minting
+
+**If a post claimed a `$Ticker`, does selling that post sell the NAME?** The ticker is registered
+against `post_id`/`root_id`, so on the current schema the name is attached to the post, and
+selling the post would hand over the name — including, potentially, a name that parents an entire
+subtree of other people's threads. Either the name transfers with the token (simple, and means
+buying a post can buy a namespace), or names are pinned to the claiming PUBKEY and stay put
+(safer, but then a token's most valuable property does not travel with it). **Undecided.**
+
+**Not built.** Inscription, minting and paid posting remain one milestone (see above), and nothing
+mints before posting costs money.
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,
