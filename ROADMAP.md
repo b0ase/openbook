@@ -43,8 +43,8 @@ outpoint `<txid>_<vout>`** — not the SQLite id, not a content hash. See DECISI
 - [ ] ⚠ **Broadcast ONE inscription and confirm a public indexer shows it.** The envelope follows
       the 1Sat convention and is unit-tested for shape, but shape is not recognition. **Nothing may
       be charged for until this passes.** It costs a few pence and only the owner can authorise it.
-- [ ] **Wire the compose box** — price quote, insufficient-funds → deposit, the paid submit path.
-      `clientSidePost` has no caller yet.
+- [x] **Compose box wired** — asks `getPostingMode()`, builds + broadcasts, sends `raw_tx`, and
+      reports money failures honestly ("nothing was spent") rather than "failed to post".
 
 **Waiting behind this gate, in order:**
 

@@ -897,6 +897,36 @@ export async function getThreadStats(rootId: number): Promise<{ tokens: number; 
   return { tokens, replies: Math.max(0, tokens - 1) };
 }
 
+export interface PostingMode {
+  /** True when the author must fund their own post. */
+  paid: boolean;
+  /** Where the markup must be paid. Null means at-cost (no fee output). */
+  platformAddress: string | null;
+  /** Markup percentage, so the client can quote the SAME price the server floors. */
+  markupPercent: number;
+}
+
+/**
+ * Whether posting costs the author money, and what it costs.
+ *
+ * ⚠ THE CLIENT CANNOT DECIDE THIS. `isPaidPostingEnabled()` and the platform
+ * address are server state; a client that guessed would either charge a user for
+ * a post the server accepts free, or build an unfunded transaction the server
+ * then refuses AFTER it was broadcast — which spends their money for nothing.
+ *
+ * Exposes no secret: the platform address is a public destination that appears
+ * in every paid transaction anyway.
+ */
+export async function getPostingMode(): Promise<PostingMode> {
+  const paid = isPaidPostingEnabled();
+  const raw = Number((process.env.POST_MARKUP_PERCENT ?? "").trim());
+  return {
+    paid,
+    platformAddress: paid ? getServerAddress() : null,
+    markupPercent: Number.isFinite(raw) && raw >= 0 ? raw : 10,
+  };
+}
+
 export interface TickerHolder {
   pubkey: string;
   /** The holder's public name, or null if they have not claimed one. */

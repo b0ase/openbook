@@ -8,7 +8,7 @@ import { useMediaUpload } from "@/hooks/useMediaUpload";
 import { useVoiceToText } from "@/hooks/useVoiceToText";
 import { ACCEPTED_MIME } from "@/lib/upload";
 import { AgentChat } from "./AgentChat";
-import { createPost } from "./actions";
+import { createPost, getPostingMode } from "./actions";
 import { TickerHint } from "./TickerHint";
 
 interface PostFormProps {
@@ -176,6 +176,54 @@ export function PostForm({
           formData.set("signature", sig.signature);
           formData.set("pubkey", sig.pubkey);
         }
+
+        // ── Paid posting ───────────────────────────────────────────────────
+        // ⚠ THE MODE IS ASKED FOR, NEVER ASSUMED. Guessing wrong in either
+        // direction hurts the user: assume free and the server refuses a post
+        // they wrote; assume paid and they spend money on a transaction the
+        // server would have accepted for nothing.
+        const mode = await getPostingMode();
+        if (mode.paid) {
+          const { postPrice } = await import("@/lib/post-economics");
+          const { clientSidePost } = await import("@/services/bsv/client-post");
+          const { onchainRecord } = await import("@/lib/onchain-record");
+
+          // The SAME envelope the server-funded path anchors, so a paid post and
+          // a free one are the same record to anybody reading the chain.
+          const payload = onchainRecord("post", {
+            content,
+            author: currentIdentity.name,
+            sig: sig?.signature ?? null,
+            pubkey: sig?.pubkey ?? null,
+            parent: parentId ?? null,
+          });
+
+          // Price the WHOLE transaction, not the payload: the miner charges for
+          // the transaction, and the envelope plus inputs and change dwarf the
+          // text on a short post.
+          const price = postPrice(payload.length + 600, {
+            markupPercent: mode.markupPercent,
+          });
+
+          const paid = await clientSidePost(
+            currentIdentity.wif,
+            currentIdentity.address,
+            payload,
+            mode.platformAddress,
+            price
+          );
+
+          if (paid.status !== "success") {
+            // ⚠ NOTHING IS SENT TO THE SERVER ON FAILURE. A post the author did
+            // not pay for must not be stored, and `createPost` would refuse it
+            // anyway — reporting here keeps their draft recoverable instead of
+            // showing a generic server rejection.
+            onPostRejected?.(tempId, paid.status);
+            return;
+          }
+          formData.set("raw_tx", paid.rawTx);
+        }
+
         const result = await createPost(formData);
         if (!result.ok) {
           onPostRejected?.(tempId, result.reason);

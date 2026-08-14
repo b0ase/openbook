@@ -39,6 +39,27 @@ const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffec
 
 export type FeedMode = "live" | "origin";
 
+/**
+ * What a rejected post says to its author.
+ *
+ * ⚠ MONEY FAILURES MUST NOT READ AS "failed to post". Under paid posting the
+ * author's own funds are involved, and a generic failure leaves them unsure
+ * whether they were charged. Each of these happens BEFORE anything is
+ * broadcast, so the honest message is that nothing was spent.
+ */
+const POST_FAILURE_TEXT: Record<string, string> = {
+  rate_limited: "Too fast — try again",
+  daily_limit: "Daily post limit reached",
+  paused: "Posting briefly paused",
+  rejected_content: "Can't be posted",
+  // Paid posting — nothing was broadcast, so nothing was spent.
+  insufficient_funds: "Not enough funds — add some and try again",
+  no_utxos: "No funds yet — add some to post",
+  broadcast_failed: "Couldn't reach the network — nothing was spent",
+  payment_required: "This post needs funding",
+  invalid_payment: "Payment didn't check out — nothing was stored",
+};
+
 // A post that was added optimistically before the server confirms it.
 interface OptimisticPost {
   id: number; // temporary timestamp ID
@@ -772,15 +793,7 @@ function FeedContent({
                         <time>{timeAgo(op.created_at)}</time>
                         {op.failed && (
                           <span className="text-red-400 text-[10px]">
-                            {op.failReason === "rate_limited"
-                              ? "Too fast — try again"
-                              : op.failReason === "daily_limit"
-                                ? "Daily post limit reached"
-                                : op.failReason === "paused"
-                                  ? "Posting briefly paused"
-                                  : op.failReason === "rejected_content"
-                                    ? "Can't be posted"
-                                    : "Failed to post"}
+                            {POST_FAILURE_TEXT[op.failReason ?? ""] ?? "Failed to post"}
                           </span>
                         )}
                       </div>
