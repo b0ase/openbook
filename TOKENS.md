@@ -1060,6 +1060,63 @@ measure of reach rather than of authorship.
 
 **Not built.** Same gate as everything else here: nothing mints before posting costs money.
 
+## SETTLED: mint revenue follows ownership (owner, 2026-08-14)
+
+*"If I BUY a post off you… whoever likes it, the revenue goes to me. That's a convention, enforced
+by ownership."*
+
+**Settled.** I recommended the opposite (see the sellable-post-tokens section, which argued for
+keeping payouts on the signing pubkey to stay consistent with *a token confers nothing*). The
+owner decided otherwise and this is the position of record. The security-shape caveat already
+written above still stands and is not repeated here — it is a matter for the lawyer, not for
+re-argument.
+
+**It is also the choice that makes a post market mean anything.** If revenue did NOT follow
+ownership, a buyer would be trading provenance alone — a receipt for something that pays someone
+else forever. Because it does follow, the price of a post becomes an estimate of its **future
+attention**, which is the only thing that makes a market in posts worth having.
+
+### ⚠ "Enforced by ownership" needs a lookup we do not currently have
+
+Today the money goes to the **signing pubkey**: `services/fairness/weights.ts` attributes by
+pubkey, and `api/boot-confirm` **derives the credited address from a verified ECDSA signature** —
+deliberately, because deriving it rather than accepting it is what closed a boot-attribution
+forgery hole (see the boot-confirm notes in CLAUDE.md).
+
+Routing to the *current holder* means resolving **who holds the inscription's outpoint at the
+moment of payment**. That is a chain lookup, not a signature derivation, and it has consequences:
+
+- **The unforgeable property goes away.** A signature proves who signed; it cannot prove who
+  currently owns a token. Ownership has to be READ from the chain, and reading it wrong — or
+  trusting a client's claim about it — reintroduces exactly the forgery class that was closed.
+- **The payee becomes mutable.** Every payout path currently assumes a stable recipient derived
+  from a key. It would need to tolerate the recipient changing between two payments for the same
+  post, which is a different invariant from the one those paths were written against.
+
+**None of this argues against the decision** — it is the work the decision implies, recorded so
+it is not discovered late.
+
+### ⚠ UNSETTLED, AND IT MATTERS: what exactly is "the post" that gets bought?
+
+Under *like == mint*, the author holds unit #1 and every liker holds one of #2…#N. So "buying the
+post" has two possible meanings:
+
+1. **Buying unit #1** — one token among many, which happens to be the first.
+2. **Buying the issuer position** — the right to receive revenue from all FUTURE issuance.
+
+The owner's sentence implies **(2)**. But if unit #1 is what carries that right, then **the genesis
+unit is not fungible with the others**, and the semi-fungible model recorded above (all instances
+interchangeable as units of the same token) has one exception at its centre. That may well be
+correct — a first edition is not an ordinary edition — but it should be a decision rather than
+something discovered when the first post is sold and two people disagree about what changed hands.
+
+**Options, undecided:** the issuer position rides on unit #1; or it is a separate object that can
+be sold independently of any unit; or every unit carries a pro-rata share of future revenue (which
+makes units uniform again but turns each one into a revenue claim, sharpening the legal question
+rather than softening it).
+
+**Not built.** Same gate: nothing mints before posting costs money.
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,
