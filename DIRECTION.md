@@ -9,7 +9,10 @@
 > Model* (spawning is driven by supply exhaustion, not by traction alone). The token model
 > lives in [TOKENS.md](TOKENS.md); thread structure in [THREADS.md](THREADS.md).
 >
-> Where this file says "OpenCook" it means the upstream project and the shared foundation.
+> **On the two names:** "OpenCook" is kept wherever it means the upstream project, its
+> historical firsts, or its authorship of the fairness rules — those statements are true of
+> upstream and it would be dishonest to relabel them. "OpenBook" is used where the sentence
+> describes the product a reader is actually using. Both are accurate; neither is a leftover.
 
 ## The Vision
 
@@ -28,7 +31,7 @@ Everyone. Not just developers.
 
 The person in Lagos with a brilliant idea but no money for a patent. The ex-Google architect who disagrees with how things are built but has no platform to prove it. The graphic designer browsing spawned projects at midnight, offering their eye for UI. The attorney who spots a legal gap. The music artist who wants fair royalties. The marketer who knows how to make things spread. The property owner with an idea for how rentals should work. The teenager with vibes and nothing else.
 
-**OpenCook doesn't care who you are. It cares what you did.**
+**OpenBook doesn't care who you are. It cares what you did.**
 
 Every contribution is timestamped on-chain. An anonymous user posting as `anon_k` gets the same credit as anyone else. No resumes, no interviews, no gatekeepers. You contribute, you're credited, you earn. The poorest person with the best idea earns the same as the richest person with the same idea.
 
@@ -48,7 +51,7 @@ The endgame isn't one platform. It's a universal system where **whoever contribu
 
 An idea posted on-chain has a timestamp. If someone codes that idea later, the original poster gets credit — the idea came first. If code exists before someone posts it as an idea, the coder gets credit. On-chain timestamps are the arbiter. No disputes, no committees, no politics.
 
-This works across forks. OpenCook is open source. Anyone can fork it, improve it, launch their own version. That's not a threat — it's the model working. Contributors don't pick sides. They post ideas, write code, and earn proportionally from every project that uses their contribution. The best projects attract the most activity. Competition drives quality, not lock-in.
+This works across forks. OpenCook is open source, and **OpenBook is that claim being tested rather than asserted** — this project is a fork of it, diverging on economics while keeping the contribution history. Anyone can fork it, improve it, launch their own version. That's not a threat — it's the model working. Contributors don't pick sides. They post ideas, write code, and earn proportionally from every project that uses their contribution. The best projects attract the most activity. Competition drives quality, not lock-in.
 
 **How it works:**
 - Every contribution is timestamped on-chain (posts, code commits linked to BSV identity)
@@ -152,7 +155,7 @@ It doesn't matter what the idea is. The model works for anything:
 The person who spawns a project becomes the project owner. They can:
 - Direct development priorities
 - Set the initial fairness parameters for their project
-- Use OpenCook's community as their first users and contributors
+- Use OpenBook's community as their first users and contributors
 - Drop tokens to their users if they want (BSV-21 — nothing stops them)
 - The fairness system tracks contributions automatically — no payroll, no invoicing
 
@@ -196,7 +199,7 @@ Enforcement is phased: start with instructions only, add hooks when contributors
 
 ## Competitive Positioning
 
-OpenCook combines elements that exist separately elsewhere, but nobody has put them all together on a chain where the economics actually work.
+OpenBook inherits a combination that exists separately elsewhere but had not been put together on a chain where the economics work — and then changes the economics. The table below is upstream's analysis; read the note after it for where the fork no longer gets to claim its answers.
 
 ### Why existing approaches failed
 
@@ -237,4 +240,4 @@ The innovation lives or dies on one demo: **a user posts an idea, someone boots 
 - Not a crypto wallet app
 - Not a social media platform (yet — it may evolve into one)
 - Not a fundraising tool
-- Not built on bOpen.ai — bOpen is the toolkit, the product is OpenCook
+- Not built on bOpen.ai — bOpen is the toolkit, the product is OpenBook

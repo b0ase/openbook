@@ -1,0 +1,51 @@
+# OpenBook on a plain Docker host (Hetzner box).
+#
+# Why this and not Vercel: the app is STATEFUL BY DESIGN. better-sqlite3 opens a
+# real file on a real disk, synchronously, from module scope. Vercel gives
+# serverless functions a read-only filesystem outside /tmp, and /tmp is
+# per-instance and wiped — so every DB route 500s at import with "unable to open
+# database file". That is not a bug to fix; it is the wrong shape of host. A box
+# with a disk is the right one, and it keeps the architecture OpenCook started
+# with (no sync→async port of the money path).
+#
+#   docker compose up -d --build
+#
+# Requires a .env file beside this one — see .env.example. NEVER commit it.
+
+services:
+  openbook:
+    build: .
+    restart: unless-stopped
+
+    # ⚠ BOUND TO LOCALHOST ON PURPOSE. Put a reverse proxy (Caddy/nginx) in front
+    # for TLS. This is not only about certificates: every per-IP rate limit in the
+    # app reads `x-forwarded-for`, which is a CLIENT-SUPPLIED header. Behind a
+    # proxy that sets it, it is trustworthy. Exposed directly to the internet,
+    # anyone can spoof it and walk through the post caps, the free-boot cap and
+    # the agent limits. See CLAUDE.md "Deployment Notes".
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    # A BIND MOUNT, not a named volume, so the SQLite file is a visible path on
+    # the host. That makes the off-box backup a plain `cp`/`rsync` of ./data
+    # rather than a docker volume export — the DB is the only thing here that
+    # cannot be rebuilt from the repo.
+    volumes:
+      - ./data:/data
+
+    environment:
+      DATABASE_PATH: /data/local.db
+      NODE_ENV: production
+    env_file:
+      - .env
+
+    # Hits the app's real operational snapshot: wallet balance, pending anchors,
+    # daily-spend ceiling, kill-switch. Returns 503 when a critical condition
+    # trips, so Docker restarts on a genuinely unhealthy app rather than only on
+    # a crashed process.
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 60s
+      timeout: 10s
+      start_period: 40s
+      retries: 3

@@ -1,0 +1,124 @@
+# Deploying OpenBook
+
+> Durable deployment reference. The launch-day do-list lives in LAUNCH_CHECKLIST.md
+> (temporary); this file is the part that stays true afterwards.
+
+## The one constraint that decides everything
+
+**This app is stateful by design.** `better-sqlite3` opens a real file on a real disk,
+**synchronously**, from module scope — `src/lib/db.ts` runs at import, so a failure to open
+the file takes down every route that touches data, at import time, before any handler runs.
+
+That single fact rules hosts in and out:
+
+| Host | Works? | Why |
+|---|---|---|
+| **Railway** (current) | ✅ | Volume mounted at `/data`, `DATABASE_PATH=/data/local.db` |
+| **Any Docker host** (Hetzner, VPS) | ✅ | Bind-mount a host directory to `/data` |
+| **Fly, Render, any box with a disk** | ✅ | Same shape — persistent filesystem |
+| **Vercel** | ❌ | **Structurally cannot work.** See below. |
+
+### Why Vercel cannot host this
+
+Serverless functions get a **read-only filesystem outside `/tmp`**, and `/tmp` is
+per-instance and wiped between invocations. There is nowhere to put the database. The
+observed failure is not subtle:
+
+```
+Error: OpenBook DB: failed to open local.db — unable to open database file
+    at module evaluation (.next/server/chunks/…)
+```
+
+— on `/api/posts`, `/api/earnings`, and the `createPost` server action, every request.
+The genesis seed never runs there either: it is an npm `prestart` hook, and Vercel never
+invokes `npm start`.
+
+**This is not a bug to fix.** Making it work means replacing SQLite with a network database,
+which means every `db.prepare(...).get()` in the codebase becomes `await` — including
+`weights.ts`, `pricing.ts`, `boot-orchestrator.ts` and `anchor-sweep.ts`, i.e. the code that
+moves money. That is a large refactor with real regression risk on the money path, taken on
+in order to use a host that offers nothing this app needs. **Don't.**
+
+---
+
+## Railway (current production)
+
+Already configured; `railway.toml` is committed. What matters:
+
+- **Volume attached at `/data` in the dashboard.** The `[deploy.volumes]` TOML alone does
+  NOT create it — attach it in the dashboard *and* redeploy.
+- **`DATABASE_PATH=/data/local.db`** — without it the DB lands on the ephemeral container
+  filesystem and every deploy silently loses all posts.
+- **`startCommand` is not shell-wrapped.** Never use `;` or `&&` there — `node` receives the
+  whole string as a filename and nothing serves. Sequence via npm lifecycle hooks; that is
+  why seeding is a `prestart` hook rather than part of the start command.
+- **Healthcheck path stays `/`**, not `/api/health` — the latter returns 503 by design when
+  a critical condition trips, which Railway would read as a failed deploy.
+
+## Docker host (Hetzner or any VPS)
+
+`docker-compose.yml` is committed and self-contained:
+
+```bash
+cp .env.example .env      # fill in the secrets — NEVER commit this file
+docker compose up -d --build
+```
+
+Two choices in that file are load-bearing, both explained inline:
+
+- **The port binds to `127.0.0.1`, not `0.0.0.0`.** Put Caddy or nginx in front for TLS.
+  This is a security requirement, not just a convenience: every per-IP rate limit in the app
+  (post caps, free-boot cap, agent limits) reads `x-forwarded-for`, which is a
+  **client-supplied header**. Behind a proxy that sets it, it is trustworthy. Exposed
+  directly, anyone can spoof it and walk straight through every cap.
+- **`/data` is a bind mount (`./data`), not a named volume**, so the SQLite file is a plain
+  path on the host. The database is the only thing here that cannot be rebuilt from the repo,
+  so backing it up should be a `cp`, not a docker volume export.
+
+Minimal Caddy front (sets `X-Forwarded-For` automatically, gets TLS automatically):
+
+```
+openbook.example.com {
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+### Backups
+
+The DB is the only irreplaceable artifact. With the bind mount:
+
+```bash
+sqlite3 ./data/local.db ".backup './data/backup-$(date +%F).db'"
+```
+
+Use `.backup` rather than `cp` — the app runs in WAL mode, so a naive copy of a live database
+can capture a torn state.
+
+---
+
+## Environment variables
+
+See `.env.example` for the full annotated list. The ones that decide whether a deploy is
+correct rather than merely running:
+
+| Variable | Consequence if wrong |
+|---|---|
+| `DATABASE_PATH` | Unset → DB on ephemeral storage → **all posts lost on every deploy** |
+| `BSV_SERVER_WIF` | Unset → posts save but never anchor on-chain (`tx_id` stays NULL) |
+| `LAUNCH_TS` | Unset → fail-closed far-future sentinel → **nobody earns from the pool** |
+| `ALLOW_INDEXING` | Unset → `noindex`. Set `true` only at go-public |
+| `CONTENT_DENYLIST` | Unset → the pre-publish screen is a no-op. Set before inviting posters |
+
+## First boot
+
+`scripts/seed-if-empty.mjs` (the `prestart` hook) copies `seed/genesis.db` into
+`DATABASE_PATH` **only when the target is missing or empty**. It never overwrites a database
+that has posts, and it fails toward preserving a corrupt or locked one. So it is safe to
+leave enabled forever — on an established deploy it is a no-op.
+
+Verify a deploy is actually healthy, not just serving:
+
+```bash
+curl -s https://<host>/api/health     # ok:true, addressConfigured:true
+curl -s https://<host>/api/posts | head -c 200   # newest post id
+```
