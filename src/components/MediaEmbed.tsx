@@ -62,8 +62,8 @@ export function MediaEmbed({ url, kind }: { url: string; kind: MediaKind }) {
 
   if (kind === "video") {
     return (
-      // biome-ignore lint/a11y/useMediaCaptions: captions cannot exist for an
-      // arbitrary third-party file the poster only linked to.
+      // Captions cannot exist for an arbitrary third-party file the poster only linked to.
+      // biome-ignore lint/a11y/useMediaCaption: see above
       <video
         src={url}
         controls
@@ -76,7 +76,7 @@ export function MediaEmbed({ url, kind }: { url: string; kind: MediaKind }) {
   }
 
   return (
-    // biome-ignore lint/a11y/useMediaCaptions: same as video above.
+    // biome-ignore lint/a11y/useMediaCaption: same as video above.
     <audio
       src={url}
       controls

@@ -376,6 +376,124 @@ export async function getThreadTicker(rootId: number): Promise<string | null> {
 }
 
 /**
+ * What one author holds in one thread, counted in posts.
+ *
+ * ⚠ THIS IS THE CONTRIBUTION RECORD, NOT A TOKEN BALANCE. Nothing is minted
+ * (TOKENS.md: no mint, no fee, no supply), so there is no ledger to read. Under
+ * one-token-per-contribution the two would coincide — your holding in a thread
+ * IS the number of posts you put in it — which is exactly why this can be shown
+ * now and why it must never be *called* a balance in the UI. If minting ever
+ * ships, this becomes a read of the real thing rather than a stand-in, and every
+ * caller keeps working.
+ *
+ * Keyed on `pubkey`, matching `fairness/weights.ts`. The address is derived from
+ * the pubkey, so counting by pubkey is the same partition with one less
+ * conversion that could disagree.
+ */
+export async function getThreadShare(
+  rootId: number,
+  pubkey: string
+): Promise<{ mine: number; total: number }> {
+  if (!Number.isInteger(rootId) || rootId <= 0 || !pubkey) return { mine: 0, total: 0 };
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN pubkey = ? THEN 1 ELSE 0 END) AS mine
+         FROM posts WHERE root_id = ?`
+    )
+    .get(pubkey, rootId) as { total: number; mine: number | null };
+  return { mine: row?.mine ?? 0, total: row?.total ?? 0 };
+}
+
+export interface Holding {
+  root_id: number;
+  /** Ticker ancestry, root-first. Empty when the thread was never named. */
+  path: string[];
+  /** Posts by this author in the thread — the tokens they would hold. */
+  mine: number;
+  /** Posts in the thread by everyone — the tokens the thread would have issued. */
+  total: number;
+}
+
+/**
+ * Every thread this author has contributed to, with their share of each.
+ *
+ * One aggregate query over the threads they appear in, rather than a query per
+ * thread: this runs whenever the You modal opens, and a per-thread lookup would
+ * turn a wallet panel into N round-trips for someone who posts a lot.
+ *
+ * Capped at 50. A cap is silent truncation, so it is ordered by holding size —
+ * what falls off the end is the tail the reader cares least about, not an
+ * arbitrary slice. See `getThreadShare` for why posts stand in for tokens.
+ */
+export async function getHoldings(pubkey: string): Promise<Holding[]> {
+  if (!pubkey || typeof pubkey !== "string") return [];
+  const rows = db
+    .prepare(
+      `SELECT p.root_id AS root_id,
+              SUM(CASE WHEN p.pubkey = ? THEN 1 ELSE 0 END) AS mine,
+              COUNT(*) AS total
+         FROM posts p
+        WHERE p.root_id IN (
+                SELECT DISTINCT root_id FROM posts
+                 WHERE pubkey = ? AND root_id IS NOT NULL
+              )
+        GROUP BY p.root_id
+        ORDER BY mine DESC, total DESC
+        LIMIT 50`
+    )
+    .all(pubkey, pubkey) as { root_id: number; mine: number; total: number }[];
+  if (!rows.length) return [];
+
+  // Names for the threads that have one, in a single lookup. A thread with no
+  // ticker is normal — most posts are unnamed — and renders by its content.
+  const placeholders = rows.map(() => "?").join(",");
+  const named = db
+    .prepare(
+      `SELECT root_id, symbol FROM tickers
+        WHERE root_id IN (${placeholders})
+        ORDER BY post_id ASC, symbol ASC`
+    )
+    .all(...rows.map((r) => r.root_id)) as { root_id: number; symbol: string }[];
+  const symbolFor = new Map<number, string>();
+  for (const n of named) if (!symbolFor.has(n.root_id)) symbolFor.set(n.root_id, n.symbol);
+
+  // Ancestry walk, memoised across rows: sibling threads share ancestors, so the
+  // same parent chain would otherwise be re-walked once per holding.
+  const parentStmt = db.prepare("SELECT parent_symbol FROM tickers WHERE symbol = ?");
+  const pathCache = new Map<string, string[]>();
+  const pathFor = (symbol: string): string[] => {
+    const cached = pathCache.get(symbol);
+    if (cached) return cached;
+    const path: string[] = [symbol];
+    const seen = new Set<string>([symbol]);
+    let current = symbol;
+    // Same depth cap and cycle guard as getTickerPath, for the same reason:
+    // "impossible" data is what hangs a render path.
+    for (let depth = 0; depth < 16; depth++) {
+      const row = parentStmt.get(current) as { parent_symbol: string | null } | undefined;
+      const parent = row?.parent_symbol;
+      if (!parent || seen.has(parent)) break;
+      path.unshift(parent);
+      seen.add(parent);
+      current = parent;
+    }
+    pathCache.set(symbol, path);
+    return path;
+  };
+
+  return rows.map((r) => {
+    const symbol = symbolFor.get(r.root_id);
+    return {
+      root_id: r.root_id,
+      path: symbol ? pathFor(symbol) : [],
+      mine: r.mine,
+      total: r.total,
+    };
+  });
+}
+
+/**
  * Unfurl a post's first link and attach it. Never throws — it runs detached, so
  * a rejection here would be an unhandled rejection with nothing to catch it.
  */

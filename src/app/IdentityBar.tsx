@@ -12,6 +12,8 @@ import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useInstallContext } from "@/contexts/InstallContext";
 import { satsToDollars, useBsvPrice } from "@/hooks/useBsvPrice";
 import { useCurrencyMode } from "@/hooks/useCurrencyMode";
+import { formatShare } from "@/lib/share";
+import { titleCaseTicker } from "@/lib/ticker";
 import {
   downloadBackup,
   getStoredHint,
@@ -21,6 +23,7 @@ import {
 } from "@/services/bsv/backup-template";
 import { encryptWif } from "@/services/bsv/crypto";
 import { getStoredAnonName, isEffectivelyProtected, unlockIdentity } from "@/services/bsv/identity";
+import { getHoldings, type Holding } from "./actions";
 import { FundAddress } from "./FundAddress";
 
 const BACKED_UP_KEY = "opencook_identity_backed_up";
@@ -128,6 +131,11 @@ export function IdentityChip(): React.JSX.Element | null {
   const [activityExpanded, setActivityExpanded] = useState(false);
   const [chartExpanded, setChartExpanded] = useState(true);
 
+  // Threads this identity holds a share of. See `getHoldings` — this is the
+  // contribution record, not a minted balance.
+  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [holdingsExpanded, setHoldingsExpanded] = useState(false);
+
   // Deposit modal
   const [showDeposit, setShowDeposit] = useState(false);
   // Manage identity modal
@@ -170,6 +178,7 @@ export function IdentityChip(): React.JSX.Element | null {
     setKeyRevealed(false);
     setCopied(false);
     setActivityExpanded(false);
+    setHoldingsExpanded(false);
     setJustBackedUp(false);
   }, []);
 
@@ -253,6 +262,27 @@ export function IdentityChip(): React.JSX.Element | null {
       })
       .catch(() => setEarnedSats(0));
   }, [identity?.address]);
+
+  // Holdings load when the panel opens, not on a poll. A share only moves when
+  // somebody posts, which is far slower than the 30s earnings cadence, and this
+  // is a DB aggregate rather than a cached summary — polling it would be the
+  // most expensive query in the panel refreshing to show the same numbers.
+  useEffect(() => {
+    if (!open || !identity?.pubkey) return;
+    let live = true;
+    void getHoldings(identity.pubkey)
+      .then((h) => {
+        if (live) setHoldings(h);
+      })
+      .catch(() => {
+        // Non-critical panel section: an empty list renders the "nothing yet"
+        // copy, which is the honest state for a failed read too.
+        if (live) setHoldings([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, identity?.pubkey]);
 
   // Background earnings poll (30s) — drives the chip flash for real earnings.
   // When the dropdown is open we also refresh the activity feed and earnings
@@ -1552,6 +1582,79 @@ export function IdentityChip(): React.JSX.Element | null {
                     );
                   })}
                 </div>
+              )}
+            </div>
+
+            {/* ── Threads you hold a share of ──
+                ⚠ NOT LABELLED A BALANCE, DELIBERATELY. Nothing is minted yet
+                (TOKENS.md), and the manifesto says so in as many words: "there
+                is nothing to buy, hold or trade". A panel headed "Tokens" with
+                numbers in it would quietly contradict the front page. What is
+                shown is the contribution record those tokens would be issued
+                against, which is real today — and under
+                one-token-per-contribution it is the same number. The footnote is
+                load-bearing: without it this reads as a wallet. */}
+            <div className="px-3 py-2.5 border-b border-amber-400/10 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">
+                  Your threads
+                </span>
+                {holdings.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setHoldingsExpanded((v) => !v)}
+                    className="relative -my-2 py-2 text-[11px] text-zinc-100 font-medium underline underline-offset-2 decoration-zinc-600 hover:decoration-zinc-400 transition-colors"
+                  >
+                    {holdingsExpanded ? "Show less" : `View all ${holdings.length}`}
+                  </button>
+                )}
+              </div>
+              {holdings.length === 0 ? (
+                <p className="text-[11px] text-zinc-600 leading-relaxed">
+                  Post an idea and your share of the thread shows up here.
+                </p>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    {(holdingsExpanded ? holdings : holdings.slice(0, 3)).map((h) => (
+                      <div
+                        key={h.root_id}
+                        className="flex items-center justify-between gap-2 text-[11px]"
+                      >
+                        <span className="truncate text-zinc-400">
+                          {h.path.length ? (
+                            h.path.map((seg, i) => (
+                              <span key={seg}>
+                                {i > 0 && <span className="text-zinc-700">/</span>}
+                                <span
+                                  className={
+                                    i === h.path.length - 1 ? "text-amber-400" : "text-zinc-600"
+                                  }
+                                >
+                                  ${titleCaseTicker(seg)}
+                                </span>
+                              </span>
+                            ))
+                          ) : (
+                            // An unnamed thread still holds a real share, so it
+                            // gets a row — identified by the id its URL uses.
+                            <span className="text-zinc-500">Thread #{h.root_id}</span>
+                          )}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2 font-mono tabular-nums">
+                          <span className="text-zinc-600">
+                            {h.mine}/{h.total}
+                          </span>
+                          <span className="text-amber-400">{formatShare(h.mine, h.total)}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-zinc-600">
+                    One post, one token &mdash; not minted yet. This is the record they&rsquo;d be
+                    issued against.
+                  </p>
+                </>
               )}
             </div>
 

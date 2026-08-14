@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useIdentityContext } from "@/contexts/IdentityContext";
+import { formatShare } from "@/lib/share";
 import { ROOT_TICKER, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
-import { getThread, getThreadTicker, getTickerPath } from "./actions";
+import { getThread, getThreadShare, getThreadTicker, getTickerPath } from "./actions";
+import { IdentityChip } from "./IdentityBar";
 import { PostContent } from "./PostContent";
 import { PostForm } from "./PostForm";
 import { BootButton } from "./PostList";
@@ -66,13 +69,31 @@ export function ThreadView({
   const [path, setPath] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [optimistic, setOptimistic] = useState<OptimisticReply[]>([]);
+  const [share, setShare] = useState<{ mine: number; total: number } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const { identity } = useIdentityContext();
 
   const refresh = useCallback(async () => {
     const thread = await getThread(rootId);
     setPosts(thread);
     setLoading(false);
   }, [rootId]);
+
+  // Your stake in the thread you are reading. Recomputed alongside the poll (not
+  // on its own timer) so the share can never describe a different revision of
+  // the thread than the posts underneath it.
+  const pubkey = identity?.pubkey;
+  const refreshShare = useCallback(async () => {
+    if (!pubkey) {
+      setShare(null);
+      return;
+    }
+    setShare(await getThreadShare(rootId, pubkey));
+  }, [rootId, pubkey]);
+
+  useEffect(() => {
+    void refreshShare();
+  }, [refreshShare]);
 
   useEffect(() => {
     void refresh();
@@ -99,10 +120,16 @@ export function ThreadView({
   // while the tab is hidden so a backgrounded thread costs nothing.
   useEffect(() => {
     const id = setInterval(() => {
-      if (!document.hidden) void refresh();
+      if (!document.hidden) {
+        void refresh();
+        // Someone else replying dilutes your share, so it has to move on the same
+        // tick as the posts — a stale percentage beside fresh replies is worse
+        // than no percentage.
+        void refreshShare();
+      }
     }, POLL_MS);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [refresh, refreshShare]);
 
   // Escape closes, matching every other overlay in the app.
   useEffect(() => {
@@ -155,75 +182,105 @@ export function ThreadView({
   return (
     <div className="fixed inset-0 z-40 flex flex-col h-[100dvh] bg-black">
       <header className="shrink-0 border-b border-zinc-800 bg-black">
-        <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Back to feed"
-            className="relative -m-2 p-2 text-zinc-400 hover:text-amber-400 transition-colors"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+        {/* `justify-between` with the crumb group and the chip as the two ends:
+            the overlay covers the whole viewport including the app header, so
+            without the chip here the wallet simply disappears on every shared
+            ticker link — the exact URLs most likely to be someone's first
+            landing. `min-w-0` on the crumb group so a deep path truncates
+            instead of pushing the chip off-screen. */}
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Back to feed"
+              className="relative -m-2 p-2 shrink-0 text-zinc-400 hover:text-amber-400 transition-colors"
             >
-              <path d="M19 12H5m0 0l7 7m-7-7l7-7" />
-            </svg>
-          </button>
-          <div>
-            {/* Headline the thread by the name it was claimed under. A thread
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M19 12H5m0 0l7 7m-7-7l7-7" />
+              </svg>
+            </button>
+            <div className="min-w-0">
+              {/* Headline the thread by the name it was claimed under. A thread
                 that carries a ticker IS that idea, so the symbol is the title
                 and "Thread" is only the fallback for unnamed ones. */}
-            <h1 className="text-base font-semibold tracking-tight leading-none">
-              {path.length ? (
-                path.map((seg, i) => {
-                  const isLeaf = i === path.length - 1;
-                  return (
-                    <span key={seg}>
-                      {i > 0 && <span className="text-zinc-600 mx-0.5">/</span>}
-                      {/* The leaf is this thread — a link to where you already are
+              <h1 className="text-base font-semibold tracking-tight leading-none">
+                {path.length ? (
+                  path.map((seg, i) => {
+                    const isLeaf = i === path.length - 1;
+                    return (
+                      <span key={seg}>
+                        {i > 0 && <span className="text-zinc-600 mx-0.5">/</span>}
+                        {/* The leaf is this thread — a link to where you already are
                           is a dead control, so only ancestors are clickable. They
                           are dimmed because they are context, not the subject. */}
-                      {isLeaf ? (
-                        <span className="text-amber-400">${titleCaseTicker(seg)}</span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            // The main feed IS the root token's thread, so the root
-                            // crumb closes the overlay rather than opening a thread
-                            // that would duplicate the feed behind it.
-                            if (seg === ROOT_TICKER) onClose();
-                            else onOpenTicker?.(seg);
-                          }}
-                          className="text-zinc-500 hover:text-amber-300 transition-colors"
-                          title={`Go to $${titleCaseTicker(seg)}`}
-                        >
-                          ${titleCaseTicker(seg)}
-                        </button>
-                      )}
+                        {isLeaf ? (
+                          <span className="text-amber-400">${titleCaseTicker(seg)}</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // The main feed IS the root token's thread, so the root
+                              // crumb closes the overlay rather than opening a thread
+                              // that would duplicate the feed behind it.
+                              if (seg === ROOT_TICKER) onClose();
+                              else onOpenTicker?.(seg);
+                            }}
+                            className="text-zinc-500 hover:text-amber-300 transition-colors"
+                            title={`Go to $${titleCaseTicker(seg)}`}
+                          >
+                            ${titleCaseTicker(seg)}
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })
+                ) : ticker ? (
+                  <span className="text-amber-400">${titleCaseTicker(ticker)}</span>
+                ) : (
+                  <span className="text-zinc-100">Thread</span>
+                )}
+              </h1>
+              <p className="text-[11px] text-zinc-500 tracking-wide mt-0.5">
+                {loading
+                  ? "Loading…"
+                  : replyCount === 0
+                    ? "No replies yet"
+                    : `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
+                {/* Your stake in the thread you are looking at. Shown only when you
+                  actually hold some: "0%" on every thread you have never posted
+                  in would be noise on most of them, and would read as a loss
+                  rather than an absence. */}
+                {share && share.mine > 0 && (
+                  <>
+                    <span className="text-zinc-700 mx-1.5">·</span>
+                    <span
+                      className="text-amber-400/90 font-mono tabular-nums"
+                      title={`You wrote ${share.mine} of ${share.total} posts in this thread`}
+                    >
+                      {formatShare(share.mine, share.total)}
                     </span>
-                  );
-                })
-              ) : ticker ? (
-                <span className="text-amber-400">${titleCaseTicker(ticker)}</span>
-              ) : (
-                <span className="text-zinc-100">Thread</span>
-              )}
-            </h1>
-            <p className="text-[11px] text-zinc-500 tracking-wide mt-0.5">
-              {loading
-                ? "Loading…"
-                : replyCount === 0
-                  ? "No replies yet"
-                  : `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
-            </p>
+                    <span className="text-zinc-600"> yours</span>
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+          {/* Same chip as the app header — the same component, so the locked /
+              unlocked / read-only states cannot diverge between the feed and a
+              thread. */}
+          <div className="shrink-0">
+            <IdentityChip />
           </div>
         </div>
       </header>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatShare } from "@/lib/share";
 import { distinctTickers, titleCaseTicker } from "@/lib/ticker";
 import { getTickerUsage, resolveTickers } from "./actions";
 
@@ -68,20 +69,16 @@ export function TickerHint({ content }: { content: string }) {
         // Include the post being written, so a brand-new name reads 100% rather
         // than 0% — the author is about to become its first use.
         const total = Math.max(1, s.threads + (s.claimed ? 0 : 1));
-        const share = 100 / total;
-        const pct =
-          share >= 10
-            ? share.toFixed(0)
-            : share >= 1
-              ? share.toFixed(1)
-              : share.toFixed(share >= 0.1 ? 2 : 4);
+        // Shared with the thread header and the wallet — see lib/share.ts for why
+        // this must not be formatted locally.
+        const pct = formatShare(1, total);
         return (
           <div key={s.symbol} className="flex items-center gap-2 text-[11px] leading-tight">
             <span className="font-medium text-amber-400">${titleCaseTicker(s.symbol)}</span>
             <span
               className={`font-mono tabular-nums ${s.claimed ? "text-zinc-500" : "text-emerald-400"}`}
             >
-              {pct}%
+              {pct}
             </span>
             <span className="text-zinc-500">
               {s.claimed ? (

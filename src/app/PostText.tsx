@@ -29,13 +29,16 @@ export function PostText({
   const parts: React.ReactNode[] = [];
   let cursor = 0;
 
-  segments.forEach((seg, i) => {
+  // Keyed on the segment's offset in the content, not its array index: offsets
+  // are unique and stable for a given post, so editing nothing keeps the same
+  // keys while an index would renumber every node after any insertion.
+  segments.forEach((seg) => {
     if (seg.start > cursor) parts.push(content.slice(cursor, seg.start));
 
     if (seg.kind === "url") {
       parts.push(
         <a
-          key={`u-${i}`}
+          key={`u-${seg.start}`}
           href={seg.url}
           target="_blank"
           rel="noopener noreferrer"
@@ -48,7 +51,7 @@ export function PostText({
     } else if (onOpenTicker) {
       parts.push(
         <button
-          key={`t-${seg.symbol}-${i}`}
+          key={`t-${seg.start}`}
           type="button"
           onClick={(e) => {
             e.stopPropagation();

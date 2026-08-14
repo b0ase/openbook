@@ -642,3 +642,44 @@ than two — which began to matter the moment `LAUNCH_TS` opened the pool.
 operator wallet separate from the contributor identity is what stops "the platform cut" and "a
 contributor's earnings" becoming indistinguishable — which is the asymmetry this fork exists to
 argue against.
+
+## Holdings are shown as the contribution record, not a balance (settled 2026-08-14)
+
+The wallet panel ("Your threads") and the thread header now show a **percentage share of each
+thread**, computed as *your posts in the thread ÷ all posts in the thread* — `getHoldings` and
+`getThreadShare` in `actions.ts`, keyed on `pubkey` the same way `fairness/weights.ts` is.
+
+**Why posts stand in for tokens.** Nothing is minted (TOKENS.md: no mint, no fee, no supply)
+and the manifesto says so on the front page — *"there is nothing to buy, hold or trade"*. A
+panel headed "Tokens" with numbers in it would quietly contradict that. But under
+**one-token-per-contribution**, a holding and a post count are *the same number*, so the
+contribution record can be shown honestly today and becomes a read of the real ledger if
+minting ever ships. Every caller keeps working across that change.
+
+Consequences that are deliberate, not oversights:
+
+- **Labelled "Your threads", never "Balance"**, and carries the footnote *"One post, one token
+  — not minted yet."* The footnote is load-bearing; without it the panel reads as a wallet.
+- **This must never feed allocation.** Same rule as the ticker saturation gauge: posting is
+  free, and anything free that confers value destroys the anchor.
+- **`formatShare` (`lib/share.ts`) is the single formatter** for all three surfaces — compose
+  hint, thread header, wallet. Three copies of "round it sensibly" would disagree by a digit on
+  the same figure, and a reader who sees 0.3% in one panel and 0.25% in another stops trusting
+  both. It never prints `0%` for a holding that exists (`<0.01%` instead) — "0%" reads as *you
+  have nothing* when the truth is *you have a little*.
+- **The share is refreshed on the thread poll, not its own timer**, so it can never describe a
+  different revision of the thread than the posts beside it.
+- **Holdings load on panel open, not on a poll.** A share only moves when someone posts, which
+  is far slower than the 30s earnings cadence, and this is a DB aggregate rather than a cached
+  summary.
+
+## The identity chip belongs in the thread overlay too (settled 2026-08-14)
+
+`ThreadView` is `fixed inset-0` and covers the app header, so on every `/$ticker/...` URL the
+wallet chip simply disappeared — on exactly the links most likely to be someone's first landing,
+since a ticker path is the thing people share. `<IdentityChip />` now renders in the overlay
+header as well.
+
+**The same component, not a copy.** The chip carries the locked / unlocked / read-only states
+and the sign-in trigger; a second implementation would drift from the header's on precisely the
+paths that are hardest to notice.

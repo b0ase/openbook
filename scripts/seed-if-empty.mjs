@@ -122,7 +122,10 @@ function topUpFromSeed() {
     // timeline silently becomes neither ours nor theirs, which is the exact
     // outcome this whole reconciliation exists to avoid.
     const seedContent = new Map(
-      src.prepare("SELECT id, content FROM posts").all().map((r) => [r.id, r.content])
+      src
+        .prepare("SELECT id, content FROM posts")
+        .all()
+        .map((r) => [r.id, r.content])
     );
     const liveRows = live.prepare("SELECT id, content FROM posts").all();
     const diverged = liveRows.filter((r) => seedContent.get(r.id) !== r.content);
@@ -158,13 +161,13 @@ function topUpFromSeed() {
       }
     });
     run(rows);
-    console.log(`[seed] Topped up ${rows.length} inherited post(s): ids ${liveMax + 1}..${seedMax}`);
+    console.log(
+      `[seed] Topped up ${rows.length} inherited post(s): ids ${liveMax + 1}..${seedMax}`
+    );
   } catch (err) {
     // Never crash startup over this — the app is perfectly usable without the
     // last few inherited posts, and the next boot re-attempts.
-    console.error(
-      `[seed] Top-up skipped: ${err instanceof Error ? err.message : String(err)}`
-    );
+    console.error(`[seed] Top-up skipped: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     try {
       live?.close();
