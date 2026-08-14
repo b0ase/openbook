@@ -81,6 +81,46 @@ export function applyThreadingMigration(database: Db): void {
   // write cost on every insert. Re-measure before adding one back.
 }
 
+/**
+ * Link previews (see the unfurl service). One row per distinct URL, keyed by a
+ * hash of the normalised URL, so a link shared by a hundred posts is fetched once.
+ *
+ * `posts.preview_hash` points at it. Nullable, because most posts have no link
+ * and because unfurling is fire-and-forget — a post exists before its preview does.
+ *
+ * ⚠ FAILURES ARE ROWS TOO. A blocked or dead URL is stored with a non-'ok' status
+ * rather than left absent, so a hostile link is fetched ONCE and then answered from
+ * the table. Without that, every post of a bad URL is a fresh outbound request.
+ *
+ * Exported and parameterised for the same reason as applyThreadingMigration:
+ * so it can be tested against a schema that predates it.
+ */
+export function applyLinkPreviewMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS link_previews (
+      url_hash TEXT PRIMARY KEY,
+      url TEXT NOT NULL,
+      title TEXT,
+      description TEXT,
+      image_url TEXT,
+      site_name TEXT,
+      status TEXT NOT NULL,
+      fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  addColumnIfMissing(
+    database,
+    "posts",
+    "preview_hash",
+    "preview_hash TEXT REFERENCES link_previews(url_hash)"
+  );
+
+  database.exec("CREATE INDEX IF NOT EXISTS idx_posts_preview_hash ON posts(preview_hash)");
+  // Serves the re-fetch sweep: find stale or failed rows without scanning.
+  database.exec("CREATE INDEX IF NOT EXISTS idx_link_previews_status ON link_previews(status)");
+}
+
 try {
   db = new Database(process.env.DATABASE_PATH || path.join(process.cwd(), "local.db"));
 } catch (err) {
@@ -140,6 +180,9 @@ try {
   // Threading columns, backfill and indexes — see THREADS.md. Extracted so the
   // backfill can be tested against a real pre-threading schema.
   applyThreadingMigration(db);
+
+  // Link previews table + posts.preview_hash.
+  applyLinkPreviewMigration(db);
 
   // Boot grants — free boot tracking per user (no custody)
   db.exec(`

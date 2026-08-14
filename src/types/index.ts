@@ -35,9 +35,32 @@ export interface PostRow {
    */
   parent_id: number | null;
   root_id: number | null;
+  /**
+   * Link preview (see `lib/link-preview-store.ts`). Points at `link_previews`.
+   * Null until the fire-and-forget unfurl lands — or forever, if the post has
+   * no link.
+   */
+  preview_hash: string | null;
 }
 
-export type Post = PostRow & { boot_count: number };
+/**
+ * A post's link preview, flattened onto the row by the `POST_SELECT` join.
+ *
+ * Flat rather than nested because better-sqlite3 returns rows, not object
+ * graphs. `preview_status` is `'ok'` or an `UnfurlFailure` — a failed unfurl is
+ * still recorded, so the UI can tell "not fetched yet" (all null) apart from
+ * "fetched and there was nothing to show" (status set, title null).
+ */
+export interface PostPreviewFields {
+  preview_url: string | null;
+  preview_title: string | null;
+  preview_description: string | null;
+  preview_image: string | null;
+  preview_site_name: string | null;
+  preview_status: string | null;
+}
+
+export type Post = PostRow & { boot_count: number } & Partial<PostPreviewFields>;
 
 // ── Bootboard ──────────────────────────────────────────────────────────────
 

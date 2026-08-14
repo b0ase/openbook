@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { BootIcon } from "@/components/icons/BootIcon";
+import { LinkPreviewCard } from "@/components/LinkPreviewCard";
 import { useBootContext } from "@/contexts/BootContext";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useBoot } from "@/hooks/useBoot";
@@ -336,6 +337,7 @@ export function PostList({
                   <p className="mt-1.5 text-[15px] leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">
                     {post.content}
                   </p>
+                  <LinkPreviewCard post={post} />
                 </div>
                 <div className="shrink-0 self-center">
                   <BootButton

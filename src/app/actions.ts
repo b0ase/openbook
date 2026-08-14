@@ -4,6 +4,13 @@ import { headers } from "next/headers";
 import { screenContent } from "@/lib/content-filter";
 import { db } from "@/lib/db";
 import { tryConsumeFreeBootForIp } from "@/lib/free-boot-cap";
+import {
+  attachPreviewToPost,
+  firstLinkIn,
+  hasPreview,
+  savePreview,
+  urlHash,
+} from "@/lib/link-preview-store";
 import { rateLimit } from "@/lib/rate-limit";
 import {
   FREE_BOOT_COST_SATS,
@@ -23,6 +30,7 @@ import { logPostOnChain } from "@/services/bsv/onchain";
 import { isServerSpendDisabled } from "@/services/bsv/wallet";
 import { executeBoot } from "@/services/fairness/boot-orchestrator";
 import { getBootPrice, getBootPriceForUser } from "@/services/fairness/pricing";
+import { unfurl } from "@/services/link-unfurl";
 import type { BootboardData, BootboardHistoryRow, BootboardRow, Post } from "@/types";
 
 export interface CreatePostResult {
@@ -128,47 +136,94 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   // to be swept — see anchor-sweep MIN_AGE). Fire-and-forget, single-flight.
   void sweepOrphans();
 
+  // Fire-and-forget: unfurl the first link so the feed can show a preview card.
+  // Deliberately NOT awaited — an unfurl is a network round-trip to a stranger's
+  // server, and blocking post creation on it would put someone else's latency
+  // (and downtime) directly in front of the compose box. The post is already
+  // committed; the preview attaches when it arrives and the feed poll picks it up.
+  void unfurlFirstLink(postId, trimmedContent);
+
   return { ok: true };
 }
+
+/**
+ * Unfurl a post's first link and attach it. Never throws — it runs detached, so
+ * a rejection here would be an unhandled rejection with nothing to catch it.
+ */
+async function unfurlFirstLink(postId: number, content: string): Promise<void> {
+  try {
+    const link = firstLinkIn(content);
+    if (!link) return;
+
+    // Cache hit — including a cached FAILURE — costs no outbound request. This is
+    // what stops a hostile URL from being re-fetched every time it is posted.
+    if (hasPreview(db, link)) {
+      attachPreviewToPost(db, postId, urlHash(link));
+      return;
+    }
+
+    const result = await unfurl(link);
+    const hash = result.ok
+      ? savePreview(db, {
+          url: result.url,
+          status: "ok",
+          title: result.data.title,
+          description: result.data.description,
+          imageUrl: result.data.image,
+          siteName: result.data.siteName,
+        })
+      : savePreview(db, { url: result.url, status: result.reason });
+
+    // Attach even on failure: the row records that this URL was tried and what
+    // happened, which is what makes the cache-hit path above meaningful.
+    attachPreviewToPost(db, postId, hash);
+  } catch (e) {
+    console.error(`OpenBook: link unfurl failed for post ${postId}`, e);
+  }
+}
+
+/**
+ * The one SELECT every feed read is built from.
+ *
+ * ⚠ SIX COPIES OF THIS JOIN USED TO EXIST, and adding link previews would have
+ * made it six places to keep in step. One constant instead: a column added here
+ * reaches LIVE scroll-up, ORIGIN read-forward, polling and confirmation-refresh
+ * at once, and none of them can quietly drift from the others.
+ *
+ * `p.*` carries the post's own columns (including `parent_id` / `root_id` /
+ * `preview_hash`); the preview columns are aliased flat rather than nested
+ * because better-sqlite3 returns rows, not object graphs. A post with no link,
+ * or whose unfurl has not landed yet, simply has nulls — the LEFT JOIN never
+ * drops a post.
+ */
+const POST_SELECT = `
+  SELECT p.*,
+         COALESCE(bc.boot_count, 0) as boot_count,
+         lp.url         as preview_url,
+         lp.title       as preview_title,
+         lp.description as preview_description,
+         lp.image_url   as preview_image,
+         lp.site_name   as preview_site_name,
+         lp.status      as preview_status
+  FROM posts p
+  LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
+    ON bc.post_id = p.id
+  LEFT JOIN link_previews lp
+    ON lp.url_hash = p.preview_hash
+`;
 
 export async function getPosts(beforeId?: number): Promise<Post[]> {
   if (beforeId !== undefined) {
     return db
-      .prepare(`
-      SELECT p.*, COALESCE(bc.boot_count, 0) as boot_count
-      FROM posts p
-      LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
-        ON bc.post_id = p.id
-      WHERE p.id < ?
-      ORDER BY p.id DESC
-      LIMIT 100
-    `)
+      .prepare(`${POST_SELECT} WHERE p.id < ? ORDER BY p.id DESC LIMIT 100`)
       .all(beforeId) as Post[];
   }
-  return db
-    .prepare(`
-    SELECT p.*, COALESCE(bc.boot_count, 0) as boot_count
-    FROM posts p
-    LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
-      ON bc.post_id = p.id
-    ORDER BY p.id DESC
-    LIMIT 100
-  `)
-    .all() as Post[];
+  return db.prepare(`${POST_SELECT} ORDER BY p.id DESC LIMIT 100`).all() as Post[];
 }
 
 export async function getNewPosts(sinceId: number): Promise<Post[]> {
   if (!Number.isInteger(sinceId) || sinceId < 0) return [];
-  return db
-    .prepare(`
-    SELECT p.*, COALESCE(bc.boot_count, 0) as boot_count
-    FROM posts p
-    LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
-      ON bc.post_id = p.id
-    WHERE p.id > ?
-    ORDER BY p.id DESC
-  `)
-    .all(sinceId) as Post[];
+  return db.prepare(`${POST_SELECT} WHERE p.id > ? ORDER BY p.id DESC`).all(sinceId) as Post[];
 }
 
 /**
@@ -181,14 +236,9 @@ export async function getUpdatedPosts(knownIds: number[]): Promise<Post[]> {
   // Only check posts the client already has — return those that now have a tx_id
   const placeholders = knownIds.map(() => "?").join(",");
   return db
-    .prepare(`
-    SELECT p.*, COALESCE(bc.boot_count, 0) as boot_count
-    FROM posts p
-    LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
-      ON bc.post_id = p.id
-    WHERE p.id IN (${placeholders}) AND p.tx_id IS NOT NULL
-    ORDER BY p.id DESC
-  `)
+    .prepare(
+      `${POST_SELECT} WHERE p.id IN (${placeholders}) AND p.tx_id IS NOT NULL ORDER BY p.id DESC`
+    )
     .all(...knownIds) as Post[];
 }
 
@@ -199,31 +249,14 @@ export async function getOlderPosts(beforeId: number): Promise<Post[]> {
 
 /** Oldest 100 posts, ascending (id 1 first) — the ORIGIN window. */
 export async function getOldestPosts(): Promise<Post[]> {
-  return db
-    .prepare(`
-    SELECT p.*, COALESCE(bc.boot_count, 0) as boot_count
-    FROM posts p
-    LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
-      ON bc.post_id = p.id
-    ORDER BY p.id ASC
-    LIMIT 100
-  `)
-    .all() as Post[];
+  return db.prepare(`${POST_SELECT} ORDER BY p.id ASC LIMIT 100`).all() as Post[];
 }
 
 /** Next 100 posts NEWER than afterId, ascending — ORIGIN mode reads forward. */
 export async function getForwardPosts(afterId: number): Promise<Post[]> {
   if (!Number.isInteger(afterId) || afterId < 0) return [];
   return db
-    .prepare(`
-    SELECT p.*, COALESCE(bc.boot_count, 0) as boot_count
-    FROM posts p
-    LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
-      ON bc.post_id = p.id
-    WHERE p.id > ?
-    ORDER BY p.id ASC
-    LIMIT 100
-  `)
+    .prepare(`${POST_SELECT} WHERE p.id > ? ORDER BY p.id ASC LIMIT 100`)
     .all(afterId) as Post[];
 }
 
