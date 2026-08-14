@@ -57,10 +57,11 @@ changing is the disclosure.
 - **The button must state the price.** A send button that silently spends is the one thing
   this cannot be. Mint is paid (see *Supply and dilution* — payment is what gives issuance a
   cost basis), so the button says what it costs before it is pressed.
-- **Posting must stay free.** The button only becomes Mint when a `$ticker` is present. A
-  post without one is exactly what it is today, at no cost. This is the *"paying to mint is
-  a founding act; paying to post is a different product"* line in the risks section, made
-  structural rather than a policy anyone has to remember.
+- **Posting is paid — decided 2026-08-14, reaffirmed.** An earlier draft of this section had
+  the ticker gate the cost, keeping ordinary posting free. That is no longer the model: every
+  post is a purchase (see *Supply and dilution*). The `$ticker` gesture now marks the act
+  that **opens** a thread and its supply, not the act that makes a post cost money. The
+  consequence is accepted and named under *What paid posting costs* below.
 - **A failed mint must not silently become an ordinary post**, and an ordinary post must
   never accidentally mint. `$` appears in normal prose ("$50", "$OpenBook" as a reference).
   The parse rule needs a deliberate shape, and the ambiguous cases resolve toward NOT
@@ -68,6 +69,24 @@ changing is the disclosure.
 
 **Not built.** Nothing about minting exists yet — no ticker registry, no fee, no covenant.
 Building the button before the thing it triggers would be a button that lies.
+
+### What paid posting costs
+
+Decided, not overlooked. Recorded once so it is not rediscovered as a surprise.
+
+DIRECTION.md's onboarding claim — *"no wallet downloads, no seed phrases, no 'buy crypto
+first'"*, targeting ~15% conversion against an industry ~0.3% — rests on posting being free.
+**Paid posting ends that claim as written.** A first-time user must have funded their
+address before their first post, which is the friction the 2-click onboarding was built to
+remove.
+
+The trade being accepted: a smaller number of users who are actually buying something, over
+a larger number who are posting into a system where their contribution is counted but not
+owned. That is a legitimate bet and it is the fork's whole thesis, but it is a bet.
+
+**Follow-through required:** DIRECTION.md still states the free-posting claim and must be
+updated when this ships — a stale conversion claim in the direction document is exactly the
+kind of thing that gets repeated into a pitch.
 
 ## The attachment seam
 
@@ -207,23 +226,71 @@ That is a materially weaker assumption than custody. Say that, rather than "trus
 OP_RETURN, so contribution is in principle provable on-chain. A contract that verifies it
 is much harder, but the ingredients exist.
 
-## Supply and dilution
+## Supply and dilution — pay to post, on a depleting per-thread supply
 
-Mint-on-allocation means **uncapped supply**, which has two consequences.
+**Settled 2026-08-14. This SUPERSEDES the uncapped mint-on-allocation position recorded
+below, which is kept because the reasoning that replaced it matters.**
 
-**It needs an anchor.** Free minting is free money and worth nothing. Issuance must be paid
-for by the act that triggers it — the payment gives each token a cost basis. This is what
-makes the mint price load-bearing rather than a fee bolted on.
+The model is one move: **you pay to post, and the tokens you get back are a tradable
+receipt.** There is no separate mint action, no allocation formula, no scoring step. Text is
+the unit of purchase — a longer post costs more and returns more tokens — and each thread
+has its own **depleting supply**.
 
-**Continuous dilution replaces the decay curve.** This resolves the stock-versus-flow
-tension better than the "decay-adjusted issuance" this document originally proposed:
-uncapped mint-on-contribution *is* continuous dilution, so contributor #500 is not shut out
-by a closed cap table, and no 30-day half-life is needed to prevent accumulation.
+That last part is what makes it a game rather than a fee. As a thread's supply depletes the
+price per token rises, so **users pay more and more to post less and less text.** Early in a
+thread, tokens are cheap and posts can be long; late in a thread they are expensive and
+posts are necessarily short.
+
+**Why this is the right shape.**
+
+- **One sentence explains it.** "You pay to post, you get tokens." Anything requiring a
+  formula to justify what someone received is a worse product, whatever its properties.
+- **The payment IS the proof of contribution** — see *Pay-to-mint is these two composed*.
+  Nothing has to attest that someone earned tokens; they bought them, and the script checked.
+- **Spam becomes self-pricing.** Free posting is the *free-post weight-farming* vector logged
+  as SECURITY_AUDIT **L8**. Volume now costs money, at a price that rises the more of it
+  there is.
+- **The rush is the mechanism, not a side effect.** Nobody knows what a thread will become;
+  all anyone knows is what its token is *called*. Buying early into an unproven name is the
+  risk being priced, and the curve is what pays for taking it.
+- **Threads get terser as they mature.** An emergent property worth naming: rising price per
+  byte means signal density rises over a thread's life. Late posts are expensive, so they
+  are short and deliberate.
+
+### Why a per-thread cap is now possible — and was not before
+
+*Custody: why a fixed supply cannot work* (above) still stands **as written**, and this does
+not contradict it. That section rules out a supply **minted to an address**: those tokens sit
+somewhere, and whoever holds the key custodies them.
+
+A depleting supply held **in a covenant** is a different construction. `HashToMintBsv20`
+already does exactly this — `supply -= reward` carried in the contract UTXO on every mint,
+with `hash256(outputs)` forcing the continuation. The unissued remainder is real tokens in a
+real UTXO held **by a script rather than a key**, which is the row the trilemma table already
+marked as the resolution. So the cap buys scarcity without buying a treasury.
+
+**The distinction to preserve:** a cap enforced by a covenant is fine; a cap enforced by
+someone holding the unissued supply is the thing that cannot work. Do not let a future
+"simpler" implementation quietly move the reserve to an address.
+
+### Superseded: uncapped mint-on-allocation
+
+The previous position, kept for the reasoning:
+
+> Mint-on-allocation means **uncapped supply**. It needs an anchor — free minting is free
+> money and worth nothing. Continuous dilution replaces the decay curve: uncapped
+> mint-on-contribution *is* continuous dilution, so contributor #500 is not shut out by a
+> closed cap table, and no 30-day half-life is needed to prevent accumulation.
+
+What survives: the anchor argument, which the new model satisfies more directly (the price
+is the anchor, and it rises). What does not: "contributor #500 is not shut out" is now
+**deliberately false** — later contributors get less, and paying more for it is the point.
+That is a real cost, taken knowingly, and it is what open question 7 was asking about.
 
 **The parent's share must be per-mint, not one-off.** A one-time parent allocation dilutes
-to nothing as the child grows. So it has to mean: every child mint also produces the
-parent's output, enforced by the covenant. Note the arithmetic — a 50% parent share means
-the contributor receives half of what is minted on their behalf, and supply grows at twice
+to nothing as the child grows. So every child mint also produces the parent's output,
+enforced by the covenant. Note the arithmetic — a 50% parent share means the contributor
+receives half of what is minted on their behalf, and the child's supply depletes at twice
 the contribution rate.
 
 ## BSV-20 vs BSV-21
@@ -266,10 +333,10 @@ Reasons upstream may be right. Not dismissed.
 - **sCrypt contract work on the money path.** `hash256(outputs)` covenants need OP_PUSH_TX /
   BIP-143 preimage handling. Well-trodden on BSV, but not a weekend, and mistakes are
   unrecoverable.
-- **Pay-to-post would end zero-friction onboarding.** Posting is free today; the server
-  covers ~$0.0005. DIRECTION.md's whole onboarding claim rests on it. Paying to **mint** is
-  a founding act and a natural fee; paying to **post** is a different product. Keep them
-  separate.
+- **Pay-to-post ends zero-friction onboarding.** ~~Keep them separate.~~ **SUPERSEDED
+  2026-08-14 — paid posting is now the model** (see *Supply and dilution*). The risk is
+  unchanged and real; what changed is that it is now a chosen cost rather than a thing to
+  avoid. Quantified under *What paid posting costs*.
 
 ## The unissued claim
 
@@ -314,14 +381,16 @@ question is whether others get one too.*
    many.
 5. **What does `launchTs` mean for minting?** Pre-launch genesis posts are pool-excluded —
    can their threads mint?
-6. **How many tokens does one contribution mint?** Raised 2026-08-14 and completely open.
-   *Supply and dilution* settles that issuance is uncapped and paid-for, but not the rate.
-   A flat "N tokens per contribution" makes weight meaningless; scaling by the existing
-   `weights.ts` score reuses machinery that is already tested and already resistant to the
-   gaming analysed in FAIRNESS.md. That is the obvious first answer and it has not been
-   examined.
+6. ~~**How many tokens does one contribution mint?**~~ **ANSWERED 2026-08-14:** tokens track
+   payment, and payment tracks post length against the thread's current curve price. No
+   scoring step. A `weights.ts`-based allocation was proposed and **rejected for breaking the
+   one-move property** — anything needing a formula to justify what someone received is a
+   worse product than "you paid, here are your tokens", whatever its properties.
 7. **Is there an emission curve within a thread — should early contributors get more?**
-   Raised 2026-08-14. The intuition is sound and matches how the value actually arrives:
+   **ANSWERED IN PRINCIPLE 2026-08-14 — yes, via the depleting supply.** Early contributors
+   get more because tokens are cheaper early, not because a multiplier favours them. The
+   curve's *shape* is still unset, and the cautions below still apply to how steep it is.
+   Original reasoning:
    the person who replies to a thread of 3 took a real risk on an unproven idea; the person
    who replies at 3,000 is joining something already working. A declining curve prices that
    difference. Three things have to be weighed against it, and none is settled:
@@ -341,13 +410,25 @@ question is whether others get one too.*
    None of that says no. It says the curve's shape is an economic decision with a security
    consequence, and it should be made after question 1, not before.
 
-**On hard-capping supply** — asked again 2026-08-14, and it is not open: see *Custody: why a
-fixed supply cannot work*. The objection is mechanical rather than economic. In a UTXO
-model a minted supply has to sit at an address, and whoever holds that key custodies it, so
-a cap does not buy scarcity — it buys a treasury and the counterparty risk that comes with
-it. Uncapped mint-on-allocation is what lets the design stay non-custodial. The scarcity
-intuition behind the question is real, but the place to express it is the emission rate
-(question 6) and the curve (question 7), not a ceiling.
+8. **What happens when a thread's supply is exhausted?** Open, and it is the question this
+   model has to answer. If posting requires minting and there is nothing left to mint, the
+   thread becomes unpostable. Three readings, none chosen:
+   - **Threads fill up and close.** Defensible, even elegant — a thread has a lifetime and
+     then it is history. But a genuinely valuable discussion getting locked because it was
+     popular is a bad failure, and it is unrecoverable.
+   - **Posting continues, minting stops.** The thread stays alive; late posts are free and
+     mint nothing. Keeps discussion open but removes the incentive exactly where the thread
+     has proven itself.
+   - **Supply is large enough that exhaustion is theoretical.** Avoids the choice rather than
+     making it, and "theoretical" has a way of arriving.
+
+**On hard-capping supply** — asked 2026-08-14, initially answered "not open", then **resolved
+the other way the same day.** The original objection was mechanical: a minted supply has to
+sit at an address, and whoever holds that key custodies it. That objection is still correct
+about a supply held at an *address* — but a depleting supply held in a **covenant** is a
+different construction, already demonstrated by `HashToMintBsv20`, and it delivers the
+scarcity without the treasury. See *Why a per-thread cap is now possible — and was not
+before*. Per-thread supply is capped and depleting; total supply across the tree is not.
 
 ## Build order
 

@@ -2,6 +2,47 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-14 (token model) — Pay to post, depleting per-thread supply
+
+- **Category: direction (TOKENS.md only — no code).** The token model moved from open to a
+  chosen shape. Owner's design, recorded with the reasoning that got there.
+- **The model: one move — pay to post, tokens back as a tradable receipt, on a DEPLETING
+  per-thread supply.** Text is the unit of purchase (longer post = more cost = more tokens),
+  and as a thread's supply depletes the price rises, so users pay more and more to post less
+  and less text. No separate mint action, no allocation formula, no scoring step.
+- **A `weights.ts`-based allocation was proposed and REJECTED** for breaking the one-move
+  property. Recorded because the rejection is the point: anything needing a formula to
+  justify what someone received is a worse product than "you paid, here are your tokens".
+- **The hard-cap question reversed within the same day, correctly.** First answered "not
+  open — a fixed supply must sit at an address, so a cap buys a treasury, not scarcity".
+  That objection holds only for supply held at an *address*. A depleting supply held in a
+  **covenant** is a different construction, already demonstrated by `HashToMintBsv20`
+  (`supply -= reward` carried in the contract UTXO, `hash256(outputs)` forcing the
+  continuation) — which is the row TOKENS.md's own trilemma table already marked as the
+  resolution. Per-thread supply is capped and depleting; total supply across the tree is not.
+  **The distinction to preserve: a cap enforced by a covenant is fine, a cap enforced by
+  someone holding the unissued supply is not.**
+- **Open questions 6 and 7 answered by the model.** 6 (how many tokens per contribution) —
+  tokens track payment, payment tracks length against the curve. 7 (early-contributor curve)
+  — yes, via the depleting supply: early contributors get more because tokens are cheaper
+  early, not because a multiplier favours them. The curve's *shape* is still unset and the
+  steepness cautions still apply.
+- **New open question 8: what happens when a thread's supply is exhausted?** The question
+  this model has to answer — threads fill up and close, or posting continues while minting
+  stops, or the supply is "large enough". None chosen. A valuable thread getting locked
+  because it was popular is an unrecoverable failure.
+- **Paid posting accepted as a cost, not overlooked.** It ends DIRECTION.md's zero-friction
+  onboarding claim (~15% vs industry ~0.3%) — a first-time user must fund an address before
+  their first post. Raised twice, reaffirmed twice, so recorded as a chosen trade with a
+  follow-through flagged: **DIRECTION.md still states the free-posting claim and must be
+  updated when this ships.** The corresponding "keep minting and posting separate" risk
+  bullet is marked SUPERSEDED rather than deleted.
+- **Also recorded:** securities exposure rises (an early-buyer-advantage curve on a name
+  nobody can evaluate is the Friend.tech mechanism DIRECTION.md's own table indicts), and
+  self-dealing needs a rule — an early multiplier plus self-replies is a founder allocation
+  by stealth.
+- **Still NOT built:** everything token. No ticker registry, no mint, no fee, no covenant.
+
 ## 2026-08-14 (later) — Threading step 4 (thread UI), $OpenBook title, token direction
 
 - **Category: feature + brand.** Finished THREADS.md **step 4** — threading is now complete end to end and user-visible. Pushed the earlier threading + title commits to origin.
