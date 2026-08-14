@@ -662,6 +662,59 @@ tempting to build early, the answer is no, and the reason is the sentence above.
 percentage of each thread (`getHoldings` / `getThreadShare` in `src/app/actions.ts`). **Not
 built:** citation-minting of additional units, and the market.
 
+## The unit: fungible token, non-fungible instances (owner's taxonomy, 2026-08-14)
+
+**Owner's formulation, recorded verbatim in substance:** invoking `$Parent` mints a COPY, which
+the invoker pays for, buys, and keeps. There were one `$Parent` in circulation; now there are two
+— the original author holds theirs, the invoker holds the new one. Each instance carries a
+unique serial, and the parent token **does not distinguish between its instances**: it treats
+them all as fungible units of itself.
+
+**This is a semi-fungible token, and the analogy is a banknote.** Every £10 note has a unique
+serial and is individually traceable, but no shop treats one as worth more than another —
+non-fungible in identity, fungible in exchange. That is exactly the structure described, and it
+is a real, well-understood shape rather than an exotic one.
+
+**It maps directly onto the BSV stack we are already on.** 1Sat Ordinals gives each unit its own
+satoshi with a unique outpoint (`txid:vout`) — the serial number, for free, already immutable —
+while BSV-21 aggregates those units into a fungible supply under one `sym`. So the taxonomy the
+owner reasoned to independently is what 1Sat/BSV-21 already implements. **This is a strong signal
+the model is buildable as specified** rather than needing a bespoke contract.
+
+**Two minting paths were described, and they are ONE rule.** (a) Quoting `$Parent` from
+elsewhere. (b) Writing anything inside `$Parent`'s thread. Both are the same act —
+**participation IS invocation** — and collapsing them means one rule to reason about instead of
+two that could drift. Worth noting: **path (b) already exists in the code.** `getHoldings` counts
+an author's posts in a thread as their holding in it, which is precisely "writing in the thread
+mints you a unit". Path (a), quoting from outside, is the unbuilt extension.
+
+**Supply stays bounded, so this does not contradict the depleting-supply model.** Every
+invocation mints, but only until the thread's supply is exhausted, at which point the thread
+closes (see *Closure*). Early units are cheap and later ones dear, so a founder's compensation
+for dilution is that theirs cost least — which is the manifesto's existing "as it fills up the
+tokens get scarcer and cost more", arrived at from the other direction.
+
+### ⚠ OPEN — the separator is ambiguous, and it will harden into consensus
+
+The owner wrote instances as `$parent/$post-1234h21huwery`. That collides with the meaning `/`
+ALREADY has: `/$openbook/$test` means *`$Test` is a distinct CHILD TOKEN of `$OpenBook`*. Using
+the same separator for *an instance of `$Parent`* makes one syntax mean two different things —
+child token vs serial of the same token — and that is precisely the kind of ambiguity that
+becomes unfixable once URLs are shared and records are on-chain.
+
+**Recommendation: `/` for lineage, `#` for serial.** `$OpenBook/$Test` is a child token;
+`$Parent#1234h21huwery` is instance 1234h21huwery *of* `$Parent`. `#` already reads as a serial
+in ordinary English ("Issue #42"), and the two can then never be confused by a reader or a parser.
+
+**⚠ SECOND HAZARD, and this one is a squatting vector: a serial must NOT live in the ticker
+namespace.** If an instance is written `$post-1234h21huwery` with a leading `$`, then by the
+existing parse rule it IS a claimable ticker — so someone could *claim the name of somebody
+else's serial*, and first-claim-wins would let them. Serials must be structurally outside the
+namespace `ticker.ts` governs. `#` achieves that too, since `findTickers` requires a leading `$`.
+
+**Not built.** Recorded so the taxonomy is fixed before anything mints. Nothing here changes the
+settled gate: minting of any kind ships WITH paid posting, never before it.
+
 ## Non-goals
 
 - Not a presale, not a public sale, not a fundraise. Tokens are earned or bought at mint,
