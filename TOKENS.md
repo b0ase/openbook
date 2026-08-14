@@ -1243,14 +1243,162 @@ different construction, already demonstrated by `HashToMintBsv20`, and it delive
 scarcity without the treasury. See *Why a per-thread cap is now possible — and was not
 before*. Per-thread supply is capped and depleting; total supply across the tree is not.
 
+## Tagging: a tag is a MENTION WITH A TARGET, and it claims the word (SETTLED by the owner 2026-08-14)
+
+*"if you can tag posts you can tag tags in posts like `$MEMEPLEX ($pretentious)`."*
+
+### What prompted it — the incentive the live board exposed in its first hour
+
+Read the feed on launch day: of twelve posts, **nine were bare one-word ticker claims**
+(`$SEO`, `$KEYWORDS`, `$SEARCH`, `$SOCIALGRAPH`, `$clickme`, `$openbooks`, `$MEMEPLEX`×4) and
+three were the only posts containing an argument. **The three posts carrying the ideas minted
+nothing at all**, because no ticker appeared in their text.
+
+That is the whole problem in one screen: **the cheapest possible act — typing one word — captured
+every asset, and writing a thought captured none.** Left alone, the equilibrium is a registry, not
+a board: bare claims strictly dominate prose, because they cost the same (nothing) and take
+seconds. The owner reached this from the other direction, noticing that the *prose* post was the
+valuable one and had no token.
+
+**Tagging is the repair.** It is the only mechanism that lets a post accumulate tokens **from
+readers, after the fact**, rather than only from words its author remembered to type. It is what
+makes writing competitive with claiming.
+
+### The model: a tag is a mention with a target
+
+Do not build tagging as a fourth primitive. It is the primitive already settled in *Liking IS
+buying a unit*, with a name attached:
+
+| | what it is |
+|---|---|
+| inline `$MEMEPLEX` in prose | an **untargeted** mention |
+| tagging a post `$profound` | a mention **pointed at that post** |
+| tagging a ticker `$MEMEPLEX ($pretentious)` | a mention **pointed at that ticker** |
+
+So the edge is `(from_post, ticker, target)` where **`target ∈ {post, ticker, null}`** — one
+nullable target plus a type discriminator. Everything else is machinery that already exists:
+supply already counts *posts that mention a ticker* (`getTickerSupply`), so tags feed the existing
+counter, the existing `formatShare`, and the existing first-claim-wins PRIMARY KEY. Nothing about
+the namespace changes.
+
+⚠ **Design the target column now even though the build is gated.** Supporting `target ∈ {post,
+ticker}` from the start is one column; retrofitting a second target type onto a populated edge
+table is not.
+
+One act, four consequences: **you pay the post's current price → the author earns (revenue follows
+ownership) → you hold a unit of the post (like == boost == quote) → and `$profound`'s supply grows
+by one.**
+
+### Tagging CLAIMS the word (owner's call)
+
+Asked explicitly whether tagging with an unclaimed word claims it or merely mentions it: **it
+claims it.** The first person to tag anything `$COOL` becomes the genesis holder of `$COOL`.
+
+This is consistent with every other rule here — *claiming posts it*, one rule for every name, no
+second class of ticker — and it is deliberately a land-rush on the vocabulary of praise. That is
+the intended consequence, not an overlooked one: the common words of approval are exactly the
+namespace the platform is trying to own early, and a tag is a founding act like any other.
+
+Two mechanical notes that follow:
+
+- A tag with a **reserved** word is SKIPPED, not refused, like every other reserved claim — the
+  tag still records against any other name it carries. A reservation list must never become a word
+  filter.
+- Tagging **does not re-root** the tagged post. The retro-tagging objection recorded in the
+  Bitcoin Schema section stands: a claim re-roots its post, so retro-tagging someone else's post
+  would MOVE it out of its thread, and the post signature covers content only. A tag is a
+  **separately-signed record pointing AT a post**, so the post is untouched, unmoved, and its
+  on-chain record still matches its content.
+
+### This is the SEO thesis arriving
+
+**A tag is a keyword someone PAID to attach to a document.** That is not adjacent to *economically
+weighted SEO keywords* (DIRECTION.md) — it is the thing itself, and it is a better signal than an
+inline mention because it is deliberate and directed rather than incidental to prose. The
+`/tickers` index already ranks by supply; tags are what make that ranking legible to an outsider.
+
+### Negative tags are load-bearing, and the economics already handle them
+
+`$SCAM`, `$BORING`, `$PRETENTIOUS` are permanent, on-chain, and attached to someone else's post.
+**The griefer pays the post's owner to insult them** — harassment is a transfer TO the target.
+That defence falls out of *revenue follows ownership* for free and needs no moderation apparatus,
+which is the correct shape for this project's thin-core stance. Do not add a reporting flow for
+negative tags; the price is the flow.
+
+### ⚠ The gate is the same gate
+
+Tagging is the citation-mint act with a label on it, so it inherits the rule that already governs
+that act: **do not ship tagging before posting costs money.** If tags are free, `$COOL` is on
+everything within a day and the signal is dead before an outsider ever sees it — and the free
+units can never be recalled. *Anything free that confers value destroys the anchor.* **Cost is the
+entire filter**; without it tagging actively accelerates the noise it was built to fix.
+
+## Pay-to-post: a post is a lightweight NFT, and its ID is its OUTPOINT (owner's direction 2026-08-14)
+
+*"we also want 'pay to post' where a post IS a lightweight NFT, a distinct token with an ID. the
+ID is … the substance of the token presumably I dont know, but at least it's ON CHAIN then."*
+
+### What the ID is — and the distinction that matters
+
+**The token's identity is its origin outpoint: `<txid>_<vout>`.** The substance — content, author,
+signature, tags — is the payload carried on that output.
+
+The owner's instinct that the ID *is* the substance is nearly right, in the way that matters:
+**the outpoint cryptographically commits to the substance without being it.** The txid is a hash
+of the whole transaction, payload included, so the content cannot change without changing the ID.
+You get the property you want (identity inseparable from substance) without the failure the
+literal version causes.
+
+Why not the alternatives, each ruled out for a specific reason:
+
+- **The SQLite `id`** (what the OP_RETURN carries today) is *our database's* identifier. It is
+  meaningless if the DB is lost, and two forks of this codebase would issue colliding ids. It
+  stays as a local index; it must never be the token identity.
+- **A hash of the content** collides on purpose: if you post "gm" and I post "gm", those must be
+  **two distinct tokens with two distinct owners**. Content-addressing cannot express that.
+- **The outpoint** is chain-native, unique without coordination, survives our DB dying, and is
+  already what 1Sat Ordinals uses — so wallets, indexers and marketplaces understand it with no
+  bespoke work from us.
+
+### What has to change to make this real
+
+This is the milestone already identified in *We are ANCHORING posts, not inscribing them*, now
+with the owner's framing attached. Today a post's on-chain presence is `OP_FALSE OP_RETURN <json>`
+— a **provably unspendable** output. It is a record. **It cannot be owned or transferred, because
+there is nothing there to spend.**
+
+A lightweight NFT means the post's data rides on a **1-satoshi spendable output held at the
+author's address**. Ownership becomes "whoever can spend that satoshi", transfer becomes an
+ordinary BSV transaction, and the wallet literally holds the user's posts. That is the difference
+between an audit trail beside the token and the token itself.
+
+**Pay-to-post is what funds it**, exactly as already recorded: the author pays to mint their own
+token at the moment they create it, which is the same moment the anchor stops costing the operator
+money. Inscription, minting and paid posting remain **ONE milestone** — this section does not
+change that sequencing, it names the artifact the milestone produces.
+
+### Still open, deliberately
+
+- Whether the tag edge is its own inscription (its own outpoint, separately owned and sellable) or
+  a record referencing the tagged post's outpoint. The tag being *separately signed* is already
+  settled; whether it is separately **ownable** is not.
+- Whether `id` and `parent` stay in the OP_RETURN envelope once outpoints are canonical. They are
+  additive optional fields, so they can stay harmlessly — and the 2,006 already-anchored genesis
+  records mean `v` does not get bumped either way.
+
 ## Build order
 
 1. **Threading** — `parent_id` / `root_id`. Done; see THREADS.md.
 2. **Ticker registry + mint fee** — namespace and pricing, no chain yet.
 3. **Declare the claim** — repo-token semantics, `undeclared` default.
-4. **Pay-to-mint covenant** — the sCrypt work. Read `htm-contract` in full first.
-5. **Token-backed `WeightSource`** — the seam is already in place.
-6. **Boot revenue → token holders**, where the cascade turns on.
+4. **Paid posting + inscription** — ONE milestone, never apart. A post becomes a 1-sat
+   spendable output identified by its outpoint; the author funds their own mint. This is the
+   gate everything below waits on.
+5. **Tagging** — the edge table (`target ∈ {post, ticker, null}`), immediately after the gate
+   opens. Design the target column earlier than this; only *ship* it here.
+6. **Pay-to-mint covenant** — the sCrypt work. Read `htm-contract` in full first.
+7. **Token-backed `WeightSource`** — the seam is already in place.
+8. **Boot revenue → token holders**, where the cascade turns on.
 
 ## Key files
 

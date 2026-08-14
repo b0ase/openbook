@@ -2,6 +2,42 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-14 (tagging) — the tag model, and what a post-token's ID actually is
+
+- **Category: token model (docs only — no code changed).**
+- **Verified the two API keys are live in production.** Ask-AI streams a correct answer; the mic's
+  `GROQ_API_KEY` is set (a `400` proves it — the no-key path returns `503` and runs first). The
+  last open owner action from the previous session is closed.
+- **A false `wallet_low` alarm, and the defect behind it.** `/api/health` reported
+  `balanceSats: 0` while the server wallet held ~667k sats and was anchoring posts normally
+  (verified on-chain: posts 2035/2037 carry our OP_RETURN and pay change back to
+  `1Bnds27…`). Cause: **`getUtxos()` swallows a failed or non-ok WhatsOnChain fetch and returns
+  `[]` instead of throwing**, so `getBalance()` returns 0 and health's `balanceReadOk` stays
+  `true` — reporting `wallet_low` where `balance_read_failed` was intended. **The read failure is
+  indistinguishable from an empty wallet and fails toward the alarming answer.** NOT FIXED —
+  offered, not yet taken. It would page the operator on transient blips via UptimeRobot, and a
+  genuinely empty wallet later would look like the same false alarm.
+  - Secondary: `getBalance` transiently double-counts a UTXO and the mempool output spending it
+    (`1335613` = `667869 + 667744`) when the process has restarted and lost `_spent`.
+  - **I asserted the wallet was empty and that anchoring was broken. It was not.** The owner
+    caught it by asking whether that address was their WIF's.
+- **The incentive the live board exposed in its first hour:** nine of twelve posts were bare
+  one-word ticker claims; the three posts carrying actual arguments **minted nothing**. Typing one
+  word captured every asset; writing a thought captured none.
+- **Tagging settled and written up** (TOKENS.md + DECISIONS.md). A tag is **a mention with a
+  target** — `(from_post, ticker, target)`, `target ∈ {post, ticker, null}` — not a fourth
+  primitive; inline `$TICKER` is the `null` case. **Tagging CLAIMS the word** (owner's call; the
+  land-rush on the vocabulary of praise is intended). Does not re-root the tagged post. Negative
+  tags need no moderation flow: **the griefer pays the target**. Inherits the citation-mint gate —
+  **not before paid posting**.
+- **A post-token's ID is its origin outpoint `<txid>_<vout>`** — not a content hash (which
+  collides on purpose: two people posting "gm" must be two distinct tokens) and not the SQLite
+  `id` (our DB's identifier, colliding across forks). The outpoint **commits to the substance
+  without being it**, which is what the owner was reaching for.
+- **Build order updated:** paid posting + inscription is step 4 (ONE milestone), tagging step 5.
+- Two docs open questions recorded: whether a tag edge is separately *ownable*, and whether
+  `id`/`parent` stay in the envelope once outpoints are canonical.
+
 ## 2026-08-14 (rename + domain) — $OpenBooks, the run-up hidden, openbooks.space live
 
 - **Category: brand, feed rule, infrastructure.** Continues the session below.

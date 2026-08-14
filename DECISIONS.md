@@ -740,3 +740,42 @@ Local-dev consequence: uploads resolve to `http://localhost`, and `classifyMedia
 `https:`, so an uploaded file shows as a link rather than an inline embed in development. That
 is the linked-media rule working as designed (an http embed on an https page is blocked as mixed
 content), not an upload bug.
+
+## Tagging claims the word, and a post's token ID is its outpoint (settled by the owner 2026-08-14)
+
+**Tagging a post with a `$Ticker` CLAIMS that ticker.** Asked explicitly whether tagging an
+unclaimed word claims it or merely mentions it, the owner chose claims: the first person to tag
+anything `$COOL` becomes the genesis holder of `$COOL`. Consistent with *claiming posts it* — one
+rule for every name, no second class of ticker — and the land-rush on the vocabulary of praise is
+the intended consequence, not an oversight.
+
+**A tag is not a new primitive. It is a mention with a target** — the edge is `(from_post, ticker,
+target)` with `target ∈ {post, ticker, null}`, where an inline `$TICKER` in prose is simply the
+`null` case. Supply already counts posts mentioning a ticker, so tags reuse the existing counter,
+formatter and PRIMARY KEY. **Design the target column before shipping anything else that touches
+the edge table**; retrofitting a second target type onto a populated table is the expensive
+version. Tagging does NOT re-root the tagged post — the retro-tagging objection in TOKENS.md
+stands, and a separately-signed record pointing AT a post is what resolves it.
+
+**Why it is worth building at all:** the live board's first hour had nine bare one-word ticker
+claims and three posts containing actual arguments, and *the three posts carrying the ideas minted
+nothing*. Typing one word captured every asset; writing a thought captured none. Tagging is the
+only mechanism that lets a post accumulate tokens from READERS after the fact, which is what makes
+writing competitive with claiming.
+
+**It inherits the citation-mint gate, which is not optional: do not ship tagging before posting
+costs money.** Free tags put `$COOL` on everything within a day and the signal dies before an
+outsider sees it, and free units can never be recalled. Cost is the entire filter.
+
+**A post's token identity is its origin outpoint `<txid>_<vout>`, never its content hash and never
+the SQLite `id`.** The content-hash version collides on purpose — two people posting "gm" must be
+two distinct tokens with two distinct owners — and the SQLite id is our database's identifier,
+meaningless if the DB is lost and colliding across forks. The outpoint commits to the substance
+cryptographically (the txid hashes the payload) without being it, which is the property the owner
+was reaching for with *"the ID is the substance"*. It is also what 1Sat Ordinals already uses, so
+wallets and indexers need no bespoke work.
+
+**This makes pay-to-post concrete:** the post's data rides a 1-satoshi SPENDABLE output at the
+author's address, so ownership is "whoever can spend that satoshi". Today's `OP_FALSE OP_RETURN`
+is provably unspendable — a record beside the token, not the token. Inscription, minting and paid
+posting remain ONE milestone; this decision names the artifact that milestone produces.
