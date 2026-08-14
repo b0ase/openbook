@@ -167,6 +167,29 @@ describe("getHoldings", () => {
     expect((await getTickerSupply(["MEMEPLEX"])).MEMEPLEX).toBe(4);
   });
 
+  it("marks a truncated excerpt as cut, and does not end it mid-word", async () => {
+    const alice = author("anon_alic");
+    const long =
+      "Payment fanouts cannot be infinite because the payments would be swallowed entirely by transaction fees";
+    await alice.post(long);
+
+    const [held] = await getHoldings(alice.pubkey);
+    const excerpt = held.excerpt as string;
+    // Without the marker a cut line just stops and reads as corrupted text.
+    expect(excerpt.endsWith("\u2026")).toBe(true);
+    expect(excerpt.length).toBeLessThanOrEqual(81);
+    // Cut on a word boundary — the character before the ellipsis is not mid-word.
+    expect(long.startsWith(excerpt.slice(0, -1))).toBe(true);
+    expect(excerpt).not.toMatch(/\s\u2026$/);
+  });
+
+  it("leaves a short post's excerpt alone", async () => {
+    const alice = author("anon_alic");
+    await alice.post("short one");
+    const [held] = await getHoldings(alice.pubkey);
+    expect(held.excerpt).toBe("short one");
+  });
+
   it("does not list a post twice — once as a post and once under the name it gave", async () => {
     const alice = author("anon_alic");
     await alice.post("naming $Solo here");

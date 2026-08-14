@@ -61,6 +61,9 @@ interface ThreadViewProps {
   onFreeBootUsed?: () => void;
   /** Open the thread a `$Ticker` names — navigates between threads in place. */
   onOpenTicker?: (symbol: string) => void;
+  /** Open a thread by id — the wallet's holdings rows, which know root ids
+   *  rather than symbols. Swaps this overlay for that thread in place. */
+  onOpenThread?: (rootId: number) => void;
 }
 
 export function ThreadView({
@@ -72,6 +75,7 @@ export function ThreadView({
   onFundNeeded,
   onFreeBootUsed,
   onOpenTicker,
+  onOpenThread,
 }: ThreadViewProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [ticker, setTicker] = useState<string | null>(null);
@@ -314,7 +318,7 @@ export function ThreadView({
               unlocked / read-only states cannot diverge between the feed and a
               thread. */}
           <div className="shrink-0">
-            <IdentityChip />
+            <IdentityChip onOpenThread={onOpenThread} />
           </div>
         </div>
       </header>

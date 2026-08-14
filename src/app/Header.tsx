@@ -7,6 +7,8 @@ interface HeaderProps {
   genesisHydrated: boolean;
   genesisVisited: boolean;
   onScrollToGenesis: () => void;
+  /** Open a token's thread from the wallet panel. */
+  onOpenThread?: (rootId: number) => void;
 }
 
 export function Header({
@@ -14,6 +16,7 @@ export function Header({
   genesisHydrated,
   genesisVisited,
   onScrollToGenesis,
+  onOpenThread,
 }: HeaderProps) {
   return (
     <header className="shrink-0 border-b border-zinc-800 bg-black">
@@ -94,7 +97,7 @@ export function Header({
             ))}
         </div>
 
-        <IdentityChip />
+        <IdentityChip onOpenThread={onOpenThread} />
       </div>
     </header>
   );

@@ -872,6 +872,19 @@ export interface Holding {
  * what falls off the end is the tail the reader cares least about, not an
  * arbitrary slice. See `getThreadShare` for why posts stand in for tokens.
  */
+/** A post's first line of text, cut on a word boundary and marked as cut. */
+const EXCERPT_MAX = 80;
+function excerptOf(content: string): string {
+  const flat = content.trim().replace(/\s+/g, " ");
+  if (flat.length <= EXCERPT_MAX) return flat;
+  const cut = flat.slice(0, EXCERPT_MAX);
+  // Back up to the last space so the preview does not end mid-word. Only when
+  // one is reasonably close, otherwise a long unbroken string (a URL) would be
+  // cut to almost nothing.
+  const space = cut.lastIndexOf(" ");
+  return `${(space > EXCERPT_MAX - 20 ? cut.slice(0, space) : cut).trimEnd()}\u2026`;
+}
+
 export async function getHoldings(pubkey: string): Promise<Holding[]> {
   if (!pubkey || typeof pubkey !== "string") return [];
 
@@ -967,8 +980,10 @@ export async function getHoldings(pubkey: string): Promise<Holding[]> {
     root_id: r.root_id,
     path: [],
     // Shown INSTEAD of the txid, which identified the token honestly but told
-    // the holder nothing about which of their posts it was.
-    excerpt: r.content.trim().slice(0, 80),
+    // the holder nothing about which of their posts it was. The ellipsis marks
+    // the cut — without it a truncated line just stops mid-word and reads as
+    // corrupted text rather than a preview.
+    excerpt: excerptOf(r.content),
     tx_id: r.tx_id,
     mine: 1,
     total: 1,

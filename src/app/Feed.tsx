@@ -692,6 +692,7 @@ function FeedContent({
         genesisHydrated={genesisHydrated}
         genesisVisited={genesisVisited}
         onScrollToGenesis={handleGoOrigin}
+        onOpenThread={setThreadRootId}
       />
 
       {/* Published funding address — see SupportAddress for why this reverses the
@@ -890,6 +891,7 @@ function FeedContent({
         <ThreadView
           key={threadRootId}
           rootId={threadRootId}
+          onOpenThread={setThreadRootId}
           bootPrice={bootPrice}
           freeBootsRemaining={freeBootsRemaining}
           onClose={() => {

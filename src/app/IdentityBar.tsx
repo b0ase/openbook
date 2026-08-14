@@ -55,7 +55,16 @@ function suppressPassphraseNudge(): void {
 
 // ─── Main IdentityChip ─────────────────────────────────────────────────────
 
-export function IdentityChip(): React.JSX.Element | null {
+export function IdentityChip({
+  onOpenThread,
+}: {
+  /**
+   * Open a token's thread. Optional so a surface that has nowhere to put a
+   * thread (or is already showing one) can leave the rows inert rather than
+   * render a control that does nothing.
+   */
+  onOpenThread?: (rootId: number) => void;
+} = {}): React.JSX.Element | null {
   const {
     identity,
     isLoading,
@@ -1695,9 +1704,21 @@ export function IdentityChip(): React.JSX.Element | null {
                 <>
                   <div className="space-y-1">
                     {(holdingsExpanded ? holdings : holdings.slice(0, 3)).map((h) => (
-                      <div
+                      // A holding is a token, and a token IS a post — so the row
+                      // opens the thread it names. `root_id` serves both kinds:
+                      // a named token's thread, or the post token itself. Falls
+                      // back to a plain row when the host gave us nowhere to
+                      // open one, rather than rendering a dead control.
+                      <button
+                        type="button"
                         key={h.root_id}
-                        className="flex items-center justify-between gap-2 text-[11px]"
+                        disabled={!onOpenThread}
+                        onClick={() => {
+                          if (!onOpenThread) return;
+                          closeDropdown();
+                          onOpenThread(h.root_id);
+                        }}
+                        className="flex w-full items-center justify-between gap-2 text-left text-[11px] enabled:hover:text-zinc-200 transition-colors"
                       >
                         <span className="truncate text-zinc-400">
                           {h.kind === "name" ? (
@@ -1740,7 +1761,7 @@ export function IdentityChip(): React.JSX.Element | null {
                             1-of-1
                           </span>
                         )}
-                      </div>
+                      </button>
                     ))}
                   </div>
                   <p className="text-[10px] leading-relaxed text-zinc-600">
