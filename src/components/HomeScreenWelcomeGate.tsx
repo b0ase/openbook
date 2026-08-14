@@ -168,7 +168,7 @@ export function HomeScreenWelcomeGate({
           id="welcome-gate-headline"
           className="text-center font-bold tracking-tight text-white text-[clamp(2.5rem,16vw,4.5rem)] leading-none"
         >
-          <span className="text-amber-400">Open</span>Cook
+          <span className="text-amber-400">$Open</span>Book
         </h1>
         {mode === "no-file" ? (
           <>

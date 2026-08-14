@@ -24,8 +24,11 @@ export function Header({
           preserved. */}
       <div className="relative mx-auto flex max-w-2xl items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
         <div>
+          {/* The wordmark IS the ticker (TOKENS.md: the root token is $OpenBook).
+              The `$` carries the amber with "Open" so the lockup stays the same
+              two-tone it has always been, rather than adding a third colour. */}
           <h1 className="text-lg font-semibold tracking-tight leading-none">
-            <span className="text-amber-400">Open</span>Book
+            <span className="text-amber-400">$Open</span>Book
           </h1>
           <button
             type="button"
