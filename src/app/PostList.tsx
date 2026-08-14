@@ -250,6 +250,8 @@ interface PostListProps {
   freeBootsRemaining: number;
   /** Open the thread rooted at this post (THREADS.md step 4). */
   onOpenThread?: (rootId: number) => void;
+  /** Open the thread a `$Ticker` in post text names. */
+  onOpenTicker?: (symbol: string) => void;
 }
 
 export function PostList({
@@ -273,6 +275,7 @@ export function PostList({
   bootPrice,
   freeBootsRemaining,
   onOpenThread,
+  onOpenTicker,
 }: PostListProps) {
   // Re-render every 60s to keep timeAgo labels fresh
   const [, setTick] = useState(0);
@@ -340,6 +343,7 @@ export function PostList({
                 <div className="flex-1 min-w-0">
                   <PostContent
                     post={post}
+                    onOpenTicker={onOpenTicker}
                     badge={
                       /* The very first post = topmost row when nothing older remains
                          (ORIGIN always; LIVE once post #1 is reached). No server round-

@@ -1,0 +1,123 @@
+/**
+ * The ticker parse rule.
+ *
+ * Weighted deliberately toward what must NOT parse. Under the token model a
+ * ticker is a claim that costs money, so a false positive is a transaction the
+ * author never asked for, while a false negative is only a missing link.
+ */
+
+import { describe, expect, it } from "vitest";
+import { canonicalTicker, distinctTickers, findTickers, isValidTicker } from "./ticker";
+
+const symbols = (s: string) => findTickers(s).map((t) => t.symbol);
+
+describe("what is NOT a ticker", () => {
+  it.each([
+    ["$50", "a plain price"],
+    ["$1.50", "a decimal price"],
+    ["$0", "zero"],
+    ["it cost $20 today", "a price mid-sentence"],
+    ["US$20", "a currency-prefixed price"],
+    ["foo$bar", "mid-word"],
+    ["$", "a bare dollar sign"],
+    ["$$", "doubled"],
+    ["$$OpenBook", "doubled before a word"],
+    ["price: $ 20", "a space after the sign"],
+  ])("%j — %s", (input) => {
+    expect(symbols(input)).toEqual([]);
+  });
+
+  it("does not treat a price as a claim even beside a real ticker", () => {
+    // The whole point: one post can contain both, and only one is a claim.
+    expect(symbols("$OpenBook is worth more than $50")).toEqual(["OPENBOOK"]);
+  });
+});
+
+describe("what IS a ticker", () => {
+  it("matches a simple ticker", () => {
+    expect(symbols("$OpenBook")).toEqual(["OPENBOOK"]);
+  });
+
+  it("matches mid-sentence and at the end", () => {
+    expect(symbols("I think $NewIdea is the one")).toEqual(["NEWIDEA"]);
+    expect(symbols("my favourite is $NewIdea")).toEqual(["NEWIDEA"]);
+  });
+
+  it("allows digits after the first letter", () => {
+    expect(symbols("$Web3 and $B2B")).toEqual(["WEB3", "B2B"]);
+  });
+
+  it("matches after punctuation", () => {
+    expect(symbols("(see $OpenBook) and, $Other.")).toEqual(["OPENBOOK", "OTHER"]);
+  });
+
+  it("stops at the length cap", () => {
+    // 16 chars is the cap; the 17th is not consumed, and the \b then fails.
+    expect(symbols(`$${"A".repeat(16)}`)).toEqual(["A".repeat(16)]);
+    expect(symbols(`$${"A".repeat(17)}`)).toEqual([]);
+  });
+});
+
+describe("canonical form", () => {
+  it("is case-insensitive — the same name is the same claim", () => {
+    // Case-sensitive tickers would allow a visually identical second claim,
+    // which is the impersonation risk the app has to close.
+    expect(symbols("$openbook $OpenBook $OPENBOOK")).toEqual(["OPENBOOK", "OPENBOOK", "OPENBOOK"]);
+  });
+
+  it("preserves the author's casing for display", () => {
+    expect(findTickers("$OpenBook").map((t) => t.raw)).toEqual(["OpenBook"]);
+  });
+
+  it("strips a leading $ if one is passed", () => {
+    expect(canonicalTicker("$abc")).toBe("ABC");
+    expect(canonicalTicker("abc")).toBe("ABC");
+  });
+});
+
+describe("distinctTickers", () => {
+  it("counts one mention per post, however many times it appears", () => {
+    expect(distinctTickers("$X and $X and $x again")).toEqual(["X"]);
+  });
+
+  it("preserves first-appearance order", () => {
+    expect(distinctTickers("$Beta then $Alpha then $Beta")).toEqual(["BETA", "ALPHA"]);
+  });
+
+  it("returns nothing for content with no tickers", () => {
+    expect(distinctTickers("just a normal post about $5 coffee")).toEqual([]);
+  });
+});
+
+describe("positions", () => {
+  it("reports offsets a renderer can slice on without re-scanning", () => {
+    const content = "buy $OpenBook now";
+    const [t] = findTickers(content);
+    expect(content.slice(t.start, t.end)).toBe("$OpenBook");
+  });
+
+  it("is stable across repeated calls (no shared regex state)", () => {
+    // A module-level /g regex carries lastIndex between calls, which would make
+    // results depend on call order. Same input must always give same output.
+    const content = "$A and $B";
+    expect(symbols(content)).toEqual(symbols(content));
+    expect(symbols(content)).toEqual(["A", "B"]);
+  });
+});
+
+describe("isValidTicker", () => {
+  it.each([["OPENBOOK"], ["A"], ["WEB3"], ["A".repeat(16)]])("accepts %j", (s) => {
+    expect(isValidTicker(s)).toBe(true);
+  });
+
+  it.each([
+    ["openbook"],
+    ["3WEB"],
+    [""],
+    ["A".repeat(17)],
+    ["OPEN_BOOK"],
+    ["OPEN-BOOK"],
+  ])("rejects %j", (s) => {
+    expect(isValidTicker(s)).toBe(false);
+  });
+});

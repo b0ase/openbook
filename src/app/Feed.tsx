@@ -14,7 +14,7 @@ import { useFeedPolling } from "@/hooks/useFeedPolling";
 import { useScrollTracker } from "@/hooks/useScrollTracker";
 import { timeAgo } from "@/lib/utils";
 import type { BootboardData, Post } from "@/types";
-import { getForwardPosts, getOlderPosts, getOldestPosts } from "./actions";
+import { getForwardPosts, getOlderPosts, getOldestPosts, resolveTickers } from "./actions";
 import { Bootboard } from "./Bootboard";
 import { FundAddress } from "./FundAddress";
 import { Header } from "./Header";
@@ -454,6 +454,18 @@ function FeedContent({
     el.scrollBy(0, -1);
   }, [scrollRef]);
 
+  // `$Ticker` → the thread it names. Resolved on CLICK rather than pre-fetched
+  // for every rendered post: a click is rare, a feed render is constant, and
+  // resolving lazily keeps the ticker feature off the 5s poll entirely.
+  const handleOpenTicker = useCallback(async (symbol: string) => {
+    const resolved = await resolveTickers([symbol]);
+    const hit = resolved[symbol];
+    // An unclaimed symbol is a normal answer — posts written before the registry
+    // existed contain tickers nobody registered. Do nothing rather than open an
+    // empty thread or throw.
+    if (hit) setThreadRootId(hit.root_id);
+  }, []);
+
   const handleAskAgent = useCallback(() => {
     scrollToBottom();
     setAgentHighlight(true);
@@ -524,6 +536,7 @@ function FeedContent({
             bootPrice={bootPrice}
             freeBootsRemaining={freeBootsRemaining}
             onOpenThread={setThreadRootId}
+            onOpenTicker={handleOpenTicker}
           />
 
           {/* Optimistic posts — appear at the bottom (newest), full opacity since server confirms in ~50ms */}
@@ -669,6 +682,7 @@ function FeedContent({
             setShowFundModal(true);
           }}
           onFreeBootUsed={handleFreeBootUsed}
+          onOpenTicker={handleOpenTicker}
         />
       )}
 

@@ -46,6 +46,8 @@ interface ThreadViewProps {
   onBooted?: () => void;
   onFundNeeded?: (address: string, balance?: number, fee?: number) => void;
   onFreeBootUsed?: () => void;
+  /** Open the thread a `$Ticker` names — navigates between threads in place. */
+  onOpenTicker?: (symbol: string) => void;
 }
 
 export function ThreadView({
@@ -56,6 +58,7 @@ export function ThreadView({
   onBooted,
   onFundNeeded,
   onFreeBootUsed,
+  onOpenTicker,
 }: ThreadViewProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -189,7 +192,7 @@ export function ThreadView({
                     <div
                       className={`flex-1 min-w-0 ${isRoot ? "" : "border-l border-zinc-800 pl-3"}`}
                     >
-                      <PostContent post={post} />
+                      <PostContent post={post} onOpenTicker={onOpenTicker} />
                     </div>
                     <div className="shrink-0 self-center">
                       <BootButton

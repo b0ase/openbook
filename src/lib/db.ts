@@ -95,6 +95,40 @@ export function applyThreadingMigration(database: Db): void {
  * Exported and parameterised for the same reason as applyThreadingMigration:
  * so it can be tested against a schema that predates it.
  */
+/**
+ * Ticker registry — `$Ticker` → the thread it names.
+ *
+ * ⚠ FIRST CLAIM WINS, AND THE DATABASE IS WHAT ENFORCES IT. `symbol` is the
+ * PRIMARY KEY, so registration is `INSERT OR IGNORE` and the second claimant
+ * silently loses. That is deliberate: BSV-21 identity is the deploy `txid_vout`,
+ * so `sym` is NOT globally unique at the protocol level (TOKENS.md,
+ * "BSV-20 vs BSV-21"). The protocol therefore cannot tell two `$NewIdea` threads
+ * apart — but a `$ticker` written in a post has to resolve to exactly ONE thread
+ * or the link is ambiguous, so the APP supplies the uniqueness the protocol
+ * deliberately does not.
+ *
+ * Symbols are stored CANONICAL (uppercase, no `$`) — see `lib/ticker.ts`. A
+ * case-sensitive key would let someone claim a visually identical name, which is
+ * exactly the impersonation attack the BSV-21 notes warn about.
+ *
+ * `root_id` rather than `post_id` is what a reader wants: the ticker names a
+ * THREAD, and the claiming post is just where it was first said.
+ */
+export function applyTickerMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS tickers (
+      symbol     TEXT PRIMARY KEY,
+      post_id    INTEGER NOT NULL REFERENCES posts(id),
+      root_id    INTEGER NOT NULL REFERENCES posts(id),
+      pubkey     TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  // Reverse lookup: "which tickers does this thread carry?" — used to show a
+  // thread's own symbol, and by any future allocation that keys on the thread.
+  database.exec("CREATE INDEX IF NOT EXISTS idx_tickers_root_id ON tickers(root_id)");
+}
+
 export function applyLinkPreviewMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS link_previews (
@@ -183,6 +217,9 @@ try {
 
   // Link previews table + posts.preview_hash.
   applyLinkPreviewMigration(db);
+
+  // Ticker registry — first claim wins.
+  applyTickerMigration(db);
 
   // Boot grants — free boot tracking per user (no custody)
   db.exec(`

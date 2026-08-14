@@ -91,13 +91,19 @@ Three things that adds to the gesture above:
   awarded for writing, cheaply at first and more expensively as supply dries up. It names what
   the payment is evidence OF, which is the thing a reader needs to understand in one line.
 
-**Unresolved by this refinement:** ticker uniqueness. BSV-21 identity is the deploy
+**BUILT 2026-08-14 (the non-token half).** The hotlink and the registry ship without any
+token machinery: a `tickers` table (`symbol` PRIMARY KEY = first claim wins), registration in
+`createPost`, `resolveTickers`, and `$Ticker` rendered as a link that opens the thread. What
+is NOT built remains everything monetary — no mint, no fee, no supply, no covenant. Claiming
+is currently free, which is the temporary state, not the model.
+
+**Resolved by building it:** ticker uniqueness. BSV-21 identity is the deploy
 `txid_vout`, so `sym` is deliberately NOT globally unique (see *BSV-20 vs BSV-21*) — which
 removes squatting but means two threads can both call themselves `$NewIdea`. If a `$ticker` in
 post text is a hotlink, it must resolve to exactly one thread, so the APP needs a first-claim
-registry even though the PROTOCOL does not. First claim wins is the obvious rule; it is not
-yet a decision, and it is the point where "the UI parse rule is consensus-critical" stops being
-abstract.
+registry even though the PROTOCOL does not. **First claim wins, enforced by the PRIMARY KEY** rather than by application logic — so there
+is no read-then-write race and no check to forget. Symbols are stored canonical (uppercase),
+which closes the visually-identical-second-claim vector.
 
 **Not built.** Nothing about minting exists yet — no ticker registry, no fee, no covenant.
 Building the button before the thing it triggers would be a button that lies.

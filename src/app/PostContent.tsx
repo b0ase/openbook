@@ -3,6 +3,7 @@
 import { LinkPreviewCard } from "@/components/LinkPreviewCard";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
+import { PostText } from "./PostText";
 
 /**
  * A post's rendered body — author line, content, link preview.
@@ -15,7 +16,16 @@ import type { Post } from "@/types";
  * `badge` is a slot for a caller-supplied chip beside the author name — the feed
  * passes the Genesis marker, the thread view passes nothing.
  */
-export function PostContent({ post, badge }: { post: Post; badge?: React.ReactNode }) {
+export function PostContent({
+  post,
+  badge,
+  onOpenTicker,
+}: {
+  post: Post;
+  badge?: React.ReactNode;
+  /** Open the thread a `$Ticker` names. Omitted = tickers render as plain text. */
+  onOpenTicker?: (symbol: string) => void;
+}) {
   return (
     <>
       <div className="flex items-center gap-2 text-xs text-zinc-500">
@@ -57,7 +67,7 @@ export function PostContent({ post, badge }: { post: Post; badge?: React.ReactNo
         )}
       </div>
       <p className="mt-1.5 text-[15px] leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">
-        {post.content}
+        <PostText content={post.content} onOpenTicker={onOpenTicker} />
       </p>
       <LinkPreviewCard post={post} />
     </>

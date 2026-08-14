@@ -18,6 +18,7 @@ import {
   POST_LOG_COST_SATS,
   recordDailySpend,
 } from "@/lib/server-spend-budget";
+import { distinctTickers, isValidTicker } from "@/lib/ticker";
 import { generateAnonName } from "@/lib/utils";
 
 async function getBsvSdk() {
@@ -180,6 +181,13 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
     root: rootId,
   });
 
+  // Claim any `$Ticker` in the post — FIRST CLAIM WINS, enforced by the PRIMARY
+  // KEY (see applyTickerMigration). Synchronous and inside the request, unlike
+  // the on-chain log and the unfurl: those are caches of work that can be redone,
+  // whereas a claim decides who owns a name and a race would hand it to whoever
+  // the event loop happened to favour.
+  registerTickers(postId, rootId ?? postId, content.trim(), pubkey);
+
   // Fire-and-forget: log on-chain, update tx_id if successful
   const trimmedContent = content.trim();
   const sigStr = typeof signature === "string" ? signature : null;
@@ -217,6 +225,57 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   void unfurlFirstLink(postId, trimmedContent);
 
   return { ok: true };
+}
+
+/**
+ * Record a post's ticker claims. Never throws — a failure here must not lose the
+ * post, which is already committed.
+ *
+ * `INSERT OR IGNORE` is the whole first-claim-wins rule: the PRIMARY KEY on
+ * `symbol` rejects a later claimant silently, so no read-then-write race exists
+ * and no application-level check is needed.
+ */
+function registerTickers(
+  postId: number,
+  rootId: number,
+  content: string,
+  pubkey: FormDataEntryValue | null
+): void {
+  try {
+    const symbols = distinctTickers(content);
+    if (!symbols.length) return;
+    const stmt = db.prepare(
+      "INSERT OR IGNORE INTO tickers (symbol, post_id, root_id, pubkey) VALUES (?, ?, ?, ?)"
+    );
+    const pk = typeof pubkey === "string" ? pubkey : null;
+    const claimAll = db.transaction(() => {
+      for (const symbol of symbols) stmt.run(symbol, postId, rootId, pk);
+    });
+    claimAll();
+  } catch (e) {
+    console.error(`OpenBook: ticker registration failed for post ${postId}`, e);
+  }
+}
+
+/**
+ * Where a `$Ticker` points — the thread that claimed it, or null if unclaimed.
+ *
+ * Unclaimed is a normal, expected answer: someone can write `$Whatever` in a post
+ * that has not been made yet, or refer to a name nobody has taken. The UI renders
+ * those as plain text rather than a dead link.
+ */
+export async function resolveTickers(
+  symbols: string[]
+): Promise<Record<string, { root_id: number; post_id: number }>> {
+  const wanted = symbols.filter(isValidTicker);
+  if (!wanted.length) return {};
+  const placeholders = wanted.map(() => "?").join(",");
+  const rows = db
+    .prepare(`SELECT symbol, root_id, post_id FROM tickers WHERE symbol IN (${placeholders})`)
+    .all(...wanted) as { symbol: string; root_id: number; post_id: number }[];
+  return Object.fromEntries(
+    rows.map((r) => [r.symbol, { root_id: r.root_id, post_id: r.post_id }])
+  );
 }
 
 /**
