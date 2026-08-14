@@ -16,7 +16,7 @@ describe("buildAgentPrompt — base context", () => {
   });
 
   it("carries the personality regardless of the question", () => {
-    expect(buildAgentPrompt("anything")).toContain("You are the OpenBook agent");
+    expect(buildAgentPrompt("anything")).toContain("You are the OpenBooks agent");
   });
 });
 

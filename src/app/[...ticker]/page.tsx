@@ -54,8 +54,8 @@ export async function generateMetadata({
   const leaf = path.at(-1);
   if (!leaf) return {};
   const name = `$${titleCaseTicker(leaf)}`;
-  const title = `${name} — $OpenBook`;
-  const description = `${name} on $OpenBook. Every post anchored on-chain, and one token to whoever wrote it.`;
+  const title = `${name} — $OpenBooks`;
+  const description = `${name} on $OpenBooks. Every post anchored on-chain, and one token to whoever wrote it.`;
 
   const slug = path.map((s) => `$${s.toLowerCase()}`).join("/");
   const image = `${siteOrigin()}/api/og?p=${encodeURIComponent(slug)}`;

@@ -1,13 +1,15 @@
 {
-  "name": "$OpenBook",
-  "short_name": "$OpenBook",
+  "name": "$OpenBooks",
+  "short_name": "$OpenBooks",
   "description": "Own what you post. Every idea anchored on-chain, and a token to whoever wrote it.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#f59e0b",
   "orientation": "portrait-primary",
-  "launch_handler": { "client_mode": "focus-existing" },
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
   "icons": [
     {
       "src": "/icon-192.png",

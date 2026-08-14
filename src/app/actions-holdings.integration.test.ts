@@ -37,6 +37,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { ROOT_TICKER } from "@/lib/ticker";
 import { createPost, getHoldings, getThreadShare } from "./actions";
 
 /** A stable author, so several posts attribute to the same holder. */
@@ -147,7 +148,7 @@ describe("getHoldings", () => {
     const held = await getHoldings(alice.pubkey);
     const child = held.find((h) => h.path.at(-1) === "CHILD");
     expect(child).toBeDefined();
-    expect(child?.path).toEqual(["OPENBOOK", "PARENT", "CHILD"]);
+    expect(child?.path).toEqual([ROOT_TICKER, "PARENT", "CHILD"]);
   });
 
   it("hangs an unparented claim off the root token", async () => {
@@ -160,7 +161,7 @@ describe("getHoldings", () => {
 
     const held = await getHoldings(alice.pubkey);
     const loose = held.find((h) => h.path.at(-1) === "LOOSE");
-    expect(loose?.path).toEqual(["OPENBOOK", "LOOSE"]);
+    expect(loose?.path).toEqual([ROOT_TICKER, "LOOSE"]);
   });
 
   it("still reports an unnamed thread, with an empty path", async () => {

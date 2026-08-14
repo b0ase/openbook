@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- ⚠ THIS SAID "OC" — OpenCook — UNTIL 2026-08-14. It was inherited at the fork
-       and shipped as the favicon, the PWA install icon and the iOS home-screen
-       icon, so the app a user installed was branded as the project it forked
-       FROM. Structure below is deliberately unchanged; only the letters and the
-       mark are OpenBook's now. -->
+  <!-- ⚠ THIS SAID "OC" — OpenCook — UNTIL 2026-08-14. It was inherited at the
+       fork and shipped as the favicon, the PWA install icon and the iOS
+       home-screen icon, so the app a user installed was branded as the project
+       it forked FROM. The board took the plural the same day ($OpenBook →
+       $OpenBooks) to match openbooks.space. Structure below is deliberately
+       unchanged; only the mark is ours. -->
   <!-- Full-bleed amber (brand amber-400 #fbbf24 — matches the "$Open" wordmark).
        Bleeds to every edge, so ANY mask (Android circle/squircle, iOS squircle,
        desktop rounded-square) crops solid amber — there is no thin edge band left

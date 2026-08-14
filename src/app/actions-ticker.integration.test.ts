@@ -36,6 +36,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { ROOT_TICKER } from "@/lib/ticker";
 import { createPost, getThread, getTickerPath, resolveTickers } from "./actions";
 
 async function post(content: string, parentId?: number) {
@@ -110,14 +111,18 @@ describe("first claim wins", () => {
   });
 
   it("treats different casing as the SAME claim", async () => {
-    // Otherwise `$openbook` is a second, visually identical claim on `$OpenBook`
-    // — the impersonation vector the canonical form exists to close.
-    await post("mine: $OpenBook");
+    // Otherwise `$sierra` is a second, visually identical claim on `$Sierra` —
+    // the impersonation vector the canonical form exists to close.
+    //
+    // Uses an ordinary name rather than the root's: this is about case-folding,
+    // and coupling it to whatever the root happens to be called meant renaming
+    // the board broke a test that has nothing to do with the board's name.
+    await post("mine: $Sierra");
     const firstId = lastId();
-    await post("mine too: $OPENBOOK and $openbook");
+    await post("mine too: $SIERRA and $sierra");
 
-    const resolved = await resolveTickers(["OPENBOOK"]);
-    expect(resolved.OPENBOOK.post_id).toBe(firstId);
+    const resolved = await resolveTickers(["SIERRA"]);
+    expect(resolved.SIERRA.post_id).toBe(firstId);
     expect(db.prepare("SELECT COUNT(*) n FROM tickers").get()).toEqual({ n: 1 });
   });
 
@@ -210,13 +215,13 @@ describe("the tree is the right way round", () => {
     const foxRoot = lastId();
     await post("inside it, $Golf", foxRoot);
 
-    expect(await getTickerPath("GOLF")).toEqual(["OPENBOOK", "FOXTROT", "GOLF"]);
-    expect(await getTickerPath("FOXTROT")).toEqual(["OPENBOOK", "FOXTROT"]);
+    expect(await getTickerPath("GOLF")).toEqual([ROOT_TICKER, "FOXTROT", "GOLF"]);
+    expect(await getTickerPath("FOXTROT")).toEqual([ROOT_TICKER, "FOXTROT"]);
   });
 
   it("parents a top-level claim to the root token", async () => {
     await post("just $Hotel on its own");
-    expect(await getTickerPath("HOTEL")).toEqual(["OPENBOOK", "HOTEL"]);
+    expect(await getTickerPath("HOTEL")).toEqual([ROOT_TICKER, "HOTEL"]);
   });
 });
 
@@ -308,7 +313,7 @@ describe("a repeat mention is an INVOCATION, not a claim", () => {
     await post("citing $Branch a third time");
 
     const path = await getTickerPath("BRANCH");
-    expect(path).toEqual(["OPENBOOK", "BRANCH"]);
+    expect(path).toEqual([ROOT_TICKER, "BRANCH"]);
     expect(path.filter((s) => s === "BRANCH")).toHaveLength(1);
   });
 

@@ -59,8 +59,8 @@ export async function GET(req: Request) {
     }
   }
 
-  const display = path.length ? path.map((s) => `$${titleCaseTicker(s)}`) : ["$OpenBook"];
-  const name = display.at(-1) ?? "$OpenBook";
+  const display = path.length ? path.map((s) => `$${titleCaseTicker(s)}`) : ["$OpenBooks"];
+  const name = display.at(-1) ?? "$OpenBooks";
 
   return new ImageResponse(
     <div
@@ -116,8 +116,8 @@ export async function GET(req: Request) {
           }}
         >
           {found
-            ? "An idea on $OpenBook, anchored on-chain and owned by the people who wrote it."
-            : "An idea on $OpenBook. This name is unclaimed — post it and it's yours."}
+            ? "An idea on $OpenBooks, anchored on-chain and owned by the people who wrote it."
+            : "An idea on $OpenBooks. This name is unclaimed — post it and it's yours."}
         </div>
 
         {found && (

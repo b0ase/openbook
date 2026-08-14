@@ -17,14 +17,14 @@ export function Header({
 }: HeaderProps) {
   return (
     <header className="shrink-0 border-b border-zinc-800 bg-black">
-      {/* pt = safe-area-inset-top + 12px so the "OpenBook" logo and anon chip
+      {/* pt = safe-area-inset-top + 12px so the "OpenBooks" logo and anon chip
           aren't covered by the PWA status bar (where statusBarStyle is
           black-translucent — content extends behind the status bar). In
           Safari the env value resolves to 0 so the original 12px is
           preserved. */}
       <div className="relative mx-auto flex max-w-2xl items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
         <div>
-          {/* The wordmark IS the ticker (TOKENS.md: the root token is $OpenBook).
+          {/* The wordmark IS the ticker (TOKENS.md: the root token is $OpenBooks).
               The `$` carries the amber with "Open" so the lockup stays the same
               two-tone it has always been, rather than adding a third colour. */}
           {/* No subtitle. "Agentic Fairness" described the payout engine, which
@@ -35,7 +35,7 @@ export function Header({
               "Open questions"). The Genesis jump this text used to carry lives
               on the header chevron, which shows whenever you are not at the top. */}
           <h1 className="text-lg font-semibold tracking-tight leading-none">
-            <span className="text-amber-400">$Open</span>Book
+            <span className="text-amber-400">$Open</span>Books
           </h1>
         </div>
 

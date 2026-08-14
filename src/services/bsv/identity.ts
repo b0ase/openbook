@@ -1,5 +1,5 @@
 /**
- * BSV identity management for OpenBook.
+ * BSV identity management for OpenBooks.
  * Auto-generates a keypair on first visit.
  * Supports plaintext (Phase 1) and encrypted (Phase 4) storage.
  * Private key never leaves the browser.
@@ -212,7 +212,7 @@ export async function getIdentity(options?: { allowAutoGen?: boolean }): Promise
         // SAME key → interrupted encrypt-in-place. Use the plaintext so the user
         // isn't locked out (same key/address).
         console.warn(
-          "[OpenBook] getIdentity: both stores present, SAME address — interrupted " +
+          "[OpenBooks] getIdentity: both stores present, SAME address — interrupted " +
             "encrypt-in-place. Using plaintext identity."
         );
         return await materializeFromStored(plaintext);
@@ -223,7 +223,7 @@ export async function getIdentity(options?: { allowAutoGen?: boolean }): Promise
       // the RESTORED key, not silently reverting to the old one. NEVER touch the
       // encrypted store here — that's the just-restored identity (R1 invariant).
       console.warn(
-        "[OpenBook] getIdentity: both stores present, DIFFERENT address — interrupted " +
+        "[OpenBooks] getIdentity: both stores present, DIFFERENT address — interrupted " +
           "restore. Removing stale plaintext; routing to unlock."
       );
       try {

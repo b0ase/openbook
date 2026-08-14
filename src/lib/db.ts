@@ -1,5 +1,6 @@
 import path from "node:path";
 import Database from "better-sqlite3";
+import { isRootTicker, ROOT_TICKER } from "./ticker";
 
 let db: ReturnType<typeof Database>;
 
@@ -192,14 +193,17 @@ function repairTickerParents(database: Db): void {
 
     const run = database.transaction(() => {
       for (const t of tickers) {
-        if (t.symbol !== "OPENBOOK") {
+        if (!isRootTicker(t.symbol)) {
           const post = parentOf.get(t.post_id) as { parent_id: number | null } | undefined;
           if (post?.parent_id != null) {
             rerootPost.run(t.post_id);
             rerootTicker.run(t.post_id, t.symbol);
           }
         }
-        if (t.symbol === "OPENBOOK") {
+        // Either spelling of the root parents to nothing. The board was
+        // `$OpenBook` before it took the plural; an existing row under the old
+        // name stays a root rather than becoming a child of its own successor.
+        if (isRootTicker(t.symbol)) {
           if (t.parent_symbol !== null) update.run(null, t.symbol);
           continue;
         }
@@ -218,8 +222,13 @@ function repairTickerParents(database: Db): void {
         }
         // Nothing above it carries a ticker → it hangs off the root token, so the
         // whole board stays one tree.
-        const parent = found ?? "OPENBOOK";
-        if (bySymbol.has(parent) || parent === "OPENBOOK") {
+        // ⚠ THIS LINE IS THE ROOT RENAME'S MIGRATION. Parents are recomputed
+        // from scratch on every boot, so pointing the fallback at ROOT_TICKER
+        // re-parents every top-level ticker from `OPENBOOK` to `OPENBOOKS` on
+        // the next start — no migration script, no backfill, and it self-heals
+        // if it is ever run against a half-renamed database.
+        const parent = found ?? ROOT_TICKER;
+        if (bySymbol.has(parent) || isRootTicker(parent)) {
           if (t.parent_symbol !== parent) update.run(parent, t.symbol);
         }
       }
@@ -229,7 +238,7 @@ function repairTickerParents(database: Db): void {
     // Never block startup over a display-only tree. A wrong path is cosmetic; a
     // server that will not boot is not.
     console.error(
-      `OpenBook: ticker parent repair skipped — ${err instanceof Error ? err.message : String(err)}`
+      `OpenBooks: ticker parent repair skipped — ${err instanceof Error ? err.message : String(err)}`
     );
   }
 }
@@ -264,7 +273,7 @@ try {
   db = new Database(process.env.DATABASE_PATH || path.join(process.cwd(), "local.db"));
 } catch (err) {
   throw new Error(
-    `OpenBook DB: failed to open local.db — ${err instanceof Error ? err.message : String(err)}`
+    `OpenBooks DB: failed to open local.db — ${err instanceof Error ? err.message : String(err)}`
   );
 }
 
@@ -361,7 +370,7 @@ try {
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_payouts_txid ON payouts(txid, recipient_address)");
 } catch (err) {
   throw new Error(
-    `OpenBook DB: failed during schema init — ${err instanceof Error ? err.message : String(err)}`
+    `OpenBooks DB: failed during schema init — ${err instanceof Error ? err.message : String(err)}`
   );
 }
 

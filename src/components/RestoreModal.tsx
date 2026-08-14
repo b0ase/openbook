@@ -312,7 +312,7 @@ export function RestoreModal({
           ? "This recovery file is from an older version and can't be restored. Use a file you saved recently."
           : result.error === "no_key"
             ? "File does not contain a valid recovery key"
-            : "Could not read file — make sure it is an OpenBook recovery file (.html or .json)"
+            : "Could not read file — make sure it is an OpenBooks recovery file (.html or .json)"
       );
       return;
     }

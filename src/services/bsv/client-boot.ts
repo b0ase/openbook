@@ -1,5 +1,5 @@
 /**
- * Client-side trustless boot transaction builder for OpenBook.
+ * Client-side trustless boot transaction builder for OpenBooks.
  *
  * Runs entirely in the BROWSER. The user's browser builds a multi-output
  * split transaction, signs it with their private key, and broadcasts

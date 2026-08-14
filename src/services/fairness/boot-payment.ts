@@ -101,7 +101,7 @@ export async function buildSplitTransaction(
   // The mutex ensures the retry waits for any in-flight transaction to finish.
   // Common cause: stale WoC data returned an already-spent UTXO.
   console.warn(
-    `OpenBook: boot split first attempt failed for post ${postId}, retrying in 1s...`,
+    `OpenBooks: boot split first attempt failed for post ${postId}, retrying in 1s...`,
     result
   );
   await new Promise((resolve) => setTimeout(resolve, 1000));

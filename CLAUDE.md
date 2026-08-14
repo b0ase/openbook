@@ -1,18 +1,28 @@
-# OpenBook — AI Context File
+# $OpenBooks — AI Context File
 
 > **If you're an AI reading this:** This file is your onboarding. Read it fully before writing any code.
 > After completing significant work, update the relevant context files (DIRECTION.md, DECISIONS.md, ROADMAP.md) with what you changed and why.
 
 ## What This Is
 
-A platform that builds itself. It started as a post board and evolves based on user contributions. Every post is logged on-chain (BSV). An Agentic Fairness system tracks contributions and distributes value. Eventually, any idea can spawn into its own project with the same model.
+A board for ideas where the record of who wrote what is public, permanent, and belongs to the person who wrote it. Every post is anchored on-chain (BSV) **and mints its author one token** — that part is live. Threads can be named with a `$Ticker`, which gives them an address and gives the token a readable name.
 
-**Tagline:** "A platform that builds itself, then lets anyone do the same."
-**Subtitle:** Agentic Fairness
+**Tagline:** "Own what you post."
+
+⚠ **THIS FILE IS LOADED INTO THE USER-FACING AGENT** (`src/data/agent-prompt.ts` reads it on
+every question), so a stale line here is not an internal inaccuracy — the agent will say it to
+users. Two things were corrected on 2026-08-14 for exactly that reason:
+
+- The name is **$OpenBooks**, plural, matching `openbooks.space`. It was `$OpenBook` until then.
+- The tagline was *"A platform that builds itself, then lets anyone do the same"* with the
+  subtitle *"Agentic Fairness"*. Both were rejected by the owner. "Builds itself" is not true —
+  somebody has to build the platform others then use. And "fair" is not the pitch: nobody is
+  looking for a fair place to post, they want somewhere good and worth their time. Fairness
+  describes the payout arithmetic, which is plumbing. **The proposition is ownership.**
 
 ## Toolkit
 
-This project is built using the **bOpen.ai toolkit** (agents, skills, plugins). bOpen is the tooling, not the product. The product is OpenBook.
+This project is built using the **bOpen.ai toolkit** (agents, skills, plugins). bOpen is the tooling, not the product. The product is $OpenBooks.
 
 ## Architecture
 

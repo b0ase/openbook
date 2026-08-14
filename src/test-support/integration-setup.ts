@@ -19,7 +19,7 @@ process.env.BSV_WALLET_SPEND_DISABLED = "true";
 delete process.env.BSV_SERVER_WIF;
 
 /**
- * Start post ids ABOVE the fork point, so test posts are OpenBook-era.
+ * Start post ids ABOVE the fork point, so test posts are OpenBooks-era.
  *
  * ⚠ WITHOUT THIS, EVERY INTEGRATION TEST POSTS INTO THE INHERITED ERA. Feed reads
  * default to `id > FORK_POINT_ID` (posts at or below it were written on OpenCook

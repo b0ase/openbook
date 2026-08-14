@@ -114,12 +114,12 @@ export function BootButton({
 
   const displayCount = bootCount + optimisticBoots;
   const title = !postPubkey
-    ? "Unsigned post — cannot be booted"
+    ? "Unsigned post — cannot be boosted"
     : !identity
-      ? "Sign in to boot"
+      ? "Sign in to boost"
       : isFree
-        ? `Boot to the board (FREE — ${freeBootsRemaining} remaining)`
-        : `Boot to the board (~${bootPrice.toLocaleString()} sats + network fee)`;
+        ? `Boost this post (FREE — ${freeBootsRemaining} remaining)`
+        : `Boost this post (~${bootPrice.toLocaleString()} sats + network fee)`;
 
   return (
     <div className="flex flex-col items-center">
@@ -152,7 +152,7 @@ export function BootButton({
         )}
       </button>
 
-      {/* Boot count — hide while actively booting this post */}
+      {/* Boost count — hide while actively booting this post */}
       {!isThisBooting && displayCount > 0 && (
         <span className="text-[9px] text-zinc-600 mt-0.5">{displayCount}</span>
       )}
@@ -227,7 +227,7 @@ function ReplyButton({
 /**
  * Whether the fork marker belongs immediately above this row.
  *
- * True for the first OpenBook-era post in the window, and only when the row
+ * True for the first OpenBooks-era post in the window, and only when the row
  * before it is on the other side — so it appears exactly once, and only when the
  * loaded window actually spans the boundary.
  */
@@ -237,10 +237,10 @@ function isForkBoundary(posts: Post[], post: Post, i: number): boolean {
 
 /**
  * The fork boundary: everything above came from OpenCook, everything below is
- * OpenBook's own.
+ * OpenBooks's own.
  *
  * ⚠ ALSO RENDERED WHEN THE FEED IS EMPTY. It normally attaches above the first
- * OpenBook-era post — but a board with no posts of its own yet has no such row,
+ * OpenBooks-era post — but a board with no posts of its own yet has no such row,
  * and then the toggle would be the only route to the inherited history AND
  * absent. That is exactly the state a fresh deploy is in. See the empty-state
  * branch in PostList.
@@ -262,7 +262,7 @@ function ForkMarker({
         <div className="flex-1 h-px bg-amber-500/40" />
       </div>
       <p className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
-        <span className="text-amber-400">$Open</span>Book starts here
+        <span className="text-amber-400">$Open</span>Books starts here
       </p>
       {/* The copy has to follow the toggle. "Everything above is inherited" is
           simply false while the run-up is hidden — and it is hidden by default,
@@ -403,7 +403,7 @@ export function PostList({
           <p className="py-16 text-center text-sm text-zinc-600">
             No posts yet. Be the first to share an idea.
           </p>
-          {/* No OpenBook post exists yet, so no row can carry the boundary — and
+          {/* No OpenBooks post exists yet, so no row can carry the boundary — and
               without this the inherited history would be unreachable on a board
               that has not been posted to. */}
           <ForkMarker showInherited={showInherited} onToggleInherited={onToggleInherited} />
@@ -414,7 +414,7 @@ export function PostList({
         {posts.map((post, i) => (
           <Fragment key={post.id}>
             {/* Fork boundary — everything above came from OpenCook, everything
-                below is OpenBook's own. Rendered before the first post past the
+                below is OpenBooks's own. Rendered before the first post past the
                 fork point, and only when the previous row is on the other side,
                 so it appears exactly once and only when the window spans it. */}
             {isForkBoundary(posts, post, i) && (
@@ -458,12 +458,12 @@ export function PostList({
                         >
                           OpenCook
                         </span>
-                      ) : /* The first post of OpenBook's own timeline, once nothing
+                      ) : /* The first post of OpenBooks's own timeline, once nothing
                              newer-side remains above it. */
                       i === 0 && (mode === "origin" || (mode === "live" && !liveHasMore)) ? (
                         <span
                           className="text-[9px] font-semibold uppercase tracking-wider text-amber-400/80 border border-amber-500/30 rounded px-1 py-px shrink-0"
-                          title="The first post — where OpenBook began"
+                          title="The first post — where OpenBooks began"
                         >
                           Genesis
                         </span>

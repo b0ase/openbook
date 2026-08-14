@@ -1,4 +1,4 @@
-// Shared domain types for OpenBook.
+// Shared domain types for OpenBooks.
 
 export interface Identity {
   name: string;

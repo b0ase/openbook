@@ -83,7 +83,7 @@ export function HomeScreenWelcomeGate({
           result.error === "unsupported_version"
             ? "This recovery file is from an older version and can't be restored. Use a file you saved recently."
             : result.error === "parse_failed"
-              ? "Could not read this file — make sure it's an OpenBook recovery file (.html or .json)"
+              ? "Could not read this file — make sure it's an OpenBooks recovery file (.html or .json)"
               : "File does not contain a valid recovery key"
         );
         return;
@@ -168,7 +168,7 @@ export function HomeScreenWelcomeGate({
           id="welcome-gate-headline"
           className="text-center font-bold tracking-tight text-white text-[clamp(2.5rem,16vw,4.5rem)] leading-none"
         >
-          <span className="text-amber-400">$Open</span>Book
+          <span className="text-amber-400">$Open</span>Books
         </h1>
         {mode === "no-file" ? (
           <>

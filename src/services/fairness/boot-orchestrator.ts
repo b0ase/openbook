@@ -41,7 +41,7 @@ function maybeAlertLowBalance(spendableSats: number): void {
   if (now - _lastLowBalanceAlertAt < 5 * 60_000) return; // debounce: once per 5 min
   _lastLowBalanceAlertAt = now;
   console.warn(
-    `[OpenBook ALERT] Server wallet low: ${spendableSats} sats spendable (< ${FAIRNESS_CONFIG.serverLowBalanceAlertSats}). Free boots route to paid once a boot can't be covered. Top up the BSV_SERVER_WIF address.`
+    `[OpenBooks ALERT] Server wallet low: ${spendableSats} sats spendable (< ${FAIRNESS_CONFIG.serverLowBalanceAlertSats}). Free boots route to paid once a boot can't be covered. Top up the BSV_SERVER_WIF address.`
   );
 }
 
@@ -138,7 +138,7 @@ export async function executeBoot(
     // Fail-closed by design: when tripped, the server simply stops spending.
     if (isServerSpendDisabled()) {
       console.warn(
-        `OpenBook: server spending DISABLED — routing free boot for post ${postId} to paid`
+        `OpenBooks: server spending DISABLED — routing free boot for post ${postId} to paid`
       );
       return {
         success: false,
@@ -160,7 +160,7 @@ export async function executeBoot(
     maybeAlertLowBalance(spendable);
     if (spendable < actualPrice + SERVER_FEE_BUFFER_SATS) {
       console.warn(
-        `OpenBook: server wallet can't cover free boot for post ${postId} (${spendable} < ${actualPrice + SERVER_FEE_BUFFER_SATS} sats) — routing to paid`
+        `OpenBooks: server wallet can't cover free boot for post ${postId} (${spendable} < ${actualPrice + SERVER_FEE_BUFFER_SATS} sats) — routing to paid`
       );
       return {
         success: false,
@@ -221,7 +221,7 @@ export async function executeBoot(
       const indeterminate = result.status === "broadcast_timeout";
       const errorDetail = result.status === "broadcast_failed" ? result.error : result.status;
       console.error(
-        `OpenBook: boot split broadcast ${indeterminate ? "TIMED OUT (indeterminate)" : "FAILED"} for post ${postId}: ${errorDetail}`
+        `OpenBooks: boot split broadcast ${indeterminate ? "TIMED OUT (indeterminate)" : "FAILED"} for post ${postId}: ${errorDetail}`
       );
       // Step 8: the free grant was ALREADY consumed before this broadcast and is
       // deliberately NOT refunded here — a broadcast failure/timeout is ambiguous

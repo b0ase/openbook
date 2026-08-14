@@ -30,14 +30,14 @@ export const TICKER_MAX_LENGTH = 16;
  * The preceding character must be a start-of-string or a non-word character, so
  * `US$20` and `foo$bar` are not matches. Underscores and hyphens are excluded
  * from the body deliberately: they invite lookalike claims (`$Open_Book` vs
- * `$OpenBook`) on something that is supposed to be a durable name.
+ * `$OpenBooks`) on something that is supposed to be a durable name.
  */
 const TICKER_PATTERN = /(?<![\w$])\$([A-Za-z][A-Za-z0-9]{0,15})\b/g;
 
 /**
  * Canonical form used for identity and de-duplication: UPPERCASE.
  *
- * `$openbook`, `$OpenBook` and `$OPENBOOK` are the SAME ticker. Case-sensitive
+ * `$openbook`, `$OpenBooks` and `$OPENBOOK` are the SAME ticker. Case-sensitive
  * tickers would let someone claim a visually identical name, which is the
  * impersonation attack the BSV-21 notes already warn about (`sym` is not
  * globally unique, so the app is what disambiguates).
@@ -107,9 +107,30 @@ export function isValidTicker(symbol: string): boolean {
  * this, so the whole board is one tree rather than a scattering of unrelated
  * names — and the main feed is simply this token's thread.
  */
-export const ROOT_TICKER = "OPENBOOK";
+export const ROOT_TICKER = "OPENBOOKS";
 
-/** Render a claim path for display: `["OPENBOOK","TEST"]` → `$OpenBook/$Test`. */
+/**
+ * The root's previous name, kept so old links keep working.
+ *
+ * The board was `$OpenBook` until 2026-08-14, when it took the plural to match
+ * `openbooks.space`. Renaming the root is CHEAP here and expensive elsewhere,
+ * for one reason worth knowing: a ticker URL resolves by its LAST segment only
+ * (`Feed.tsx` → `parseTickerPath(...).at(-1)`), so `/$openbook/$test` already
+ * opens `$Test` without consulting the ancestors at all. Only the breadcrumb
+ * changes.
+ *
+ * `/$openbook` on its own is the one case that needs this constant: it used to
+ * mean "the root, i.e. the main feed", and without recognising the old name it
+ * would fall through to "unknown ticker".
+ */
+export const LEGACY_ROOT_TICKER = "OPENBOOK";
+
+/** True for either spelling of the root — use this, never `=== ROOT_TICKER`. */
+export function isRootTicker(symbol: string): boolean {
+  return symbol === ROOT_TICKER || symbol === LEGACY_ROOT_TICKER;
+}
+
+/** Render a claim path for display: `["OPENBOOK","TEST"]` → `$OpenBooks/$Test`. */
 export function formatTickerPath(path: string[], display?: Record<string, string>): string {
   return path.map((s) => `$${display?.[s] ?? titleCaseTicker(s)}`).join("/");
 }

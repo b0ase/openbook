@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { screenContent } from "@/lib/content-filter";
 import { db } from "@/lib/db";
+import { FORK_POINT_ID } from "@/lib/fork-point";
 import { tryConsumeFreeBootForIp } from "@/lib/free-boot-cap";
 import {
   attachPreviewToPost,
@@ -18,7 +19,6 @@ import {
   POST_LOG_COST_SATS,
   recordDailySpend,
 } from "@/lib/server-spend-budget";
-import { FORK_POINT_ID } from "@/lib/fork-point";
 import { canonicalTicker, distinctTickers, isValidTicker, ROOT_TICKER } from "@/lib/ticker";
 import { generateAnonName } from "@/lib/utils";
 
@@ -317,7 +317,7 @@ export async function resolveTickers(
 }
 
 /**
- * A ticker's ancestry, root-first: `["OPENBOOK","TEST"]` for `$OpenBook/$Test`.
+ * A ticker's ancestry, root-first: `["OPENBOOK","TEST"]` for `$OpenBooks/$Test`.
  *
  * Depth-capped and cycle-guarded. `parent_symbol` is written once at claim time and
  * never edited, so a loop should be impossible — but this walk runs on a render
@@ -617,7 +617,7 @@ const POST_SELECT = `
 const ROOTS_ONLY = "p.parent_id IS NULL";
 
 /**
- * Posts written ON OpenBook, excluding the inherited OpenCook history.
+ * Posts written ON OpenBooks, excluding the inherited OpenCook history.
  *
  * ⚠ THE DEFAULT, DELIBERATELY. Posts 1..FORK_POINT_ID happened on OpenCook: other
  * people's words, signed by them, anchored on-chain under `app: "opencook"`.
@@ -710,7 +710,7 @@ export async function getOlderPosts(beforeId: number, includeInherited = false):
 /**
  * The oldest 100 posts, ascending — the ORIGIN window.
  *
- * By default this is OpenBook's OWN genesis (the first post after the fork), not
+ * By default this is OpenBooks's OWN genesis (the first post after the fork), not
  * post id 1. Jumping a new reader to the start of somebody else's board and
  * calling it the beginning would misrepresent both projects.
  */

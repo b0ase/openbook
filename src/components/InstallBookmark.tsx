@@ -13,7 +13,7 @@ import { shouldShowInstallPitch } from "@/lib/install-pitch";
  * (`<InstallPitch variant="banner" />`).
  *
  * Design (border removed 2026-06-26):
- * - 30×30 OpenBook app icon as a BARE button — no zinc box (an app icon inside
+ * - 30×30 OpenBooks app icon as a BARE button — no zinc box (an app icon inside
  *   a zinc container looked odd). 34×34 tap target, `mt-1` baseline offset, so it
  *   still aligns with the Ask AI pill in the PostForm grid.
  * - Highlight flash on collapse from sheet → bookmark: an amber `drop-shadow`

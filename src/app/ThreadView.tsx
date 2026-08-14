@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { formatShare } from "@/lib/share";
-import { ROOT_TICKER, titleCaseTicker } from "@/lib/ticker";
+import { isRootTicker, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
 import { getThread, getThreadShare, getThreadTicker, getTickerPath } from "./actions";
@@ -106,7 +106,7 @@ export function ThreadView({
     void getThreadTicker(rootId).then(async (t) => {
       if (!live) return;
       setTicker(t);
-      // The ancestry, so the header reads $OpenBook/$Test rather than a bare name
+      // The ancestry, so the header reads $OpenBooks/$Test rather than a bare name
       // — a token's position in the tree is part of what it IS.
       setPath(t ? await getTickerPath(t) : []);
     });
@@ -233,7 +233,7 @@ export function ThreadView({
                               // The main feed IS the root token's thread, so the root
                               // crumb closes the overlay rather than opening a thread
                               // that would duplicate the feed behind it.
-                              if (seg === ROOT_TICKER) onClose();
+                              if (isRootTicker(seg)) onClose();
                               else onOpenTicker?.(seg);
                             }}
                             className="text-zinc-500 hover:text-amber-300 transition-colors"

@@ -8,13 +8,13 @@ import { InstallPitch } from "@/components/InstallPitch";
 import { IosStorageToast } from "@/components/IosStorageToast";
 import { SignInModal } from "@/components/SignInModal";
 import { SupportAddress } from "@/components/SupportAddress";
-import { FORK_POINT_ID, isInheritedPost } from "@/lib/fork-point";
 import { BootProvider, useBootContext } from "@/contexts/BootContext";
 import { IdentityProvider, useIdentityContext } from "@/contexts/IdentityContext";
 import { InstallProvider } from "@/contexts/InstallContext";
 import { useFeedPolling } from "@/hooks/useFeedPolling";
 import { useScrollTracker } from "@/hooks/useScrollTracker";
-import { parseTickerPath, ROOT_TICKER, tickerSlug } from "@/lib/ticker";
+import { FORK_POINT_ID, isInheritedPost } from "@/lib/fork-point";
+import { isRootTicker, parseTickerPath, ROOT_TICKER, tickerSlug } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { BootboardData, Post } from "@/types";
 import {
@@ -311,7 +311,7 @@ function FeedContent({
     // Oldest row currently on screen. With the inherited run-up revealed on a
     // board that has NO posts of its own yet, there is no such row and no server
     // cursor either — so fall back to the fork boundary, which is exactly "older
-    // than OpenBook's first post". Without this the reveal silently loads
+    // than OpenBooks's first post". Without this the reveal silently loads
     // nothing on a fresh board, which is the state a new deploy is in.
     const cursor =
       olderPostsRef.current.length > 0
@@ -352,7 +352,7 @@ function FeedContent({
    * Show or hide the inherited OpenCook run-up above the fork marker.
    *
    * Showing re-opens the upward scroll: `liveHasMore` was set false when the
-   * feed reached OpenBook's first post, so it has to be reset or the sentinel
+   * feed reached OpenBooks's first post, so it has to be reset or the sentinel
    * will never fire again. Hiding drops the inherited rows back out and closes
    * it again, so the two directions are symmetric and the feed cannot end up
    * holding rows it is no longer meant to show.
@@ -570,7 +570,7 @@ function FeedContent({
     const onPop = () => {
       const fromUrl = parseTickerPath(window.location.pathname);
       const leaf = fromUrl.at(-1);
-      if (!leaf || leaf === ROOT_TICKER) {
+      if (!leaf || isRootTicker(leaf)) {
         setThreadRootId(null);
         return;
       }
@@ -590,7 +590,7 @@ function FeedContent({
     if (openedFromUrlRef.current) return;
     openedFromUrlRef.current = true;
     const leaf = parseTickerPath(window.location.pathname).at(-1);
-    if (!leaf || leaf === ROOT_TICKER) return;
+    if (!leaf || isRootTicker(leaf)) return;
     void resolveTickers([leaf]).then((r) => {
       const hit = r[leaf];
       if (hit) setThreadRootId(hit.root_id);
@@ -814,7 +814,7 @@ function FeedContent({
           freeBootsRemaining={freeBootsRemaining}
           onClose={() => {
             setThreadRootId(null);
-            // Back to the root token's URL — the main feed IS $OpenBook's thread.
+            // Back to the root token's URL — the main feed IS $OpenBooks's thread.
             window.history.pushState({}, "", `/${tickerSlug(ROOT_TICKER)}`);
           }}
           onBooted={refresh}

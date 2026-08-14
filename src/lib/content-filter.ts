@@ -74,7 +74,7 @@ export function screenContent(
     if (!_warnedUnconfigured) {
       _warnedUnconfigured = true;
       console.warn(
-        "[OpenBook] CONTENT_DENYLIST is not configured — the pre-publish content screen is a no-op. Set it before public launch (illegal-floor patterns)."
+        "[OpenBooks] CONTENT_DENYLIST is not configured — the pre-publish content screen is a no-op. Set it before public launch (illegal-floor patterns)."
       );
     }
     return { ok: true };

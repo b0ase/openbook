@@ -9,7 +9,7 @@ interface Message {
 
 const SUGGESTED = [
   "What is this?",
-  "How does booting work?",
+  "How does boosting work?",
   "What's the fairness agent?",
   "How do I post?",
 ];
@@ -32,7 +32,7 @@ export function AgentChat({ highlight }: { highlight?: boolean }) {
       setMessages([
         {
           from: "agent",
-          text: "Hey! I can help you understand OpenBook, brainstorm ideas for posts, or answer any questions. What are you curious about?",
+          text: "Hey! I can help you understand OpenBooks, brainstorm ideas for posts, or answer any questions. What are you curious about?",
         },
       ]);
     }
@@ -221,7 +221,7 @@ export function AgentChat({ highlight }: { highlight?: boolean }) {
           className="w-full sm:max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden pointer-events-auto animate-[slideUp_0.3s_ease-out_backwards] shadow-2xl flex flex-col max-h-[calc(100svh-env(safe-area-inset-top)-0.5rem)] sm:max-h-[calc(100dvh-2rem)]"
           role="dialog"
           aria-modal="true"
-          aria-label="OpenBook Agent"
+          aria-label="OpenBooks Agent"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
@@ -235,7 +235,7 @@ export function AgentChat({ highlight }: { highlight?: boolean }) {
           <div className="shrink-0 flex items-center justify-between px-4 pt-3 pb-3 border-b border-zinc-800">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
-              <span className="text-sm font-medium text-zinc-300">OpenBook Agent</span>
+              <span className="text-sm font-medium text-zinc-300">OpenBooks Agent</span>
             </div>
             <button
               type="button"

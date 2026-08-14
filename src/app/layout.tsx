@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   /**
    * ⚠ INHERITED OPENCOOK COPY WAS REPLACED HERE, ON PURPOSE. This used to read
    * "A platform that builds itself / Agentic fairness on BSV". Both were wrong
-   * for OpenBook and the owner rejected them:
+   * for OpenBooks and the owner rejected them:
    *
    *  - "builds itself" is not true. Somebody has to BUILD the platform other
    *    people then use. Claiming otherwise is a slogan pretending to be a fact.
@@ -62,7 +62,7 @@ export const metadata: Metadata = {
    * The actual proposition is OWNERSHIP: you keep a piece of what you make.
    * Keep this line pointed at that, and keep it to things that are live.
    */
-  title: "$OpenBook — own what you post",
+  title: "$OpenBooks — own what you post",
   description:
     "Post an idea and it's yours: timestamped on-chain, and it mints you a token in the thread it starts. Boost the ones worth reading and the payment goes straight to whoever wrote them.",
   // ⚠ Describes what is LIVE, and leads with OWNERSHIP rather than fairness —
@@ -71,7 +71,7 @@ export const metadata: Metadata = {
   // worth money. This is the least questionable surface the project has, so that
   // rule applies hardest here.
   openGraph: {
-    title: "$OpenBook — own what you post",
+    title: "$OpenBooks — own what you post",
     description:
       "Post an idea and it's yours: timestamped on-chain, permanently, and it mints you a token in the thread it starts. Boost the ones worth reading and the payment splits straight to whoever wrote them — no balances held, no IOUs.",
     type: "website",
@@ -84,31 +84,31 @@ export const metadata: Metadata = {
      * stronger at a glance, and the words still appear beside it as og:title and
      * og:description.
      *
-     * Padded to exactly 1200x630 from a 1152x768 original. The bars are
+     * Padded to exactly 1200x630 from a 1728x1152 original. The bars are
      * invisible because the sign is already photographed on black — do not
      * re-crop to fill, which would cut the book mark off the bottom.
      */
     images: [
       {
-        url: "/og-openbook.jpg",
+        url: "/og-openbooks.jpg",
         width: 1200,
         height: 630,
-        alt: "$OpenBook",
+        alt: "$OpenBooks",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "$OpenBook — own what you post",
+    title: "$OpenBooks — own what you post",
     description:
       "Every post anchored on-chain, and one token to whoever wrote it. Boosts split straight to contributors in a single transaction.",
-    images: ["/og-openbook.jpg"],
+    images: ["/og-openbooks.jpg"],
   },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "$OpenBook",
+    title: "$OpenBooks",
   },
   other: {
     "mobile-web-app-capable": "yes",

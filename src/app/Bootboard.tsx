@@ -158,8 +158,14 @@ export function Bootboard({
           <div className="flex flex-wrap items-center justify-between text-xs text-zinc-500 mb-1.5 gap-y-1">
             <div className="flex items-center gap-1.5 min-w-0">
               <BootIcon size={14} className="text-amber-400 shrink-0" />
+              {/* "Boost Board", not "Bootboard". "Boot" is inherited OpenCook
+                  vocabulary for what is plainly a boost, and reusing the old word
+                  under a new product invites people to assume the old mechanics
+                  came with it. The identifiers, table and API route still say
+                  `boot` — renaming those is a migration with real risk and no
+                  user-visible benefit. */}
               <span className="text-amber-400 font-semibold text-[11px] uppercase tracking-wide shrink-0">
-                Bootboard
+                Boost Board
               </span>
               <span className="text-zinc-700 shrink-0">·</span>
               <span className="font-medium text-amber-300 truncate">{current.author_name}</span>
@@ -209,7 +215,7 @@ export function Bootboard({
         <div className="flex items-center gap-2 text-xs">
           <BootIcon size={14} className="text-amber-400" />
           <span className="text-amber-400 font-semibold text-[11px] uppercase tracking-wide">
-            Bootboard
+            Boost Board
           </span>
           <span className="text-zinc-700">·</span>
           <span className="text-zinc-600">Boost any post to claim the spotlight</span>

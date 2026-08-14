@@ -1536,7 +1536,7 @@ export function IdentityChip(): React.JSX.Element | null {
               </div>
               {activity.length === 0 ? (
                 <p className="text-[11px] text-zinc-600 leading-relaxed">
-                  Your earnings show here &mdash; share an idea, or boot posts you like.
+                  Your earnings show here &mdash; share an idea, or boost posts you like.
                 </p>
               ) : (
                 <div className="space-y-1">

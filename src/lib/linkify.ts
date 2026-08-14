@@ -57,7 +57,7 @@ export function findUrls(content: string): UrlMatch[] {
 /**
  * URLs and tickers together, ordered, non-overlapping — what a renderer walks.
  *
- * ⚠ URLS WIN OVER TICKERS ON OVERLAP. A path like `example.com/$OpenBook` would
+ * ⚠ URLS WIN OVER TICKERS ON OVERLAP. A path like `example.com/$OpenBooks` would
  * otherwise have a "ticker" carved out of the middle of the href, producing a
  * broken link and a claim nobody made. URLs are matched first and any ticker
  * falling inside one is discarded.

@@ -4,8 +4,8 @@ import { LegalPageShell } from "@/components/LegalPageShell";
 import { cleanLegalMarkdown } from "@/lib/legal-doc";
 
 export const metadata = {
-  title: "Privacy Policy — OpenBook",
-  description: "OpenBook Privacy Policy (draft).",
+  title: "Privacy Policy — OpenBooks",
+  description: "OpenBooks Privacy Policy (draft).",
 };
 
 // Static: the legal/*.md is read at build time and baked into the page.

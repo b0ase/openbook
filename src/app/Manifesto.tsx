@@ -5,7 +5,7 @@
  * reached).
  *
  * ⚠ TENSE IS THE WHOLE SAFETY MECHANISM HERE. This page is read by people
- * deciding whether to put work, and eventually money, into OpenBook. Everything
+ * deciding whether to put work, and eventually money, into OpenBooks. Everything
  * in the PRESENT tense is shipped and verifiable today; everything else sits
  * under "What we're building" or the status box and is explicitly marked as not
  * built. Describing an unbuilt thing as if it exists would be a mis-sale, not
@@ -118,7 +118,7 @@ export function Manifesto({ onAskAgent }: ManifestoProps) {
           Why we forked
         </p>
         <p>
-          OpenBook is a fork of <span className="text-zinc-300">OpenCook</span>, which built the
+          OpenBooks is a fork of <span className="text-zinc-300">OpenCook</span>, which built the
           board, the on-chain record and the payment split, and built them well. The split works.
           The payments are real. We didn&rsquo;t fork because something was broken.
         </p>

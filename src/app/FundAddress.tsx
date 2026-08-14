@@ -112,7 +112,7 @@ export function FundAddress({
                       </span>
                     </div>
                     <div className="flex justify-between text-zinc-400">
-                      <span>Boot costs</span>
+                      <span>Boost costs</span>
                       <span className="font-mono text-zinc-200">
                         {bootPrice.toLocaleString()} sats
                       </span>

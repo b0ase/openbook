@@ -268,7 +268,7 @@ export async function buildAndBroadcast(
   // spend that reaches the wallet directly.
   if (isServerSpendDisabled()) {
     console.warn(
-      "OpenBook wallet: spending DISABLED (BSV_WALLET_SPEND_DISABLED) — refusing to broadcast"
+      "OpenBooks wallet: spending DISABLED (BSV_WALLET_SPEND_DISABLED) — refusing to broadcast"
     );
     return { status: "spend_disabled" };
   }
@@ -369,7 +369,7 @@ async function _buildAndBroadcastInner(
         const txid = tx.id("hex") as string;
         releaseUtxos(utxos);
         console.error(
-          `OpenBook wallet: broadcast TIMEOUT (indeterminate) txid=${txid} — not rebuilding (tx may have landed)`
+          `OpenBooks wallet: broadcast TIMEOUT (indeterminate) txid=${txid} — not rebuilding (tx may have landed)`
         );
         return { status: "broadcast_timeout" };
       }
@@ -426,7 +426,7 @@ async function _buildAndBroadcastInner(
       retryCount < 3
     ) {
       console.warn(
-        `OpenBook wallet: double-spend detected, blacklisting competing UTXOs and retrying (attempt ${retryCount + 1}/3)`
+        `OpenBooks wallet: double-spend detected, blacklisting competing UTXOs and retrying (attempt ${retryCount + 1}/3)`
       );
       for (const competingTxid of dsResult.more.competingTxs) {
         try {

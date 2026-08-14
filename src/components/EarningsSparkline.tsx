@@ -47,7 +47,7 @@ export function EarningsSparkline({
             fontSize="10"
             fill="#52525b"
           >
-            Boot a post to start earning
+            Boost a post to start earning
           </text>
         </svg>
       </div>
