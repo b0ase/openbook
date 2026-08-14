@@ -477,6 +477,52 @@ invocation must never be both free and valuable, or the inflation problem return
 it must be because the INVOKING POST is paid for (pay-to-post) with a slice routed to the
 owner — never because a mention conjures value from nothing. **Not decided.**
 
+## Boosting = tokenising someone ELSE's post (proposed 2026-08-14)
+
+Let a reader pay to give another user's post a ticker. Call the act **boosting**, replace the
+Bootboard with a **Boost Board**, and retire "boot" as product language.
+
+**It fixes a real defect, not just naming.** Today a ticker is claimed by writing `$X` in your
+OWN post, so only an author can name their own work — and authors do not name their own best
+work; readers do. Naming rights currently sit with the wrong party. Boosting moves recognition
+to the people who recognise.
+
+**It also gives boosting something that lasts.** A boost is currently a payment that splits and
+then a spotlight that expires; nothing persists. Under this it MINTS — a permanent, citable,
+invokable name for that post, which composes directly with *Media tickers and transclusion*
+above: once a killer text post has a ticker, it can be quoted by invoking it.
+
+### Who receives the tokens — reuse the split that already exists
+
+The obvious reading of *"the payer receives the tokens"* gives them all to the booster, which
+means paying to own a token named after someone else's work. That is appropriation with a
+price tag.
+
+**The sat split already solves this exact problem: 80% pool / 15% creator / 5% platform.** Make
+the TOKEN allocation mirror the SAT allocation. The creator holds a share of the token named
+for their work, the booster holds a share for having spotted it early, and no new economic
+policy is invented — `split.ts` and FAIRNESS.md have already been written, tested and argued
+over. **Strongly recommended over designing a second, parallel formula.**
+
+### "Boost" over "boot", and what must NOT be renamed
+
+Better motivated than the Bootboard → Bookboard idea (rejected: "boot" was the verb and "book"
+was not). "Boost" IS the verb, it is what the action does, and **the database already says so**
+— the column is `boosted_by`.
+
+Rename the PRODUCT LANGUAGE only. `boot_split` is written **on-chain and is immutable**, and
+readers select a stream by `(app, type)` — renaming the type forks the record stream in half
+for nothing. Internal column names likewise cost nothing to leave alone. UI language is not
+permanent; on-chain identifiers are.
+
+### The rule this still needs
+
+**Naming someone's post is not a neutral act.** For a killer post it is flattering; for someone
+who does not want their words tokenised it is not, and first-claim-wins means they cannot undo
+it. Options, none chosen: the author can decline or retire the ticker; the author must hold a
+share (which the split above gives them anyway); or naming is simply accepted as the price of
+posting in public. **Decide before boosting can mint.**
+
 ## Is a domain a token? (asked 2026-08-14)
 
 The intuition: a domain and a ticker are both unique names in a namespace, claimed
