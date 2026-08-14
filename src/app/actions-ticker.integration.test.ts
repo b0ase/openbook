@@ -334,3 +334,36 @@ describe("a repeat mention is an INVOCATION, not a claim", () => {
     expect(row.root_id).toBe(mixed);
   });
 });
+
+describe("the root ticker is claimable like any other", () => {
+  // Nobody had claimed the board's own name, so `/$openbooks` was hard-coded to
+  // mean "show the feed". That is only safe while it stays unclaimed: once it is
+  // a real thread, `handleOpenTicker` pushes `/$openbooks` into the address bar
+  // for a thread the URL handler would refuse to reopen — you would see one
+  // thing and share another. These pin the resolution, which is what the URL
+  // handler now depends on rather than a special case.
+
+  it("registers the root name as a normal claim", async () => {
+    expect((await post(`naming the board itself: $${ROOT_TICKER}`)).ok).toBe(true);
+    const id = lastId();
+    const resolved = await resolveTickers([ROOT_TICKER]);
+    expect(resolved[ROOT_TICKER]).toEqual({ root_id: id, post_id: id });
+  });
+
+  it("gives the root no parent, so the tree still has exactly one top", async () => {
+    await post(`the board: $${ROOT_TICKER}`);
+    const row = db.prepare("SELECT parent_symbol FROM tickers WHERE symbol = ?").get(ROOT_TICKER);
+    expect(row).toEqual({ parent_symbol: null });
+  });
+
+  it("resolves to nothing while unclaimed — which is what falls through to the feed", async () => {
+    // The pre-plural spelling is never claimed, so this is also the case that
+    // keeps old `/$openbook` links landing on the feed rather than erroring.
+    expect(await resolveTickers(["OPENBOOK"])).toEqual({});
+  });
+
+  it("puts a top-level claim under the root, named or not", async () => {
+    await post("an ordinary idea, $Zulu");
+    expect(await getTickerPath("ZULU")).toEqual([ROOT_TICKER, "ZULU"]);
+  });
+});

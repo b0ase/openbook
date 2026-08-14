@@ -14,7 +14,7 @@ import { InstallProvider } from "@/contexts/InstallContext";
 import { useFeedPolling } from "@/hooks/useFeedPolling";
 import { useScrollTracker } from "@/hooks/useScrollTracker";
 import { FORK_POINT_ID, isInheritedPost } from "@/lib/fork-point";
-import { isRootTicker, parseTickerPath, ROOT_TICKER, tickerSlug } from "@/lib/ticker";
+import { parseTickerPath, ROOT_TICKER, tickerSlug } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { BootboardData, Post } from "@/types";
 import {
@@ -570,7 +570,7 @@ function FeedContent({
     const onPop = () => {
       const fromUrl = parseTickerPath(window.location.pathname);
       const leaf = fromUrl.at(-1);
-      if (!leaf || isRootTicker(leaf)) {
+      if (!leaf) {
         setThreadRootId(null);
         return;
       }
@@ -585,12 +585,28 @@ function FeedContent({
 
   // A COLD LOAD of a shared `/$openbook/$test` link opens that thread. Runs once:
   // afterwards the URL is driven by pushState above.
+  /**
+   * Open the thread named by the URL on a cold load.
+   *
+   * ⚠ THE ROOT TICKER IS NOT SPECIAL-CASED HERE, DELIBERATELY. `/$openbooks`
+   * used to short-circuit to "show the feed", which was fine only while nobody
+   * had claimed that name. The moment it IS claimed, `handleOpenTicker` pushes
+   * `/$openbooks` into the address bar for a thread that this effect would then
+   * refuse to reopen — so you would see a thread, copy its address, and send
+   * someone the feed. A URL that does not reproduce what the sharer was looking
+   * at is worse than no URL.
+   *
+   * The division is now: `/` is the feed, `/$whatever` is a thread. An unclaimed
+   * name resolves to nothing and falls through to the feed anyway, so the old
+   * behaviour survives for as long as it is the true one — including for the
+   * pre-plural `/$openbook`.
+   */
   const openedFromUrlRef = useRef(false);
   useEffect(() => {
     if (openedFromUrlRef.current) return;
     openedFromUrlRef.current = true;
     const leaf = parseTickerPath(window.location.pathname).at(-1);
-    if (!leaf || isRootTicker(leaf)) return;
+    if (!leaf) return;
     void resolveTickers([leaf]).then((r) => {
       const hit = r[leaf];
       if (hit) setThreadRootId(hit.root_id);
