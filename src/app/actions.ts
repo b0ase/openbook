@@ -413,6 +413,33 @@ export async function getThreadShare(
  * is that minus the root, so the two numbers are consistent by construction
  * rather than by two queries that could disagree.
  */
+/**
+ * How many tokens each named ticker has issued — its thread's post count.
+ *
+ * ⚠ ONE QUERY FOR EVERY TICKER ON SCREEN, not one per ticker. A feed can hold a
+ * hundred posts and several of them may name the same token, so a per-mention
+ * lookup would turn scrolling into a query storm for a figure rendered in
+ * brackets. The feed collects the symbols it is showing and asks once.
+ *
+ * A ticker nobody has claimed is simply absent from the result — the renderer
+ * shows the name with no figure rather than inventing a zero.
+ */
+export async function getTickerSupply(symbols: string[]): Promise<Record<string, number>> {
+  const wanted = [...new Set(symbols.map(canonicalTicker).filter(isValidTicker))].slice(0, 200);
+  if (!wanted.length) return {};
+  const placeholders = wanted.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT t.symbol AS symbol, COUNT(p.id) AS tokens
+         FROM tickers t
+         JOIN posts p ON p.root_id = t.root_id
+        WHERE t.symbol IN (${placeholders})
+        GROUP BY t.symbol`
+    )
+    .all(...wanted) as { symbol: string; tokens: number }[];
+  return Object.fromEntries(rows.map((r) => [r.symbol, r.tokens]));
+}
+
 export async function getThreadStats(rootId: number): Promise<{ tokens: number; replies: number }> {
   if (!Number.isInteger(rootId) || rootId <= 0) return { tokens: 0, replies: 0 };
   const row = db.prepare("SELECT COUNT(*) AS n FROM posts WHERE root_id = ?").get(rootId) as {

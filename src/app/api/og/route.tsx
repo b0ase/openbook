@@ -147,7 +147,7 @@ export async function GET(req: Request) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", fontSize: 30, fontWeight: 700, letterSpacing: "-0.02em" }}>
             <span style={{ color: "#f59e0b" }}>$Open</span>
-            <span style={{ color: "#ffffff" }}>Book</span>
+            <span style={{ color: "#ffffff" }}>Books</span>
           </div>
           <div style={{ display: "flex", fontSize: 21, color: "#71717a" }}>
             Post it. It's yours.

@@ -1,6 +1,7 @@
 "use client";
 
 import { findSegments } from "@/lib/linkify";
+import { formatShare } from "@/lib/share";
 
 /**
  * Post body text with URLs as live links and `$Ticker`s as links to the thread
@@ -19,9 +20,23 @@ import { findSegments } from "@/lib/linkify";
 export function PostText({
   content,
   onOpenTicker,
+  tickerSupply,
 }: {
   content: string;
   onOpenTicker?: (symbol: string) => void;
+  /**
+   * Tokens issued per ticker, keyed by CANONICAL symbol.
+   *
+   * Passed down rather than fetched here: a feed can hold a hundred posts and
+   * several may name the same token, so a lookup per mention would turn
+   * scrolling into a query storm for a figure shown in brackets. The feed asks
+   * once for everything on screen and refreshes it on the poll it already runs.
+   *
+   * A symbol that is absent renders with no figure — an unclaimed name has no
+   * supply, and inventing a 0% would read as "worthless" rather than "not a
+   * token yet".
+   */
+  tickerSupply?: Record<string, number>;
 }) {
   const segments = findSegments(content);
   if (segments.length === 0) return <>{content}</>;
@@ -61,6 +76,19 @@ export function PostText({
           title={`Open the $${seg.raw} thread`}
         >
           ${seg.raw}
+          {/* One post's share of that token's supply. 100% while it is the only
+              one; it falls as the thread fills, which is the whole point — the
+              figure is what makes dilution visible at the moment it happens
+              rather than in a wallet screen later. */}
+          {(() => {
+            const tokens = tickerSupply?.[seg.symbol];
+            return tokens && tokens > 0 ? (
+              <span className="text-amber-400/60 font-normal tabular-nums">
+                {" "}
+                ({formatShare(1, tokens)})
+              </span>
+            ) : null;
+          })()}
         </button>
       );
     } else {

@@ -23,11 +23,14 @@ export function PostContent({
   post,
   badge,
   onOpenTicker,
+  tickerSupply,
 }: {
   post: Post;
   badge?: React.ReactNode;
   /** Open the thread a `$Ticker` names. Omitted = tickers render as plain text. */
   onOpenTicker?: (symbol: string) => void;
+  /** Tokens issued per ticker — see PostText. */
+  tickerSupply?: Record<string, number>;
 }) {
   const media = firstMedia(findUrls(post.content).map((u) => u.url));
 
@@ -72,7 +75,7 @@ export function PostContent({
         )}
       </div>
       <p className="mt-1.5 text-[15px] leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">
-        <PostText content={post.content} onOpenTicker={onOpenTicker} />
+        <PostText content={post.content} onOpenTicker={onOpenTicker} tickerSupply={tickerSupply} />
       </p>
       {/* A direct media link is SHOWN; anything else falls through to the unfurl
           card. Both never render for the same post — a media file is not HTML, so

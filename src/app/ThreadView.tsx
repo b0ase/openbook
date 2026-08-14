@@ -1,12 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { formatShare } from "@/lib/share";
+import { distinctTickers } from "@/lib/ticker";
 import { isRootTicker, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
-import { getThread, getThreadShare, getThreadTicker, getTickerPath } from "./actions";
+import {
+  getThread,
+  getThreadShare,
+  getThreadTicker,
+  getTickerPath,
+  getTickerSupply,
+} from "./actions";
 import { IdentityChip } from "./IdentityBar";
 import { PostContent } from "./PostContent";
 import { PostForm } from "./PostForm";
@@ -94,6 +101,25 @@ export function ThreadView({
   useEffect(() => {
     void refreshShare();
   }, [refreshShare]);
+
+  // Same figure as the feed shows beside a $Ticker, so a token's share does not
+  // silently disappear when the reader opens the thread it names.
+  const [tickerSupply, setTickerSupply] = useState<Record<string, number>>({});
+  const visibleTickers = useMemo(() => {
+    const all = new Set<string>();
+    for (const p of posts) for (const t of distinctTickers(p.content)) all.add(t);
+    return [...all].sort().join(",");
+  }, [posts]);
+  useEffect(() => {
+    if (!visibleTickers) return;
+    let live = true;
+    void getTickerSupply(visibleTickers.split(",")).then((m) => {
+      if (live) setTickerSupply(m);
+    });
+    return () => {
+      live = false;
+    };
+  }, [visibleTickers]);
 
   useEffect(() => {
     void refresh();
@@ -305,7 +331,11 @@ export function ThreadView({
                     <div
                       className={`flex-1 min-w-0 ${isRoot ? "" : "border-l border-zinc-800 pl-3"}`}
                     >
-                      <PostContent post={post} onOpenTicker={onOpenTicker} />
+                      <PostContent
+                        post={post}
+                        tickerSupply={tickerSupply}
+                        onOpenTicker={onOpenTicker}
+                      />
                     </div>
                     <div className="shrink-0 self-center">
                       <BootButton

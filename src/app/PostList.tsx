@@ -338,6 +338,8 @@ interface PostListProps {
   showInherited?: boolean;
   /** Toggle the inherited run-up in and out of the feed. */
   onToggleInherited?: () => void;
+  /** Tokens issued per ticker — see PostText. */
+  tickerSupply?: Record<string, number>;
 }
 
 export function PostList({
@@ -364,6 +366,7 @@ export function PostList({
   onOpenTicker,
   showInherited,
   onToggleInherited,
+  tickerSupply,
 }: PostListProps) {
   // Re-render every 60s to keep timeAgo labels fresh
   const [, setTick] = useState(0);
@@ -445,6 +448,7 @@ export function PostList({
                   <PostContent
                     post={post}
                     onOpenTicker={onOpenTicker}
+                    tickerSupply={tickerSupply}
                     badge={
                       /* ⚠ AN INHERITED POST IS LABELLED BEFORE ANYTHING ELSE. These
                          rows are other people's words, written on another board.

@@ -14,13 +14,14 @@ import { InstallProvider } from "@/contexts/InstallContext";
 import { useFeedPolling } from "@/hooks/useFeedPolling";
 import { useScrollTracker } from "@/hooks/useScrollTracker";
 import { FORK_POINT_ID, isInheritedPost } from "@/lib/fork-point";
-import { parseTickerPath, ROOT_TICKER, tickerSlug } from "@/lib/ticker";
+import { distinctTickers, parseTickerPath, ROOT_TICKER, tickerSlug } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { BootboardData, Post } from "@/types";
 import {
   getForwardPosts,
   getOlderPosts,
   getOldestPosts,
+  getTickerSupply,
   getTickerPath,
   resolveTickers,
 } from "./actions";
@@ -112,6 +113,15 @@ function FeedContent({
   const loadForwardRef = useRef<() => void>(() => {});
 
   // LIVE upward-load state (scroll UP → prepend older; bottom-relative anchor).
+  /**
+   * Tokens issued per ticker, for the `(n%)` beside each `$Ticker` in post text.
+   *
+   * Refreshed on the SAME cadence as the feed rather than on its own timer, so
+   * the figure can never describe a different revision of the board than the
+   * posts it is printed next to. Fetched for every symbol currently on screen in
+   * one call — see `getTickerSupply` for why not one call per mention.
+   */
+  const [tickerSupply, setTickerSupply] = useState<Record<string, number>>({});
   const [olderPosts, setOlderPosts] = useState<Post[]>([]);
   // fewer than a full initial window ⇒ post #1 is already loaded (no older remain).
   const [liveHasMore, setLiveHasMore] = useState(() => initialPosts.length >= 100);
@@ -201,6 +211,50 @@ function FeedContent({
   const liveList = useMemo(() => [...olderPosts, ...newestAsc], [olderPosts, newestAsc]);
   const renderedPosts = mode === "live" ? liveList : originPosts;
   const postIds = useMemo(() => serverPosts.map((p) => p.id), [serverPosts]);
+
+  /**
+   * Every ticker named by a post currently rendered.
+   *
+   * Derived with `distinctTickers`, the SAME matcher that decides what gets
+   * claimed and what `PostText` renders — a second pattern here would eventually
+   * ask for a symbol the renderer never draws, or miss one it does.
+   */
+  const visibleTickers = useMemo(() => {
+    const all = new Set<string>();
+    for (const p of renderedPosts) for (const t of distinctTickers(p.content)) all.add(t);
+    return [...all].sort().join(",");
+  }, [renderedPosts]);
+
+  // Keyed on the JOINED symbol list, not the post array: scrolling loads posts
+  // constantly but rarely introduces a new ticker, and this should not refetch
+  // because a boot count moved.
+  useEffect(() => {
+    if (!visibleTickers) {
+      setTickerSupply({});
+      return;
+    }
+    let live = true;
+    const symbols = visibleTickers.split(",");
+    const load = () => {
+      void getTickerSupply(symbols)
+        .then((m) => {
+          if (live) setTickerSupply(m);
+        })
+        .catch(() => {
+          // A missing figure is a bracket that isn't drawn, not a broken feed.
+        });
+    };
+    load();
+    // Same 5s cadence as the feed poll, and skipped on a hidden tab for the same
+    // reason: a backgrounded board should cost nothing.
+    const id = setInterval(() => {
+      if (!document.hidden) load();
+    }, 5000);
+    return () => {
+      live = false;
+      clearInterval(id);
+    };
+  }, [visibleTickers]);
   // Oldest post of the newest (server-polled) window. Stable: the poll only
   // prepends NEWER posts, so serverPosts.at(-1) never changes. Everything with a
   // smaller id is prepended history (never observed for unread — see PostList).
@@ -677,6 +731,7 @@ function FeedContent({
             liveHasMore={liveHasMore}
             showInherited={showInherited}
             onToggleInherited={toggleInherited}
+            tickerSupply={tickerSupply}
             isLoadingOlder={isLoadingOlder}
             oldestServerId={oldestServerId}
             onBooted={refresh}
