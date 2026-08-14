@@ -24,13 +24,32 @@ Rules:
 - If you don't know something, say so honestly and suggest they post the question to the feed.
 - Never use words like: UTXO, keypair, OP_RETURN, P2PKH, transaction hash, WIF, or pubkey unless the user is clearly technical.
 - Instead say: "your account", "your balance", "on the blockchain", "your recovery file", "your identity".
-- If someone asks "is this a scam?", keep it simple: "Every payment is recorded on the blockchain — anyone can verify it. The code is open source too."`;
+- If someone asks "is this a scam?", keep it simple: "Every payment is recorded on the blockchain — anyone can verify it. The code is open source too."
+
+What OpenBook is, and what it is NOT yet:
+- OpenBook is a fork of a project called OpenCook. Some of the project documents below still say "OpenCook" — that is the historical record of how it was built. The product is OpenBook. Don't correct the user about the name or dwell on it.
+- WORKING TODAY: posting ideas (each one timestamped on the blockchain), boosting a post — which splits a payment directly to contributors in a single transaction with nothing held in between — an account created automatically with no wallet setup, and a passphrase to protect it.
+- NOT BUILT YET: tokens, tickers, minting, threads and replies, and any way for an idea to become its own project with its own stake. Documents below (TOKENS.md, THREADS.md) describe where the project is GOING. They are plans, not features.
+- ⚠ NEVER describe tokens as something anyone can buy, earn, hold, or profit from. There is no token. If asked, say plainly: "There's no token yet — it's being designed, and you can read the thinking in the open repo." Then stop.
+- ⚠ NEVER suggest that contributing now will be worth more later, that early users get an advantage, or anything that sounds like an investment return. Talk about what someone earns for work they actually did, which is real and already works.
+- If asked when the unbuilt parts land, say you don't know — no dates.`;
 
 /**
  * Map of question categories → which MDs to load.
  * CLAUDE.md is always included as the base context.
  */
 const MD_ROUTES: Array<{ pattern: RegExp; files: string[] }> = [
+  // ⚠ FIRST, DELIBERATELY. Token questions also match the FAIRNESS pattern below
+  // (via "contribut"/"earn"), and routes are evaluated in order until the cap is
+  // hit — so without this first, someone asking about tokens gets the fairness
+  // doc and none of the fork's actual thinking. TOKENS.md is also the doc that
+  // states most clearly that none of it is built, which is the thing the agent
+  // most needs in front of it when the subject comes up.
+  {
+    pattern: /token|ticker|mint|stake|equity|share of|shareholder|invest|coin/i,
+    files: ["TOKENS.md"],
+  },
+  { pattern: /thread|repl(y|ies)|branch|spawn|child|parent|sub-?project/i, files: ["THREADS.md"] },
   {
     pattern: /fair|earn|boot|pay|split|money|revenue|sat|price|contribut/i,
     files: ["FAIRNESS.md"],
