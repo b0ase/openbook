@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteOrigin } from "@/lib/site-origin";
 import { canonicalTicker, isValidTicker, titleCaseTicker } from "@/lib/ticker";
 import { getServerAddress } from "@/services/bsv/wallet";
 import { getBootboard, getPosts } from "../actions";
@@ -36,10 +37,10 @@ export const revalidate = 10;
  * ("Catch-all must be the last part of the URL"), not a warning. Don't move it
  * back.
  *
- * The image URL must be ABSOLUTE: scrapers do not resolve relative paths. It is
- * built from `SITE_ORIGIN` for the same reason uploads are — a card URL is
- * fetched by third parties from wherever the link was shared, so it cannot
- * depend on which host served the page.
+ * The image URL must be ABSOLUTE: scrapers do not resolve relative paths, and
+ * the request host is not a safe source for it — behind Railway's proxy that is
+ * `localhost:8080`, which is how the root card ended up unfetchable. `siteOrigin()`
+ * is the one resolver; see `lib/site-origin.ts`.
  */
 export async function generateMetadata({
   params,
@@ -56,23 +57,14 @@ export async function generateMetadata({
   const title = `${name} — $OpenBook`;
   const description = `${name} on $OpenBook. Every post anchored on-chain, and one token to whoever wrote it.`;
 
-  const origin = (process.env.SITE_ORIGIN?.trim().replace(/\/+$/, "") ?? "").replace(/\/+$/, "");
   const slug = path.map((s) => `$${s.toLowerCase()}`).join("/");
-  const image = `${origin}/api/og?p=${encodeURIComponent(slug)}`;
+  const image = `${siteOrigin()}/api/og?p=${encodeURIComponent(slug)}`;
 
   return {
     title,
     description,
-    // Omit images entirely when SITE_ORIGIN is unset rather than emitting a
-    // relative URL a scraper cannot fetch — falling back to the site-wide card
-    // is a worse preview, but a broken image is a worse one still.
-    openGraph: { title, description, ...(origin ? { images: [image] } : {}) },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-      ...(origin ? { images: [image] } : {}),
-    },
+    openGraph: { title, description, images: [image] },
+    twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }
 

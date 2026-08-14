@@ -15,7 +15,7 @@ interface AnimatedBalanceProps {
   isGoat?: boolean;
   className?: string;
   /**
-   * Optional separate value that drives the flash + "Agentic fairness" label.
+   * Optional separate value that drives the flash + payout label.
    * When provided, the displayed number tracks `sats` but the flash/label only
    * fires when `flashTrigger` increases. Use this to flash on earnings while
    * displaying balance.
@@ -97,7 +97,11 @@ export function AnimatedBalance({
       : `+${satsToDollars(delta, bsvPrice)}`;
 
     setFlash(true);
-    setLabel(`${deltaDisplay} · Agentic fairness`);
+    // Say what happened, not what to call it. This read "Agentic fairness",
+    // inherited from OpenCook — a slogan on a payment notification, describing
+    // the payout arithmetic rather than the event. Nobody watching their balance
+    // move wants the name of the formula.
+    setLabel(`${deltaDisplay} · your share`);
     setTimeout(() => setFlash(false), 1200);
 
     if (labelTimer.current) clearTimeout(labelTimer.current);
@@ -121,7 +125,7 @@ export function AnimatedBalance({
         {formattedValue}
       </span>
 
-      {/* Agentic fairness label */}
+      {/* Payout label — see setLabel above */}
       {label && (
         <span
           className="absolute top-full right-0 mt-1 whitespace-nowrap text-[9px] text-amber-400/80 font-medium transition-opacity duration-500"

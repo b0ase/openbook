@@ -1,7 +1,7 @@
 {
   "name": "$OpenBook",
   "short_name": "$OpenBook",
-  "description": "A platform that builds itself. Agentic Fairness on BSV.",
+  "description": "Own what you post. Every idea anchored on-chain, and a token to whoever wrote it.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",

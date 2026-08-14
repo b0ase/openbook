@@ -1,5 +1,6 @@
 import { rateLimit } from "@/lib/rate-limit";
 import { checkUpload, formatBytes } from "@/lib/upload";
+import { siteOrigin } from "@/lib/site-origin";
 import { storeUpload } from "@/lib/upload-store";
 
 /**
@@ -10,11 +11,12 @@ import { storeUpload } from "@/lib/upload-store";
  * verbatim, and is rendered by `MediaEmbed`, which only embeds `https:` links. A
  * relative path would not even be recognised as a link by `linkify`.
  *
- * ⚠ THE URL IS PERMANENT THE MOMENT IT IS POSTED. `SITE_ORIGIN` exists because
- * of that: without it this would bake whichever hostname the request happened to
- * arrive on into content that can never be edited — so posts made during a
- * domain move would permanently point at the old domain. Set it once, to the
- * canonical public origin, and it stops mattering which host serves a request.
+ * ⚠ THE URL IS PERMANENT THE MOMENT IT IS POSTED, so it must never come from the
+ * request host. `siteOrigin()` (lib/site-origin.ts) is the one resolver — the
+ * same one the social cards use, because the failure mode is identical: behind
+ * Railway's proxy the request host is `localhost:8080`, which would have been
+ * baked into post content that can never be edited. Set `SITE_ORIGIN` to the
+ * canonical public origin and it stops mattering which host serves a request.
  *
  * Guards mirror the other write paths: per-IP rate limit, a hard byte ceiling
  * per media kind, and an extension chosen by us rather than by the uploader.
@@ -32,21 +34,6 @@ function clientIp(req: Request): string {
     req.headers.get("x-real-ip") ??
     "unknown"
   );
-}
-
-/**
- * The origin uploaded media is addressed under.
- *
- * Falls back to the request's own host so the feature works out of the box in
- * development and on a preview URL. The fallback is the unsafe-for-permanence
- * path, which is why the env var is documented as required for production.
- */
-function siteOrigin(req: Request): string {
-  const configured = process.env.SITE_ORIGIN?.trim().replace(/\/+$/, "");
-  if (configured) return configured;
-  const host = req.headers.get("host") ?? "localhost:3000";
-  const proto = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
-  return `${proto}://${host}`;
 }
 
 export async function POST(req: Request) {
@@ -105,7 +92,7 @@ export async function POST(req: Request) {
   }
 
   return Response.json({
-    url: `${siteOrigin(req)}/m/${stored.name}`,
+    url: `${siteOrigin()}/m/${stored.name}`,
     kind: check.kind,
   });
 }

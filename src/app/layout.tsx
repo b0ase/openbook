@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Geist, Geist_Mono } from "next/font/google";
+import { siteOrigin } from "@/lib/site-origin";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,23 +36,51 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "$OpenBook — A platform that builds itself",
+  /**
+   * ⚠ WITHOUT THIS, EVERY SOCIAL CARD IS BROKEN AND NOTHING SAYS SO. Next builds
+   * absolute metadata URLs from the REQUEST HOST when no base is given, and
+   * behind Railway's proxy that host is the internal `localhost:8080` — so
+   * `og:image` was literally `http://localhost:8080/opengraph-image`, which no
+   * scraper can fetch. Pages rendered, tags validated, and every shared link fell
+   * back to whatever the scraper had cached. It failed silently and totally.
+   *
+   * `siteOrigin()` resolves SITE_ORIGIN → RAILWAY_PUBLIC_DOMAIN → localhost, so a
+   * deploy is correct with no configuration and canonical once the domain is set.
+   */
+  metadataBase: new URL(siteOrigin()),
+  /**
+   * ⚠ INHERITED OPENCOOK COPY WAS REPLACED HERE, ON PURPOSE. This used to read
+   * "A platform that builds itself / Agentic fairness on BSV". Both were wrong
+   * for OpenBook and the owner rejected them:
+   *
+   *  - "builds itself" is not true. Somebody has to BUILD the platform other
+   *    people then use. Claiming otherwise is a slogan pretending to be a fact.
+   *  - "fair" is not the pitch. Nobody is looking for a fair place to post; they
+   *    want somewhere good, competitive and worth their time. Fairness describes
+   *    the payout arithmetic, which is plumbing, not a reason to show up.
+   *
+   * The actual proposition is OWNERSHIP: you keep a piece of what you make.
+   * Keep this line pointed at that, and keep it to things that are live.
+   */
+  title: "$OpenBook — own what you post",
   description:
-    "Post ideas, boot the best ones to the top, earn value through contribution. Agentic fairness on BSV.",
-  // ⚠ Describes what is LIVE. No claim that a token exists — the share card is the
-  // least questionable surface the project has, so the manifesto's tense rule
-  // applies hardest here.
+    "Post an idea and it's yours: timestamped on-chain, and it mints you a token in the thread it starts. Boost the ones worth reading and the payment goes straight to whoever wrote them.",
+  // ⚠ Describes what is LIVE, and leads with OWNERSHIP rather than fairness —
+  // see the note on `title` above. The line is token vs market (TOKENS.md): the
+  // card MAY say a post mints a token you own, and may NOT say it is buyable or
+  // worth money. This is the least questionable surface the project has, so that
+  // rule applies hardest here.
   openGraph: {
-    title: "$OpenBook — an open book of who built what",
+    title: "$OpenBook — own what you post",
     description:
-      "Post an idea and it's timestamped on-chain, permanently. Boost a post and the payment splits straight to contributors in one transaction — no balances held, no IOUs.",
+      "Post an idea and it's yours: timestamped on-chain, permanently, and it mints you a token in the thread it starts. Boost the ones worth reading and the payment splits straight to whoever wrote them — no balances held, no IOUs.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "$OpenBook — an open book of who built what",
+    title: "$OpenBook — own what you post",
     description:
-      "Every post anchored on-chain. Every boost split straight to contributors in a single transaction.",
+      "Every post anchored on-chain, and one token to whoever wrote it. Boosts split straight to contributors in a single transaction.",
   },
   manifest: "/manifest.json",
   appleWebApp: {
