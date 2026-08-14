@@ -2,6 +2,70 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-14 (ownership made visible) — a post is a token; wallet, uploads, DNS
+
+- **Category: feature + direction correction.** Four asks: percentages weren't showing against
+  tokens, the wallet vanished on ticker URLs, drag/drop + `+` uploads, and the DNS cutover.
+- **The wallet was missing on every ticker URL, and the cause was structural.** `ThreadView` is
+  `fixed inset-0`, so it covers the app header — meaning the identity chip disappeared on exactly
+  the `/$openbook/$test/...` links people share, i.e. a stranger's most likely first landing.
+  `<IdentityChip />` now renders in the overlay header too — the SAME component, not a copy, so
+  the locked / unlocked / read-only states cannot drift on the paths hardest to notice.
+- **Percentages existed, but only in the one place nobody was looking:** the compose-box hint
+  while typing a `$Ticker`. Nothing showed a share against a token already held. Added
+  `getHoldings(pubkey)` / `getThreadShare(rootId, pubkey)` — a Tokens section in the You modal and
+  "N% yours" in the thread header. `lib/share.ts` `formatShare` is the ONE formatter across all
+  three surfaces: three copies of "round it sensibly" would disagree by a digit on the same
+  figure, and a reader seeing two numbers for one thing stops trusting both. It never prints `0%`
+  for a holding that exists — that reads as *you have nothing* when the truth is *you have a
+  little*.
+- **⚠ MY FRAMING WAS WRONG AND THE OWNER OVERRULED IT.** I shipped the panel as "Your threads"
+  footnoted "not minted yet", reasoning that since no mint had shipped nothing could be owned.
+  Owner: it *"flies directly in the face of the model we're building. Users create, and own,
+  tokens when they post."* Correct. **The line that actually holds is TOKEN vs MARKET** — tokens
+  are real and owned today; what does not exist is the market. Fixed across the wallet, the
+  Manifesto status box AND its file header (which had instructed future editors "there is no
+  token"), and the agent prompt. **The agent's guardrail TEST was pinning the old falsehood**, so
+  the test was enforcing a lie; it now pins both halves — may not deny tokens exist, may not
+  call them buyable. The prompt also no longer claimed threads/tickers/replies were unbuilt.
+- **The idea I had under-weighted, now the base layer:** a post IS a token, a 1-of-1 that becomes
+  a 1-of-2 when quoted. It makes the ticker system cohere — every token needs an identifier
+  whether or not a human chose one, so the default name is the **txid**, and a `$Ticker` is the
+  readable alias you buy over it. Tickers are the naming layer over a universal token space, not
+  decoration. The wallet now shows unnamed tokens as truncated txids rather than "Thread #24", so
+  the value of naming is visible rather than argued.
+- **Citation-mint settled: the QUOTER holds the new unit.** Tokens spread to whoever cites them;
+  an author IS diluted by others' invocations — chosen knowingly. **⚠ GATED ON PAID POSTING, and
+  the gate is not optional:** quoting is free today, free acquisition of value destroys the
+  anchor, and units are irreversible once they exist. Under paid posting a quote IS a post, so
+  the quoter BUYS the unit. Written into TOKENS.md + DECISIONS.md as a refusal with its reason.
+  **NOT IMPLEMENTED.**
+- **Media uploads BUILT** — `+` button, whole-box drop target, and paste (how a screenshot
+  actually arrives). Bytes go to the persistent volume beside the SQLite file, so if the DB
+  survives a deploy so do the uploads. An upload becomes a URL in the post text — deliberately
+  the same thing a pasted link is, so it reuses `MediaEmbed` with no schema change and no second
+  render path. **No SVG** (linked SVG renders in a foreign origin; an uploaded one is served from
+  ours and carries `<script>` — stored XSS). Extension chosen from a fixed table so no
+  user-supplied filename reaches the filesystem; the serving route MATCHES a name rather than
+  sanitising a path. Verified: traversal 400/404, JSON + SVG rejected, dedupe to one file.
+- **DNS cutover diagnosed, not guessed.** `openbooks.space` → `69.46.46.88` (Railway), TXT verify
+  live, CAA includes `letsencrypt.org` — all correct. The cert error is Railway serving its
+  `*.up.railway.app` wildcard and returning **404**, which is proof the hostname is not bound to
+  the service. **Owner must add it as a Custom Domain in Railway.** HSTS means the browser warning
+  cannot be clicked through, so waiting is mandatory rather than optional.
+- **⚠ OWNER ACTION BEFORE REAL UPLOADS: set `SITE_ORIGIN=https://openbooks.space`.** An upload URL
+  is written into post text and anchored on-chain verbatim, so unset it bakes in whichever host
+  served the request — posts made mid-cutover would point at the old domain forever.
+- **Incidental lint debt cleared:** two `biome-ignore` comments named a rule that does not exist
+  (`useMediaCaptions` vs `useMediaCaption`) and so suppressed nothing; `PostText` keyed segments
+  by array index where a stable content offset was already to hand.
+- **Still open:** the duplicate-`$ticker` report (`/$openbook/$test/$branch/$branch`). While
+  writing holdings tests I confirmed ancestry follows the POST PARENT CHAIN — two sibling ROOT
+  posts both hang off `OPENBOOK`, and only a reply written INSIDE a ticker's thread nests under
+  it. That is correct behaviour and may be what looked like the bug. **Verify before changing
+  anything.** Also still open: `ANTHROPIC_API_KEY` / `GROQ_API_KEY` absent in production.
+- **Tests: 393 unit + 117 integration.** Lint and tsc clean.
+
 ## 2026-08-14 (fork identity) — $Ticker hotlinks, shared history to the fork point
 
 - **Category: feature + data.** Two asks: `$hotlinks` that open threads, and a timeline that reads as a fork rather than "neither".
