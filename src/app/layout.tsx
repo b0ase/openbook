@@ -62,7 +62,7 @@ export const metadata: Metadata = {
    * The actual proposition is OWNERSHIP: you keep a piece of what you make.
    * Keep this line pointed at that, and keep it to things that are live.
    */
-  title: "$OpenBooks — own what you post",
+  title: "$OpenBook — own what you post",
   description:
     "Post an idea and it's yours: timestamped on-chain, and it mints you a token in the thread it starts. Boost the ones worth reading and the payment goes straight to whoever wrote them.",
   // ⚠ Describes what is LIVE, and leads with OWNERSHIP rather than fairness —
@@ -71,7 +71,7 @@ export const metadata: Metadata = {
   // worth money. This is the least questionable surface the project has, so that
   // rule applies hardest here.
   openGraph: {
-    title: "$OpenBooks — own what you post",
+    title: "$OpenBook — own what you post",
     description:
       "Post an idea and it's yours: timestamped on-chain, permanently, and it mints you a token in the thread it starts. Boost the ones worth reading and the payment splits straight to whoever wrote them — no balances held, no IOUs.",
     type: "website",
@@ -104,7 +104,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "$OpenBooks — own what you post",
+    title: "$OpenBook — own what you post",
     description:
       "Every post anchored on-chain, and one token to whoever wrote it. Boosts split straight to contributors in a single transaction.",
     images: ["/og-openbooks.jpg"],
@@ -113,7 +113,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "$OpenBooks",
+    title: "$OpenBook",
   },
   other: {
     "mobile-web-app-capable": "yes",

@@ -28,7 +28,14 @@ export function Header({
           preserved. */}
       <div className="relative mx-auto flex max-w-2xl items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
         <div>
-          {/* The wordmark IS the ticker (TOKENS.md: the root token is $OpenBooks).
+          {/* ⚠ THE WORDMARK IS NO LONGER THE TICKER, and that is deliberate as of
+              2026-08-15. It reads `$OpenBook` — the REPOSITORY token
+              (`fad07aff…5cd3_0`), which is the thing the project is — while the
+              board's root ticker stays `$OPENBOOKS`, matching the domain that was
+              available. Two names, on purpose: the repo token is a fixed supply
+              held by an issuer, the board token is one unit per post held by
+              whoever wrote it, and one string cannot mean both.
+
               The `$` carries the amber with "Open" so the lockup stays the same
               two-tone it has always been, rather than adding a third colour. */}
           {/* No subtitle. "Agentic Fairness" described the payout engine, which
@@ -39,7 +46,7 @@ export function Header({
               "Open questions"). The Genesis jump this text used to carry lives
               on the header chevron, which shows whenever you are not at the top. */}
           <h1 className="text-lg font-semibold tracking-tight leading-none">
-            <span className="text-amber-400">$Open</span>Books
+            <span className="text-amber-400">$Open</span>Book
           </h1>
           {/* ⚠ UNDER the wordmark, not beside it. The Genesis control in the
               middle is absolutely positioned, so anything widening this group

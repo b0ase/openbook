@@ -51,7 +51,7 @@ export function SiteNav() {
         <a href="/" className="group">
           <span className="text-lg font-semibold tracking-tight leading-none">
             <span className="text-amber-400">$Open</span>
-            <span className="text-white group-hover:text-zinc-300 transition-colors">Books</span>
+            <span className="text-white group-hover:text-zinc-300 transition-colors">Book</span>
           </span>
         </a>
         <SiteNavLinks />
