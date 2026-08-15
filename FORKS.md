@@ -32,29 +32,61 @@ on-chain has not honoured it.
 
 ---
 
-## Why this is not in the licence
+## The terms of the token
 
-We considered writing it into the licence and decided against it, for reasons worth recording
-so nobody re-opens the question casually:
+Fixed at issue and not adjustable afterwards:
 
-- **We can't licence what we don't own.** This repository is itself a fork of MIT-licensed
-  [OpenCook](https://github.com/Challotes/opencook). Upstream's grant flows through us
-  irrevocably; conditions we add could only ever bind our own additions, and anyone can take
-  the upstream code without us in the picture at all.
+- **One token, one contract address.** Stated in the instrument. There is no second series.
+- **Fixed supply.** BSV-21 has no separate mint step — `deployBsv21Token` deploys *and* mints in
+  one operation, with the whole supply in `initialDistribution`. There is no minter role to
+  retain, so the supply cannot be increased by anyone, including the issuer.
+- **No supersession clause.** The instrument does not reserve a right to issue a later token
+  representing the same repository at a new address.
+- **The covenants bind the ISSUER, not the recipient.** No signature is required to hold a
+  gifted position, and none is required to keep it.
 
-- **"Send 50% of your tokens" is not a definable obligation.** Mint two tokens, send one,
-  comply completely, deliver nothing. Closing that hole means specifying supply, structure and
-  valuation inside a licence, and every clause added is another thing to argue about.
+⚠ **The supersession clause was drafted and then cut, deliberately.** A reserved right to
+re-issue would mean the token does not represent the repository — it represents a claim its
+issuer may replace at will, which is the standard criticism of tokens rather than an answer to
+it. It could also never be exercised without destroying the point of the gift, so it was a
+power that could only ever be used destructively while weakening the instrument on every
+reading. **Do not re-add it.**
 
-- **It would not be enforceable in practice.** You cannot detect a private fork, and suing a
-  public one costs more than the tokens are worth.
+⚠ **Nor is receipt gated on signing anything.** A gift conditional on the recipient ratifying
+the giver's framing is not a gift; it is an offer, and it can be refused on the framing alone.
+Obligations here point at the issuer so that there is nothing for a recipient to accept, and
+the position survives their disagreement with everything else in this file.
 
-- **It would cost real adoption.** A licence with a payment condition is not open source by any
-  standard definition. Much corporate legal review rejects those automatically.
+---
 
-So: MIT, plus a norm with a public ledger behind it. A licence tells people what is forbidden
-and needs a court. A public record tells people what everyone else did and needs an audience.
-This project is already built to be the second thing.
+## The licence, and a correction
+
+An earlier version of this file said a licence condition could not do this. That was too
+pessimistic, and the correction matters because it changes what is on offer.
+
+A condition **can** be a term of the copyright licence, if it attaches to the right act:
+
+> Distributing or commercially using a derivative of this repository requires registering the
+> derivative and assigning 50% of its tokens to the parent. Viewing and forking remain free, as
+> GitHub's terms require for a public repository. This condition is a term of the copyright
+> licence, not a platform rule, and applies whether or not the derivative is registered.
+
+**Not "forking"** — GitHub's Terms of Service already grant every user the right to view and
+fork a public repository, and no licence added later retracts that on GitHub's own platform.
+**Distributing or commercially using a derivative** is what copyright actually controls.
+
+Two things this repository does **not** claim, for the same reason:
+
+- **We can't licence what we don't own.** This repository is a fork of MIT-licensed
+  [OpenCook](https://github.com/Challotes/opencook). Upstream's grant flows through
+  irrevocably; conditions added here bind only our own additions.
+- **We are not owed anything by our own past, and nor is upstream owed by us.** OpenCook never
+  published a fork term. **An unpublished term is not a default — it is the upstream not having
+  asked.** So the 50% sent upstream is a GIFT, not the settlement of a debt, and describing it
+  as a debt would be inventing an obligation nobody set.
+
+Which is why the terms above are published *before* anyone forks this repository, rather than
+asserted afterwards against someone who has already forked it.
 
 ---
 
@@ -73,18 +105,39 @@ convention whose own reference implementation is aspirational is worth nothing, 
 is the last place to write a cheque the chain has not cashed. Fill each row with a txid when
 and only when it is on-chain.
 
-Two things must be settled before that is possible, and both are open:
+### Which token this is, and which it is not
 
-1. **An address upstream controls.** Upstream's author commits as `Nige <>` with no published
-   address. Tokens "gifted" to an address we control are an intention, not a gift. Until one is
-   published, the honest form is to mint, declare the offer publicly with the txid, and hold
-   the units unspent and unclaimed.
+⚠ **The repository token is NOT a `$Ticker` on openbooks.space.** They are different
+instruments that happen to share a `$` prefix, and merging them would break both:
 
-2. **An issuer allocation.** A `$Ticker` on this board currently has no issuer position at all:
-   its units are one per post that named it, held by whoever wrote those posts. **You cannot
-   gift half of a supply you do not hold.** Making the gift possible means first deciding
-   whether minting a name creates an issuer position, and saying so before anyone claims
-   another name — not afterwards, which is the version that reads badly.
+| | the board's `$Ticker` | this repository's token |
+|---|---|---|
+| what it names | a thread on the board | the repository at its URL |
+| units | one per post that named it | a fixed supply, set at issue |
+| held by | whoever wrote those posts | parties on a register |
+| supply moves when | anyone posts | never |
+
+A board `$Ticker` has **no issuer position at all** — its units belong to whoever wrote the
+posts, so there is no half of it to give away. And if repository equity were issued by posting,
+every poster would dilute the shareholders: a gifted 50% would start shrinking the moment
+somebody typed the name, and an unclaimed holder cannot exercise pre-emption rights they do not
+know they have.
+
+So the repository token is issued and recorded elsewhere, and openbooks.space is not involved
+in it. Nothing anyone posts on the board can move it.
+
+### What is still open
+
+**The reserve.** Supply cannot be increased after issue, so whatever is not distributed at
+issue is held as treasury — and that number is decided once, permanently, in the same act.
+After 50% goes upstream, the remaining half is everything there will ever be to allocate to
+every future contributor. Splitting it entirely to the issuer would leave nothing to
+enfranchise anyone with, which is the outcome this convention exists to avoid.
+
+**An address upstream controls.** Upstream publishes none. This is no longer a blocker: a
+position can be recorded against a GitHub login and left unclaimed indefinitely, which requires
+nothing of the recipient — not an address, not a signature, not agreement. It only becomes
+necessary if the units are to be made transferable to them on-chain.
 
 ---
 
