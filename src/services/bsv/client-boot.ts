@@ -22,6 +22,7 @@
  */
 
 import { bootAuditPayload } from "@/lib/boot-audit";
+import { INSCRIPTION_SATS } from "./inscription";
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -123,6 +124,25 @@ export function utxoKey(txHash: string, txPos: number): string {
 
 // ── WhatsOnChain helpers ────────────────────────────────────
 
+/**
+ * Whether a UTXO may be spent as ordinary money.
+ *
+ * ⚠ A 1-SATOSHI OUTPUT IS AN ORDINAL, NOT CHANGE. Under paid posting every post
+ * mints its author an inscription locked to their own address at exactly
+ * `INSCRIPTION_SATS` — the post-token this board exists to give people. It then
+ * sits in the same wallet as their spending money, and `selectUtxos` sorts
+ * SMALLEST-FIRST *deliberately*, to sweep up dust. So the author's own tokens
+ * were the first inputs chosen for the next boost or paid post, and would be
+ * burned as fee: "own what you post", with the wallet quietly eating the posts.
+ *
+ * Pure and exported so the rule is testable — the module around it does network
+ * I/O and holds process-wide wallet state, and this is not a rule to verify by
+ * reading it.
+ */
+export function isSpendableUtxo(value: number): boolean {
+  return value > INSCRIPTION_SATS;
+}
+
 export async function fetchUtxos(address: string, neededSats?: number): Promise<ClientUtxo[]> {
   // If pending change covers our needs, skip the WoC fetch entirely
   if (neededSats !== undefined && _pendingChange.length > 0) {
@@ -152,6 +172,21 @@ export async function fetchUtxos(address: string, neededSats?: number): Promise<
   const pendingKeys = new Set(_pendingChange.map((u) => utxoKey(u.tx_hash, u.tx_pos)));
   const filtered = wocUtxos.filter((u) => {
     const key = utxoKey(u.tx_hash, u.tx_pos);
+    // ⚠ ORDINALS ARE NOT CHANGE. A 1-satoshi output on this address is an
+    // inscription — a post-token, the thing this board exists to give people —
+    // and `selectUtxos` sorts SMALLEST-FIRST on purpose, to sweep up dust. So
+    // every ordinal the author owns was the first input picked for the next
+    // boost or paid post, and would be spent as fee. "Own what you post", with
+    // the wallet quietly eating the posts.
+    //
+    // Excluded here rather than in `selectUtxos` because this is the single
+    // choke point both the boost and paid-post paths draw from — a second
+    // filter is a second thing to forget.
+    //
+    // The 1-satoshi test is the same heuristic 1Sat wallets use, and it is
+    // exact for anything this app mints (`INSCRIPTION_SATS`). Worst case it
+    // strands a 1-sat change output, which costs ~15 sats to spend anyway.
+    if (!isSpendableUtxo(u.value)) return false;
     return !pendingKeys.has(key) && !_spent.has(key);
   });
 
