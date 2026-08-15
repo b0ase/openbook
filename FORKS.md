@@ -126,13 +126,27 @@ know they have.
 So the repository token is issued and recorded elsewhere, and openbooks.space is not involved
 in it. Nothing anyone posts on the board can move it.
 
-### What is still open
+### The split, decided
 
-**The reserve.** Supply cannot be increased after issue, so whatever is not distributed at
-issue is held as treasury — and that number is decided once, permanently, in the same act.
-After 50% goes upstream, the remaining half is everything there will ever be to allocate to
-every future contributor. Splitting it entirely to the issuer would leave nothing to
-enfranchise anyone with, which is the outcome this convention exists to avoid.
+| | units | share | |
+|---|---:|---:|---|
+| **upstream** | 500,000,000 | 50% | gifted, unclaimed until claimed |
+| **issuer** | 500,000,000 | 50% | held outright |
+| **treasury** | 0 | 0% | none reserved |
+| **total** | 1,000,000,000 | 100% | fixed at issue, never increased |
+
+**No separate reserve, deliberately.** A treasury the issuer controls is indistinguishable
+from the issuer's own holding — the same key spends both — so splitting the second half into
+two labelled buckets would have been a signal rather than a structure. This says the true
+thing: half is held, and any grant to a contributor visibly comes out of that half.
+
+⚠ **The cost, stated so nobody rediscovers it as a surprise:** nothing is pre-committed to
+future contributors. Every grant is a discretionary transfer from the issuer's own position
+rather than a draw against a declared pool, and the pool cannot be created later because supply
+is fixed. That is a communication problem and can be answered in words; the supply cannot be
+answered in words, which is why it is the number that got decided first.
+
+### What is still open
 
 **An address upstream controls.** Upstream publishes none. This is no longer a blocker: a
 position can be recorded against a GitHub login and left unclaimed indefinitely, which requires
