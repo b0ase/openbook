@@ -36,7 +36,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { ROOT_TICKER } from "@/lib/ticker";
+import { isRootTicker, ROOT_TICKER } from "@/lib/ticker";
 import {
   claimNym,
   createPost,
@@ -50,6 +50,7 @@ import {
   getTickerSupply,
   getTickerUsage,
   isReservedTicker,
+  listTickerBoards,
   listTickers,
   releaseTickers,
   reserveTickers,
@@ -452,6 +453,63 @@ describe("the root token always has a board", () => {
     const board = await getTickerLeaderboard(ROOT_TICKER);
     expect(board?.total).toBe(1);
     expect(board?.holders).toHaveLength(1);
+  });
+});
+
+describe("the /leaderboard index", () => {
+  // ⚠ It indexes OWNERSHIP, where /tickers indexes NAMES. And it is not a
+  // redirect to the root's board: `$OpenBooks` is one token among those listed,
+  // not a stand-in for all of them.
+
+  it("lists the root FIRST even with no units, then the rest by weight", async () => {
+    await post("claiming $Branch");
+    await post("citing $Branch again");
+    await post("and $Twig once");
+
+    const boards = await listTickerBoards();
+    expect(boards[0].symbol).toBe(ROOT_TICKER);
+    expect(boards[0].total).toBe(0);
+    // Ranking the board's own token by weight would drop it somewhere down a
+    // list of names taken from it.
+    expect(boards.slice(1).map((b) => b.symbol)).toEqual(["BRANCH", "TWIG"]);
+    expect(boards.slice(1).map((b) => b.total)).toEqual([2, 1]);
+  });
+
+  it("counts HOLDERS separately from units", async () => {
+    // Two posts by one author is two units held by one person — the distinction
+    // the index exists to show.
+    const key = PrivateKey.fromRandom();
+    const signAs = async (content: string) => {
+      const fd = new FormData();
+      fd.set("content", content);
+      fd.set("author", "anon_same");
+      fd.set("pubkey", key.toPublicKey().toString());
+      fd.set(
+        "signature",
+        key.sign(Array.from(new TextEncoder().encode(content))).toDER("hex") as string
+      );
+      return createPost(fd);
+    };
+    await signAs("claiming $Branch");
+    await signAs("citing $Branch again");
+
+    const board = (await listTickerBoards()).find((b) => b.symbol === "BRANCH");
+    expect(board?.total).toBe(2);
+    expect(board?.holders).toBe(1);
+  });
+
+  it("every entry links to a board that actually renders", async () => {
+    // ⚠ The index must not disagree with the thing it indexes. Listing from the
+    // `tickers` table instead of from mentions would have shown names with no
+    // units — entries linking to a 404.
+    await post("claiming $Branch");
+    for (const b of await listTickerBoards()) {
+      if (b.total === 0) {
+        // The root is the only permitted zero, and it renders regardless.
+        expect(isRootTicker(b.symbol)).toBe(true);
+      }
+      expect(await getTickerLeaderboard(b.symbol)).not.toBeNull();
+    }
   });
 });
 

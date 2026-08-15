@@ -1021,6 +1021,91 @@ function emptyBoard(symbol: string): TickerLeaderboard {
   return { symbol, path: [symbol], total: 0, attributed: 0, holders: [] };
 }
 
+export interface TickerBoardSummary {
+  symbol: string;
+  /** Ancestry, root-first — the same path a thread header renders. */
+  path: string[];
+  /** Units in circulation: posts that named it. */
+  total: number;
+  /** Distinct owners. Lower than `total` whenever somebody holds more than one. */
+  holders: number;
+}
+
+/**
+ * Every token that HAS a board, heaviest first — the index behind `/leaderboard`.
+ *
+ * ⚠ DRIVEN BY MENTIONS, NOT BY THE `tickers` TABLE. A board exists wherever
+ * units do: `/leaderboard/$name` renders for any name with a unit, claimed or
+ * not. Listing from `tickers` would have produced an index that omits pages it
+ * links to and links to pages that 404 — an index disagreeing with the thing it
+ * indexes.
+ *
+ * ⚠ THE ROOT IS PINNED FIRST, and listed even at zero units. It is the board
+ * itself rather than one name among many, so ranking it by weight would drop the
+ * site's own token somewhere down a list of names taken from it.
+ *
+ * Distinct from `/tickers`, which indexes NAMES — what has been claimed, and by
+ * what post. This indexes OWNERSHIP: how many units exist and how many people
+ * hold them.
+ */
+export async function listTickerBoards(limit = 100): Promise<TickerBoardSummary[]> {
+  const capped = Math.min(Math.max(1, limit), 200);
+  const rows = db
+    .prepare(
+      `SELECT symbol,
+              COUNT(*) AS total,
+              COUNT(DISTINCT CASE WHEN pubkey IS NOT NULL AND pubkey <> '' THEN pubkey END)
+                AS holders
+         FROM ticker_mentions
+        GROUP BY symbol
+        ORDER BY total DESC, symbol ASC
+        LIMIT ?`
+    )
+    .all(capped) as { symbol: string; total: number; holders: number }[];
+
+  const parentStmt = db.prepare("SELECT parent_symbol FROM tickers WHERE symbol = ?");
+  const cache = new Map<string, string[]>();
+  const pathFor = (symbol: string): string[] => {
+    const hit = cache.get(symbol);
+    if (hit) return hit;
+    const path: string[] = [symbol];
+    const seen = new Set([symbol]);
+    let cur = symbol;
+    // Depth-capped and cycle-guarded for the same reason `getTickerPath` is:
+    // this runs on a render path, and "impossible" data is what hangs a request.
+    for (let d = 0; d < 16; d++) {
+      const row = parentStmt.get(cur) as { parent_symbol: string | null } | undefined;
+      const parent = row?.parent_symbol;
+      if (!parent || seen.has(parent)) break;
+      path.unshift(parent);
+      seen.add(parent);
+      cur = parent;
+    }
+    cache.set(symbol, path);
+    return path;
+  };
+
+  const boards = rows
+    .filter((r) => !isRootTicker(r.symbol))
+    .map((r) => ({
+      symbol: r.symbol,
+      path: pathFor(r.symbol),
+      total: r.total,
+      holders: r.holders,
+    }));
+
+  const rootRow = rows.find((r) => isRootTicker(r.symbol));
+  return [
+    {
+      symbol: ROOT_TICKER,
+      path: [ROOT_TICKER],
+      total: rootRow?.total ?? 0,
+      holders: rootRow?.holders ?? 0,
+    },
+    ...boards,
+  ];
+}
+
 export async function getTickerLeaderboard(
   symbol: string,
   limit = 100

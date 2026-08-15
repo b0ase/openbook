@@ -1,6 +1,5 @@
 "use client";
 
-import { leaderboardHref, ROOT_TICKER } from "@/lib/ticker";
 import { IdentityChip } from "./IdentityBar";
 
 interface HeaderProps {
@@ -56,10 +55,9 @@ export function Header({
             <span aria-hidden="true" className="text-zinc-700">
               ·
             </span>
-            <a
-              href={leaderboardHref([ROOT_TICKER])}
-              className="hover:text-amber-400 transition-colors"
-            >
+            {/* The INDEX, not one token's board — `$OpenBooks` is one token
+                among those listed, not a stand-in for all of them. */}
+            <a href="/leaderboard" className="hover:text-amber-400 transition-colors">
               Holders
             </a>
           </nav>
