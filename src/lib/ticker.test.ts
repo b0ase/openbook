@@ -11,8 +11,8 @@ import {
   canonicalTicker,
   distinctTickers,
   findTickers,
+  isRootTicker,
   isValidTicker,
-  LEGACY_ROOT_TICKER,
   leaderboardHref,
   parseTickerPath,
   ROOT_HREF,
@@ -147,8 +147,14 @@ describe("tickerHref", () => {
     expect(ROOT_HREF).toBe("/");
   });
 
-  it("sends the pre-plural root home too", () => {
-    expect(tickerHref([LEGACY_ROOT_TICKER])).toBe(ROOT_HREF);
+  it("no longer treats the pre-plural name as the root", () => {
+    // ⚠ `LEGACY_ROOT_TICKER` retired 2026-08-15: `OPENBOOK` now names the
+    // REPOSITORY token, a fixed supply held by an issuer — not this board's
+    // root, whose units are one per post. Leaving it as a root spelling would
+    // have made `$OpenBook` resolve to the board while the same string meant
+    // equity elsewhere. It is reserved at boot so nobody can claim it here.
+    expect(isRootTicker("OPENBOOK")).toBe(false);
+    expect(tickerHref(["OPENBOOK"])).toBe("/$openbook");
   });
 
   it("treats an empty path as the root", () => {

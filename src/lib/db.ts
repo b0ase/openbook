@@ -189,6 +189,21 @@ export function applyReservedTickerMigration(database: Db): void {
       reserved_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+
+  // ⚠ `OPENBOOK` NAMES A DIFFERENT ASSET AND MUST NOT BE CLAIMABLE HERE. It was
+  // the board's own pre-plural name until 2026-08-14, and is now the repository
+  // token for github.com/b0ase/openbook — a fixed supply held by an issuer, not
+  // one unit per post held by whoever wrote it. Letting somebody claim it on the
+  // board would put the two one click apart under one string.
+  //
+  // Reserved at boot rather than by an operator call, because this is a
+  // structural fact about the name rather than an operational choice, and a
+  // reservation that depends on somebody remembering to run it is not one.
+  // Reserved names are SKIPPED, never refused: writing `$OpenBook` in a post
+  // still publishes, it simply claims nothing.
+  database.exec(
+    "INSERT OR IGNORE INTO reserved_tickers (symbol, reason) VALUES ('OPENBOOK', 'repo-token')"
+  );
 }
 
 /**

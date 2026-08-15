@@ -121,24 +121,29 @@ export function isValidTicker(symbol: string): boolean {
 export const ROOT_TICKER = "OPENBOOKS";
 
 /**
- * The root's previous name, kept so old links keep working.
+ * True for the root — use this, never `=== ROOT_TICKER`.
  *
- * The board was `$OpenBook` until 2026-08-14, when it took the plural to match
- * `openbooks.space`. Renaming the root is CHEAP here and expensive elsewhere,
- * for one reason worth knowing: a ticker URL resolves by its LAST segment only
- * (`Feed.tsx` → `parseTickerPath(...).at(-1)`), so `/$openbook/$test` already
- * opens `$Test` without consulting the ancestors at all. Only the breadcrumb
- * changes.
+ * ⚠ `LEGACY_ROOT_TICKER` ("OPENBOOK") WAS RETIRED 2026-08-15. It existed because
+ * the board was `$OpenBook` until it took the plural, and `/$openbook` needed to
+ * still mean "the main feed". It is gone because that string now names a
+ * DIFFERENT ASSET — the repository token for github.com/b0ase/openbook, whose
+ * units are a fixed supply held by an issuer, not one-per-post held by writers.
+ * Leaving it as a root spelling would have made `$OpenBook` on the board resolve
+ * to the board itself while the same name meant equity elsewhere.
  *
- * `/$openbook` on its own is the one case that needs this constant: it used to
- * mean "the root, i.e. the main feed", and without recognising the old name it
- * would fall through to "unknown ticker".
+ * `OPENBOOK` is RESERVED at boot instead (see `applyReservedTickerMigration`),
+ * so nobody can claim it here while it names something else. Reserved names are
+ * skipped, never refused: writing `$OpenBook` in a post still publishes, it
+ * simply claims nothing.
+ *
+ * Cost of the retirement, accepted: `/$openbook` no longer 307s to `/`. It
+ * renders the feed like any unresolved name, with the URL left as typed. Deeper
+ * old links are unaffected — a ticker URL resolves by its LAST segment only
+ * (`Feed.tsx` → `parseTickerPath(...).at(-1)`), so `/$openbook/$test` always
+ * opened `$Test` without consulting its ancestors.
  */
-export const LEGACY_ROOT_TICKER = "OPENBOOK";
-
-/** True for either spelling of the root — use this, never `=== ROOT_TICKER`. */
 export function isRootTicker(symbol: string): boolean {
-  return symbol === ROOT_TICKER || symbol === LEGACY_ROOT_TICKER;
+  return symbol === ROOT_TICKER;
 }
 
 /**
