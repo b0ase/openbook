@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findSegments, findUrls } from "./linkify";
+import { findSegments, findUrls, hasLink } from "./linkify";
 
 const urls = (s: string) => findUrls(s).map((u) => u.url);
 
@@ -66,5 +66,35 @@ describe("findSegments", () => {
 
   it("returns nothing for plain text", () => {
     expect(findSegments("just some words about $5 coffee")).toEqual([]);
+  });
+});
+
+describe("hasLink", () => {
+  // The feed poll asks this of every post on screen to decide which are still
+  // waiting on an unfurl, so it has to agree with `findUrls` exactly: a looser
+  // test here leaves a post polling forever for a preview the server was never
+  // going to record, and a stricter one leaves a real link permanently bare.
+
+  it("agrees with findUrls on every case it is asked about", () => {
+    for (const s of [
+      "see https://example.com now",
+      "http://bitcoinchat.online",
+      "https://a.com and http://b.org",
+      "just some words about $5 coffee",
+      "",
+      "$OpenBooks is not a link",
+      "example.com without a scheme",
+    ]) {
+      expect(hasLink(s)).toBe(findUrls(s).length > 0);
+    }
+  });
+
+  it("is true for a plain http link", () => {
+    // The post that surfaced the missing channel was http, not https.
+    expect(hasLink("http://bitcoinchat.online")).toBe(true);
+  });
+
+  it("is false for text with no url", () => {
+    expect(hasLink("a $ticker and a price of $50")).toBe(false);
   });
 });

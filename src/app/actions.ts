@@ -25,7 +25,13 @@ import {
   POST_LOG_COST_SATS,
   recordDailySpend,
 } from "@/lib/server-spend-budget";
-import { canonicalTicker, distinctTickers, isValidTicker, ROOT_TICKER } from "@/lib/ticker";
+import {
+  canonicalTicker,
+  distinctTickers,
+  isRootTicker,
+  isValidTicker,
+  ROOT_TICKER,
+} from "@/lib/ticker";
 import { generateAnonName } from "@/lib/utils";
 
 async function getBsvSdk() {
@@ -39,7 +45,13 @@ import { getServerAddress, isServerSpendDisabled } from "@/services/bsv/wallet";
 import { executeBoot } from "@/services/fairness/boot-orchestrator";
 import { getBootPrice, getBootPriceForUser } from "@/services/fairness/pricing";
 import { unfurl } from "@/services/link-unfurl";
-import type { BootboardData, BootboardHistoryRow, BootboardRow, Post } from "@/types";
+import type {
+  BootboardData,
+  BootboardHistoryRow,
+  BootboardRow,
+  Post,
+  PostPreviewUpdate,
+} from "@/types";
 
 export interface CreatePostResult {
   ok: boolean;
@@ -1004,6 +1016,11 @@ export interface TickerLeaderboard {
  * and `attributed` counts the ones with a holder; the difference is the
  * unowned remainder, and the page says so.
  */
+/** A board for a name with no units yet — see the root exception below. */
+function emptyBoard(symbol: string): TickerLeaderboard {
+  return { symbol, path: [symbol], total: 0, attributed: 0, holders: [] };
+}
+
 export async function getTickerLeaderboard(
   symbol: string,
   limit = 100
@@ -1018,7 +1035,15 @@ export async function getTickerLeaderboard(
          FROM ticker_mentions WHERE symbol = ?`
     )
     .get(canonical) as { total: number; attributed: number | null };
-  if (!totals || totals.total === 0) return null;
+  // A name nobody has ever written is not an empty leaderboard, it is not a
+  // token — the page 404s rather than implying it exists.
+  //
+  // ⚠ THE ROOT IS THE EXCEPTION, and it is not a special case so much as the
+  // absence of one: `$OpenBooks` is the board itself, so it cannot fail to
+  // exist, and it is linked from the header of every page. A 404 there would be
+  // the site reporting that it is not a thing. An honest empty board is the
+  // right answer while nobody has named it yet.
+  if (!totals || totals.total === 0) return isRootTicker(canonical) ? emptyBoard(canonical) : null;
 
   // The cap matches the split's 100. A leaderboard that listed more holders than
   // a payment can reach would advertise a share nobody can be paid.
@@ -1459,6 +1484,41 @@ export async function getPostCounts(
     WHERE p.id IN (${placeholders})
   `)
     .all(...ids) as { id: number; boot_count: number; reply_count: number }[];
+}
+
+/**
+ * Link previews that have landed for posts the client already has on screen.
+ *
+ * ⚠ A PREVIEW *NEEDS* THIS CHANNEL, for the same reason reply counts do. The
+ * unfurl is fire-and-forget from `createPost`, so it finishes AFTER the post row
+ * exists — and typically after the poll 500ms later has already delivered that
+ * row. Nothing then re-fetches it: `getNewPosts` only returns posts newer than
+ * the client's high-water mark, and `getUpdatedPosts` is asked only about posts
+ * MISSING a tx_id, which a paid post never is. So the author watched their own
+ * link sit bare until they reloaded, while the preview was in the database the
+ * whole time.
+ *
+ * Returns `preview_status` too, and rows are returned whether the unfurl
+ * SUCCEEDED or failed: a recorded failure is the answer that stops the client
+ * asking again, and dropping it would leave those posts polling forever.
+ */
+export async function getPostPreviews(ids: number[]): Promise<PostPreviewUpdate[]> {
+  if (!ids.length) return [];
+  const placeholders = ids.map(() => "?").join(",");
+  return db
+    .prepare(`
+    SELECT p.id,
+           lp.url         as preview_url,
+           lp.title       as preview_title,
+           lp.description as preview_description,
+           lp.image_url   as preview_image,
+           lp.site_name   as preview_site_name,
+           lp.status      as preview_status
+    FROM posts p
+    JOIN link_previews lp ON lp.url_hash = p.preview_hash
+    WHERE p.id IN (${placeholders})
+  `)
+    .all(...ids) as PostPreviewUpdate[];
 }
 
 export async function getBootboard(): Promise<BootboardData> {

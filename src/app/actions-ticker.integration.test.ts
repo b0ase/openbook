@@ -45,6 +45,7 @@ import {
   getNyms,
   getPosts,
   getThread,
+  getTickerLeaderboard,
   getTickerPath,
   getTickerSupply,
   getTickerUsage,
@@ -426,6 +427,31 @@ describe("token supply is counted from mentions", () => {
     // The renderer draws no figure when a symbol is absent; a 0% would read as
     // "worthless" instead of "not a token yet".
     expect(await getTickerSupply(["NOBODYSAIDTHIS"])).toEqual({});
+  });
+});
+
+describe("the root token always has a board", () => {
+  it("renders empty for $OpenBooks rather than 404ing", async () => {
+    // ⚠ Every other name 404s when nobody has written it — a name nobody wrote
+    // is not a token. The root is not in that category: it IS the board, it is
+    // linked from the header of every page, and a 404 there would be the site
+    // reporting that it does not exist.
+    const board = await getTickerLeaderboard(ROOT_TICKER);
+    expect(board).not.toBeNull();
+    expect(board?.symbol).toBe(ROOT_TICKER);
+    expect(board?.total).toBe(0);
+    expect(board?.holders).toEqual([]);
+  });
+
+  it("still 404s an ordinary name nobody has written", async () => {
+    expect(await getTickerLeaderboard("NOBODYSAIDTHIS")).toBeNull();
+  });
+
+  it("reports the root's real units once somebody names it", async () => {
+    await post(`naming $${ROOT_TICKER.toLowerCase()} in a post`);
+    const board = await getTickerLeaderboard(ROOT_TICKER);
+    expect(board?.total).toBe(1);
+    expect(board?.holders).toHaveLength(1);
   });
 });
 

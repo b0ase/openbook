@@ -55,6 +55,18 @@ export function findUrls(content: string): UrlMatch[] {
 }
 
 /**
+ * Whether `content` contains a URL at all.
+ *
+ * The cheap question the feed poll asks of every post on screen, to decide which
+ * ones are still waiting on an unfurl. Uses the SAME pattern as `findUrls` — a
+ * second, looser test here would have the client polling forever for previews
+ * the server was never going to record.
+ */
+export function hasLink(content: string): boolean {
+  return new RegExp(URL_PATTERN.source, "i").test(content);
+}
+
+/**
  * URLs and tickers together, ordered, non-overlapping — what a renderer walks.
  *
  * ⚠ URLS WIN OVER TICKERS ON OVERLAP. A path like `example.com/$OpenBooks` would

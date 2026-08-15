@@ -1,5 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { getBootboard, getNewPosts, getPostCounts, getPosts, getUpdatedPosts } from "@/app/actions";
+import {
+  getBootboard,
+  getNewPosts,
+  getPostCounts,
+  getPostPreviews,
+  getPosts,
+  getUpdatedPosts,
+} from "@/app/actions";
 import { rateLimit } from "@/lib/rate-limit";
 import { sweepOrphans } from "@/services/bsv/anchor-sweep";
 import { sweepPreviews } from "@/services/link-preview-sweep";
@@ -36,14 +43,23 @@ export async function GET(request: NextRequest) {
     ? countsParam.split(",").map(Number).filter(Number.isFinite).slice(0, 100)
     : [];
 
-  const [posts, bootboard, updated, counts] = await Promise.all([
+  // Client sends IDs of posts that carry a link but whose unfurl had not landed
+  // when it received them — see getPostPreviews for why nothing else re-fetches
+  // those rows.
+  const previewsParam = request.nextUrl.searchParams.get("previews");
+  const previewIds: number[] = previewsParam
+    ? previewsParam.split(",").map(Number).filter(Number.isFinite).slice(0, 50)
+    : [];
+
+  const [posts, bootboard, updated, counts, previews] = await Promise.all([
     sinceId !== null && Number.isFinite(sinceId) && sinceId >= 0
       ? getNewPosts(sinceId)
       : getPosts(),
     getBootboard(),
     pendingIds.length > 0 ? getUpdatedPosts(pendingIds) : Promise.resolve([]),
     countIds.length > 0 ? getPostCounts(countIds) : Promise.resolve([]),
+    previewIds.length > 0 ? getPostPreviews(previewIds) : Promise.resolve([]),
   ]);
 
-  return NextResponse.json({ posts, bootboard, updated, counts });
+  return NextResponse.json({ posts, bootboard, updated, counts, previews });
 }

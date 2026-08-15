@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BootboardData, Post } from "@/types";
+import { hasLink } from "@/lib/linkify";
+import type { BootboardData, Post, PostPreviewUpdate } from "@/types";
 
 interface FeedPollingResult {
   posts: Post[];
@@ -11,6 +12,8 @@ interface FeedPollingResult {
   // update live from ANY boot source (Bootboard re-boot, other users, server
   // wallet) — not just this client's own optimistic +1.
   counts?: { id: number; boot_count: number; reply_count: number }[];
+  // Previews that finished unfurling after the client already had the post.
+  previews?: PostPreviewUpdate[];
 }
 
 interface UseFeedPollingOptions {
@@ -76,6 +79,19 @@ export function useFeedPolling({
         url += `${separator}counts=${countIds.join(",")}`;
       }
 
+      // Posts carrying a link whose unfurl had not landed when we received the
+      // row. `preview_status` is the stop condition, not `preview_title` — a
+      // recorded FAILURE is an answer, and keying on the title would leave every
+      // unfetchable link polling for the life of the session.
+      const previewIds = postsRef.current
+        .filter((p) => !p.preview_status && hasLink(p.content))
+        .map((p) => p.id)
+        .slice(0, 50);
+      if (previewIds.length > 0) {
+        const separator = url.includes("?") ? "&" : "?";
+        url += `${separator}previews=${previewIds.join(",")}`;
+      }
+
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) return;
       const data: FeedPollingResult = await res.json();
@@ -92,8 +108,15 @@ export function useFeedPolling({
       // never arrives via `posts`, and `updated` only carries tx_id gains.
       const countsMap =
         data.counts && data.counts.length > 0 ? new Map(data.counts.map((c) => [c.id, c])) : null;
+      // Previews that finished after we already had the post. Without this the
+      // author watched their own link sit bare until a reload, with the preview
+      // sitting in the database the whole time.
+      const previewsMap =
+        data.previews && data.previews.length > 0
+          ? new Map(data.previews.map((v) => [v.id, v]))
+          : null;
 
-      // Patch an existing post with any tx_id confirmation and/or count change.
+      // Patch an existing post with any tx_id confirmation, count or preview.
       const patch = (p: Post): Post => {
         let next = p;
         if (updatedMap) {
@@ -107,11 +130,20 @@ export function useFeedPolling({
             if (c.reply_count !== p.reply_count) next = { ...next, reply_count: c.reply_count };
           }
         }
+        if (previewsMap && !p.preview_status) {
+          const v = previewsMap.get(p.id);
+          // `id` dropped: it is the post's own, and spreading it back would be
+          // harmless but says the wrong thing about what a preview is.
+          if (v) {
+            const { id: _id, ...fields } = v;
+            next = { ...next, ...fields };
+          }
+        }
         return next;
       };
 
       if (data.posts.length === 0) {
-        if (!updatedMap && !countsMap) return; // nothing new, nothing to patch
+        if (!updatedMap && !countsMap && !previewsMap) return; // nothing to patch
         setPosts((prev) => prev.map(patch));
         return;
       }

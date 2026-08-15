@@ -69,6 +69,14 @@ export interface PostPreviewFields {
 }
 
 /**
+ * A preview that landed after the client already had the post.
+ *
+ * Carried on its own poll channel (`getPostPreviews`) because nothing else
+ * re-fetches a post once the client holds it — see that function for why.
+ */
+export type PostPreviewUpdate = { id: number } & PostPreviewFields;
+
+/**
  * `reply_count` counts posts whose `root_id` is this post, EXCLUDING the post
  * itself — a thread with no replies reads 0, not 1. Like `boot_count` it is
  * computed by the `POST_SELECT` join rather than fetched separately, so the feed

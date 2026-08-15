@@ -1,5 +1,6 @@
 "use client";
 
+import { leaderboardHref, ROOT_TICKER } from "@/lib/ticker";
 import { IdentityChip } from "./IdentityBar";
 
 interface HeaderProps {
@@ -40,6 +41,28 @@ export function Header({
           <h1 className="text-lg font-semibold tracking-tight leading-none">
             <span className="text-amber-400">$Open</span>Books
           </h1>
+          {/* ⚠ UNDER the wordmark, not beside it. The Genesis control in the
+              middle is absolutely positioned, so anything widening this group
+              slides under it on a narrow screen — a second line stays clear of
+              it at every width and costs ~14px of header.
+
+              Wording matches what these pages already call themselves ("All
+              names" on the leaderboard footer), so the same place is not called
+              two things depending on where you came from. */}
+          <nav className="mt-1 flex items-center gap-2.5 text-[11px] leading-none text-zinc-500">
+            <a href="/tickers" className="hover:text-amber-400 transition-colors">
+              Names
+            </a>
+            <span aria-hidden="true" className="text-zinc-700">
+              ·
+            </span>
+            <a
+              href={leaderboardHref([ROOT_TICKER])}
+              className="hover:text-amber-400 transition-colors"
+            >
+              Holders
+            </a>
+          </nav>
         </div>
 
         <div className="absolute left-1/2 -translate-x-1/2">
