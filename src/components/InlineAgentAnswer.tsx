@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentTurn } from "@/lib/agent-record";
+import { type AgentTurn, stampTurn } from "@/lib/agent-record";
 
 /**
  * The running human/AI exchange, printed above the compose box.
@@ -8,8 +8,14 @@ import type { AgentTurn } from "@/lib/agent-record";
  * ⚠ IT IS A CONVERSATION, NOT A FEED. Both are rendered from the same screen,
  * and the feed means one specific thing on this board — permanent, owned,
  * on-chain. So this is deliberately unlike a post: no author chip, no boost
- * button, no timestamp, and an explicit line saying what it is. Somebody
- * reading quickly must not mistake an exchange for something already published.
+ * button, and an explicit line saying what it is. Somebody reading quickly must
+ * not mistake an exchange for something already published.
+ *
+ * ⚠ THE TIME IS SHOWN AS AN ABSOLUTE UTC STAMP, never the feed's relative "just
+ * now". It is part of the hashed record rather than decoration — it is what the
+ * server dated the answer, and on an agent turn the attestation signs it — so it
+ * is rendered in monospace beside the hash, where it reads as evidence and not
+ * as another post's byline.
  *
  * ⚠ EACH TURN SHOWS WHETHER IT IS ATTESTED. The hash chain proves nothing was
  * altered after the fact; only the server's signature speaks to what the model
@@ -64,6 +70,12 @@ export function InlineAgentTranscript({
                 }`}
               >
                 {turn.role === "human" ? "You" : "AI"}
+              </span>
+              <span
+                title={stampTurn(turn.ts)}
+                className="shrink-0 font-mono text-[9px] text-zinc-600"
+              >
+                {stampTurn(turn.ts).slice(11)}
               </span>
               {turn.role === "agent" && (
                 <span

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { hashTurn } from "@/lib/agent-record";
+import { hashTurn, isAttestableTs } from "@/lib/agent-record";
 import { rateLimit } from "@/lib/rate-limit";
 
 /**
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Slow down" }, { status: 429 });
   }
 
-  let body: { prevHash?: unknown; text?: unknown };
+  let body: { prevHash?: unknown; text?: unknown; ts?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -47,7 +47,16 @@ export async function POST(req: NextRequest) {
       ? body.prevHash
       : null;
 
-  const hash = hashTurn(prevHash, "agent", text);
+  // ⚠ THE TIME IS PART OF WHAT GETS SIGNED, so it is checked before signing. The
+  // client sends it (the hash must stay stable while the answer streams), and a
+  // signature over any timestamp it liked would let a record be dated to any
+  // moment. Out of window = still hashed, still shown, simply not attested.
+  const ts = body.ts;
+  if (!isAttestableTs(ts, Date.now())) {
+    return NextResponse.json({ attested: false, reason: "stale_timestamp" });
+  }
+
+  const hash = hashTurn(prevHash, "agent", text, ts);
 
   const wif = process.env.AGENT_ATTEST_WIF?.trim();
   if (!wif) {

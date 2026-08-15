@@ -260,7 +260,7 @@ export function PostForm({
     // what was asked survives even if the model call fails.
     let working: AgentTurn[] = [];
     setChain((prev) => {
-      working = [...prev, appendTurn(prev, "human", question)];
+      working = [...prev, appendTurn(prev, "human", question, Date.now())];
       return working;
     });
 
@@ -282,6 +282,14 @@ export function PostForm({
         return;
       }
 
+      // ⚠ THE ANSWER IS DATED BY THE SERVER THAT RAN THE MODEL. Read once, before
+      // streaming, and used for every re-hash — the hash on screen must not
+      // shuffle as chunks arrive. Falling back to the local clock keeps a
+      // proxy-stripped header from breaking the exchange; that turn simply fails
+      // the attestation window and is labelled unattested, which is the truth.
+      const headerTs = Number(res.headers.get("X-Agent-Ts"));
+      const answerTs = Number.isFinite(headerTs) && headerTs > 0 ? headerTs : Date.now();
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       const prevHash = working[working.length - 1]?.hash ?? null;
@@ -293,15 +301,22 @@ export function PostForm({
         const text = acc;
         setChain([
           ...working,
-          { role: "agent", text, prevHash, hash: hashTurn(prevHash, "agent", text) },
+          {
+            role: "agent",
+            text,
+            ts: answerTs,
+            prevHash,
+            hash: hashTurn(prevHash, "agent", text, answerTs),
+          },
         ]);
       }
 
       const finalTurn: AgentTurn = {
         role: "agent",
         text: acc,
+        ts: answerTs,
         prevHash,
-        hash: hashTurn(prevHash, "agent", acc),
+        hash: hashTurn(prevHash, "agent", acc, answerTs),
       };
 
       // ⚠ ATTESTED BY THE SERVER THAT RAN THE MODEL, not by us. Without this the
@@ -313,7 +328,7 @@ export function PostForm({
         const att = await fetch("/api/agent/attest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prevHash, text: acc }),
+          body: JSON.stringify({ prevHash, text: acc, ts: answerTs }),
         });
         if (att.ok) {
           const j = (await att.json()) as {

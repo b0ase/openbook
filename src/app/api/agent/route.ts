@@ -162,6 +162,11 @@ export async function POST(req: Request) {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache",
         "Transfer-Encoding": "chunked",
+        // ⚠ THE ANSWER'S TIME COMES FROM HERE, NOT THE BROWSER. It is hashed into
+        // the turn and signed by /api/agent/attest, so a poster's clock — wrong,
+        // or set wrong on purpose — must never be what a published human/AI
+        // record is dated by.
+        "X-Agent-Ts": String(Date.now()),
       },
     });
   } catch (e) {
