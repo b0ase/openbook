@@ -19,7 +19,11 @@
  * two paths hand out the same UTXO twice.
  */
 
-import { FEE_RATE_SATS_PER_KB, type PostPrice } from "@/lib/post-economics";
+import {
+  currentFeeRateSatsPerKb,
+  FEE_RATE_SATS_PER_KB,
+  type PostPrice,
+} from "@/lib/post-economics";
 import {
   acquireTxMutex,
   type ClientUtxo,
@@ -43,10 +47,14 @@ export type ClientPostResult =
   | { status: "no_utxos" }
   | { status: "broadcast_failed"; error: string };
 
-/** Same shape as the boot path's estimator, at the rate the price quote uses. */
-function estimateFee(inputCount: number, outputCount: number): number {
+/** Same shape as the boot path's estimator, at whatever rate the quote used. */
+function estimateFee(
+  inputCount: number,
+  outputCount: number,
+  rate: number = FEE_RATE_SATS_PER_KB
+): number {
   const bytes = 10 + 148 * inputCount + 34 * outputCount + 400; // +400 for the envelope
-  return Math.max(100, Math.ceil((bytes * FEE_RATE_SATS_PER_KB) / 1000));
+  return Math.max(100, Math.ceil((bytes * rate) / 1000));
 }
 
 const MAX_INPUTS = 20;
@@ -58,7 +66,8 @@ const MAX_INPUTS = 20;
 function selectUtxos(
   utxos: ClientUtxo[],
   target: number,
-  outputCount: number
+  outputCount: number,
+  rate: number
 ): { selected: ClientUtxo[]; total: number; fee: number } | null {
   const sorted = [...utxos].sort((a, b) => a.value - b.value);
   const selected: ClientUtxo[] = [];
@@ -68,10 +77,10 @@ function selectUtxos(
     if (selected.length >= MAX_INPUTS) break;
     selected.push(u);
     total += u.value;
-    if (total >= target + estimateFee(selected.length, outputCount)) break;
+    if (total >= target + estimateFee(selected.length, outputCount, rate)) break;
   }
 
-  const fee = estimateFee(selected.length, outputCount);
+  const fee = estimateFee(selected.length, outputCount, rate);
   return total >= target + fee ? { selected, total, fee } : null;
 }
 
@@ -103,15 +112,21 @@ export async function clientSidePost(
     const outputCount = 2 + (wantsPlatformFee ? 1 : 0);
     const target = INSCRIPTION_SATS + (wantsPlatformFee ? price.platformFeeSats : 0);
 
-    const utxos = await fetchUtxos(userAddress, target + estimateFee(1, outputCount));
+    // ⚠ THE LIVE RATE, NOT A CONSTANT. A hardcoded fee is safe only while the
+    // miner's published floor stays under it; the day it rises, every paid post
+    // is rejected AFTER the author committed, and nothing in the code would say
+    // why. Falls back to the constant on any failure, never below it.
+    const rate = await currentFeeRateSatsPerKb();
+
+    const utxos = await fetchUtxos(userAddress, target + estimateFee(1, outputCount, rate));
     if (!utxos.length) return { status: "no_utxos" };
 
-    const selection = selectUtxos(utxos, target, outputCount);
+    const selection = selectUtxos(utxos, target, outputCount, rate);
     if (!selection) {
       const balance = utxos.reduce((n, u) => n + u.value, 0);
       return {
         status: "insufficient_funds",
-        needed: target + estimateFee(1, outputCount),
+        needed: target + estimateFee(1, outputCount, rate),
         balance,
       };
     }

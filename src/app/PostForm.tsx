@@ -192,7 +192,7 @@ export function PostForm({
         // server would have accepted for nothing.
         const mode = await getPostingMode();
         if (mode.paid) {
-          const { postPrice } = await import("@/lib/post-economics");
+          const { postPrice, currentFeeRateSatsPerKb } = await import("@/lib/post-economics");
           const { clientSidePost } = await import("@/services/bsv/client-post");
           const { onchainRecord } = await import("@/lib/onchain-record");
 
@@ -211,6 +211,9 @@ export function PostForm({
           // text on a short post.
           const price = postPrice(payload.length + 600, {
             markupPercent: mode.markupPercent,
+            // Same rate the transaction builder will use, so the quote and the
+            // transaction cannot disagree.
+            feeRateSatsPerKb: await currentFeeRateSatsPerKb(),
           });
 
           const paid = await clientSidePost(

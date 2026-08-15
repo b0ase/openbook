@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   FEE_RATE_SATS_PER_KB,
+  feeRateFromPolicy,
   INSCRIPTION_SATS,
   isPaidPostingEnabled,
   MIN_ECONOMIC_OUTPUT_SATS,
@@ -120,5 +121,52 @@ describe("isPaidPostingEnabled", () => {
       process.env.PAID_POSTING = on;
       expect(isPaidPostingEnabled()).toBe(true);
     }
+  });
+});
+
+describe("feeRateFromPolicy", () => {
+  it("reads the live ARC policy shape", () => {
+    // The exact response measured from arc.gorillapool.io/v1/policy.
+    expect(feeRateFromPolicy({ policy: { miningFee: { bytes: 1000, satoshis: 100 } } })).toBe(100);
+  });
+
+  it("ROUNDS UP — one sat/kB under the floor is a rejection, not a discount", () => {
+    // And under paid posting a rejection lands AFTER the author committed.
+    expect(feeRateFromPolicy({ policy: { miningFee: { bytes: 3000, satoshis: 100 } } })).toBe(34);
+    expect(feeRateFromPolicy({ policy: { miningFee: { bytes: 1000, satoshis: 1 } } })).toBe(1);
+  });
+
+  it("never returns zero, even if a miner publishes a free policy", () => {
+    expect(feeRateFromPolicy({ policy: { miningFee: { bytes: 1000, satoshis: 0 } } })).toBe(1);
+  });
+
+  it("returns null for anything malformed rather than guessing", () => {
+    // A guessed rate is worse than the fallback: it could be below the floor.
+    for (const bad of [
+      null,
+      {},
+      { policy: {} },
+      { policy: { miningFee: {} } },
+      { policy: { miningFee: { bytes: 0, satoshis: 100 } } },
+      { policy: { miningFee: { bytes: "1000", satoshis: 100 } } },
+      { policy: { miningFee: { bytes: 1000, satoshis: -5 } } },
+      { policy: { miningFee: { bytes: Number.NaN, satoshis: 100 } } },
+    ]) {
+      expect(feeRateFromPolicy(bad)).toBeNull();
+    }
+  });
+});
+
+describe("postPrice fee rate", () => {
+  it("uses a supplied live rate over the hardcoded fallback", () => {
+    expect(postPrice(1000, { feeRateSatsPerKb: 100 }).networkFeeSats).toBe(100);
+    expect(postPrice(1000).networkFeeSats).toBe(FEE_RATE_SATS_PER_KB);
+  });
+
+  it("ignores a nonsense rate instead of pricing at zero", () => {
+    expect(postPrice(1000, { feeRateSatsPerKb: Number.NaN }).networkFeeSats).toBe(
+      FEE_RATE_SATS_PER_KB
+    );
+    expect(postPrice(1000, { feeRateSatsPerKb: 0 }).networkFeeSats).toBe(1);
   });
 });

@@ -29,10 +29,68 @@
 export const MIN_ECONOMIC_OUTPUT_SATS = 10;
 
 /**
- * Miner fee rate. Matches `wallet.ts`: the ARC floor is 100 sat/kB and 110 gives
- * rounding headroom (0 rejections observed at 110, occasional at 100).
+ * Fallback miner fee rate, used when the live policy cannot be read. Matches
+ * `wallet.ts`: the ARC floor was 100 sat/kB when measured and 110 gives rounding
+ * headroom (0 rejections observed at 110, occasional at 100).
  */
 export const FEE_RATE_SATS_PER_KB = 110;
+
+/** ARC publishes the rate its miners will actually accept. */
+export const FEE_POLICY_URL = "https://arc.gorillapool.io/v1/policy";
+
+/**
+ * Read a sat/kB rate out of an ARC policy response.
+ *
+ * ⚠ ROUNDS UP, ALWAYS, AND NEVER BELOW THE PUBLISHED RATE. Being one satoshi per
+ * kilobyte under the miner's floor is the difference between a broadcast and a
+ * rejection — and under paid posting a rejection happens AFTER the author has
+ * committed, so it costs them a failed attempt rather than costing us a retry.
+ *
+ * Split out from the fetch so the parsing is testable without a network.
+ */
+export function feeRateFromPolicy(body: unknown): number | null {
+  const fee = (body as { policy?: { miningFee?: { satoshis?: unknown; bytes?: unknown } } })?.policy
+    ?.miningFee;
+  const satoshis = fee?.satoshis;
+  const bytes = fee?.bytes;
+  if (typeof satoshis !== "number" || typeof bytes !== "number") return null;
+  if (!Number.isFinite(satoshis) || !Number.isFinite(bytes) || bytes <= 0 || satoshis < 0) {
+    return null;
+  }
+  return Math.max(1, Math.ceil((satoshis / bytes) * 1000));
+}
+
+let _feeCache: { value: number; at: number } | null = null;
+const FEE_CACHE_MS = 5 * 60_000;
+
+/**
+ * The rate miners are currently accepting.
+ *
+ * ⚠ HARDCODING THIS IS A TIME BOMB. A fixed 110 is safe only while the published
+ * floor stays under it; the day it rises, every paid post is rejected with no
+ * warning and nothing in our code would say why. Cached for five minutes because
+ * the policy does not move minute to minute, and falls back to the constant
+ * above on any failure — never below the published rate.
+ */
+export async function currentFeeRateSatsPerKb(): Promise<number> {
+  if (_feeCache && Date.now() - _feeCache.at < FEE_CACHE_MS) return _feeCache.value;
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 5000);
+    const res = await fetch(FEE_POLICY_URL, { signal: ctl.signal }).finally(() =>
+      clearTimeout(timer)
+    );
+    if (!res.ok) return FEE_RATE_SATS_PER_KB;
+    const rate = feeRateFromPolicy(await res.json());
+    if (rate === null) return FEE_RATE_SATS_PER_KB;
+    _feeCache = { value: rate, at: Date.now() };
+    return rate;
+  } catch {
+    // Offline, blocked, or timed out — the fallback is above the floor we last
+    // measured, so a post still broadcasts.
+    return FEE_RATE_SATS_PER_KB;
+  }
+}
 
 /** The satoshi the inscription itself carries. */
 export const INSCRIPTION_SATS = 1;
@@ -76,12 +134,19 @@ function markupPercent(): number {
  * charges for the transaction, and pricing only the content would under-collect
  * on every post and leave the operator funding the difference.
  */
-export function postPrice(sizeBytes: number, opts?: { markupPercent?: number }): PostPrice {
+export function postPrice(
+  sizeBytes: number,
+  opts?: { markupPercent?: number; feeRateSatsPerKb?: number }
+): PostPrice {
   // Non-finite in means non-finite out: Math.ceil(NaN) is NaN and Math.max
   // propagates it, so a junk size would quote a NaN price and carry it into a
   // transaction builder. Clamp before any arithmetic.
   const bytes = Number.isFinite(sizeBytes) ? Math.max(0, Math.ceil(sizeBytes)) : 0;
-  const networkFeeSats = Math.ceil((bytes * FEE_RATE_SATS_PER_KB) / 1000);
+  const rate =
+    opts?.feeRateSatsPerKb !== undefined && Number.isFinite(opts.feeRateSatsPerKb)
+      ? Math.max(1, Math.ceil(opts.feeRateSatsPerKb))
+      : FEE_RATE_SATS_PER_KB;
+  const networkFeeSats = Math.ceil((bytes * rate) / 1000);
 
   const requested = opts?.markupPercent;
   const pct =
