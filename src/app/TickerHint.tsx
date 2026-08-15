@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatShare } from "@/lib/share";
 import { distinctTickers, titleCaseTicker } from "@/lib/ticker";
-import { getTickerUsage, resolveTickers } from "./actions";
+import { getTickerUsage, isReservedTicker, resolveTickers } from "./actions";
 
 /**
  * Live indicator under the compose box for any `$Ticker` being typed.
@@ -26,6 +26,17 @@ import { getTickerUsage, resolveTickers } from "./actions";
 interface TickerState {
   symbol: string;
   claimed: boolean;
+  /**
+   * Held open by the operator, so naming it claims nothing.
+   *
+   * ⚠ A THIRD STATE, NOT A SHADE OF "UNCLAIMED". A reserved name is unclaimed in
+   * the database and unclaimable in fact, and the hint used to report only the
+   * first half: typing `$OpenBook` — reserved because it names the REPOSITORY
+   * token — was answered with "100% · unclaimed — you'd be starting it". The one
+   * disclosure that exists to say what pressing send will do said the opposite
+   * of what it does.
+   */
+  reserved: boolean;
   threads: number;
 }
 
@@ -60,15 +71,18 @@ export function TickerHint({ content }: { content: string }) {
     // Debounced: this fires on every keystroke, and a lookup per character would
     // be a query storm for a hint.
     const t = setTimeout(async () => {
-      const [resolved, usage] = await Promise.all([
+      const [resolved, usage, reservedFlags] = await Promise.all([
         resolveTickers(symbols),
         getTickerUsage(symbols),
+        // At most three, and only after the 350ms debounce — see above.
+        Promise.all(symbols.map((s) => isReservedTicker(s))),
       ]);
       if (!live) return;
       setStates(
-        symbols.map((symbol) => ({
+        symbols.map((symbol, i) => ({
           symbol,
           claimed: Boolean(resolved[symbol]),
+          reserved: reservedFlags[i],
           threads: usage[symbol] ?? 0,
         }))
       );
@@ -91,13 +105,21 @@ export function TickerHint({ content }: { content: string }) {
         return (
           <div key={s.symbol} className="flex items-center gap-2 text-[11px] leading-tight">
             <span className="font-medium text-amber-400">${titleCaseTicker(s.symbol)}</span>
-            <span
-              className={`font-mono tabular-nums ${s.claimed ? "text-zinc-500" : "text-emerald-400"}`}
-            >
-              {pct}
-            </span>
+            {/* ⚠ NO FIGURE FOR A RESERVED NAME. A share of a claim that cannot be
+                made is not a small number, it is a category error — and "100%"
+                beside "you'd be starting it" is the exact sentence this reserved
+                name exists to prevent somebody believing. */}
+            {!s.reserved && (
+              <span
+                className={`font-mono tabular-nums ${s.claimed ? "text-zinc-500" : "text-emerald-400"}`}
+              >
+                {pct}
+              </span>
+            )}
             <span className="text-zinc-500">
-              {s.claimed ? (
+              {s.reserved ? (
+                <span className="text-zinc-400">held — naming it claims nothing</span>
+              ) : s.claimed ? (
                 <>
                   already claimed — you're citing it
                   {s.threads > 1 && ` · used in ${s.threads} threads`}
