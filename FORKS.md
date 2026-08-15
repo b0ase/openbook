@@ -96,14 +96,19 @@ asserted afterwards against someone who has already forked it.
 |---|---|
 | **This repository** | https://github.com/b0ase/openbook |
 | **Forked from** | https://github.com/Challotes/opencook (MIT, © 2026 BSVibes contributors) |
-| **Token** | *not yet minted* |
-| **Genesis inscription** | *not yet minted* |
+| **Token** | `$OPENBOOK` — BSV-21, 1,000,000,000 units, 0 decimals |
+| **Origin outpoint** | `fad07aff3264701ec1e9fbb778465c07ff8bc1cdaebbc9d7976a48ec07395cd3_0` |
+| **Icon inscription** | `ab97d4e280e9bb3d93db57d2a42037d0f3658d652b815e220f18b0fccf8cf689_0` |
 | **50% gifted to upstream** | *not yet sent* |
 
-⚠ **These rows are deliberately empty and must stay empty until the transactions exist.** A
-convention whose own reference implementation is aspirational is worth nothing, and this file
-is the last place to write a cheque the chain has not cashed. Fill each row with a txid when
-and only when it is on-chain.
+⚠ **A row is filled only once the transaction exists**, because a convention whose own
+reference implementation is aspirational is worth nothing, and this file is the last place to
+write a cheque the chain has not cashed. The gift row stays empty until it is sent.
+
+⚠ **THE OUTPOINT IS THE TOKEN'S IDENTITY, NOT THE TICKER.** BSV-21 symbols are not unique —
+anyone may deploy another token calling itself `OPENBOOK` tomorrow. Quote
+`fad07aff…5cd3_0` when it matters; `$OPENBOOK` is a label, and a label is what an impersonator
+copies first.
 
 ### Which token this is, and which it is not
 
