@@ -17,6 +17,40 @@ import { formatShare } from "@/lib/share";
  * this page via `window.opener`. `findSegments` only ever yields http(s) URLs,
  * so `javascript:` and `data:` can never become an href.
  */
+/**
+ * Which ticker mentions in a post are allowed to print a share figure.
+ *
+ * ⚠ THE FIGURE SITS INSIDE A SENTENCE SOMEBODY WROTE, so every character of it
+ * is a tax on reading them, and it earns its place only where it says something:
+ *
+ * - **Not at 100%.** A sole holding is what EVERY new name is, so the figure
+ *   carries no information while still breaking the prose — `A $ticker (100%)
+ *   contains lots of things. In business, a $ticker (100%) is the shorthand…`.
+ *   The wallet already reports those, as `1-of-1`.
+ * - **Not twice.** Supply is counted per POST (one unit per post, enforced by a
+ *   partial unique index), so a name written three times in one post necessarily
+ *   prints the SAME number three times. Once, at its first mention.
+ *
+ * Returns start offsets, which are unique per post, so the renderer looks up a
+ * mention rather than re-deriving this while building JSX — React Compiler is
+ * enabled here, and a render depending on side effects landing in source order
+ * is precisely what it is free to rearrange.
+ */
+export function figuredOffsets(
+  segments: ReturnType<typeof findSegments>,
+  tickerSupply?: Record<string, number>
+): Set<number> {
+  const figured = new Set<number>();
+  const seen = new Set<string>();
+  for (const seg of segments) {
+    if (seg.kind !== "ticker" || seen.has(seg.symbol)) continue;
+    seen.add(seg.symbol);
+    const tokens = tickerSupply?.[seg.symbol];
+    if (tokens && tokens > 1) figured.add(seg.start);
+  }
+  return figured;
+}
+
 export function PostText({
   content,
   onOpenTicker,
@@ -43,6 +77,8 @@ export function PostText({
 
   const parts: React.ReactNode[] = [];
   let cursor = 0;
+
+  const figured = figuredOffsets(segments, tickerSupply);
 
   // Keyed on the segment's offset in the content, not its array index: offsets
   // are unique and stable for a given post, so editing nothing keeps the same
@@ -76,19 +112,26 @@ export function PostText({
           title={`Open the $${seg.raw} thread`}
         >
           ${seg.raw}
-          {/* One post's share of that token's supply. 100% while it is the only
-              one; it falls as the thread fills, which is the whole point — the
-              figure is what makes dilution visible at the moment it happens
-              rather than in a wallet screen later. */}
-          {(() => {
-            const tokens = tickerSupply?.[seg.symbol];
-            return tokens && tokens > 0 ? (
-              <span className="text-amber-400/60 font-normal tabular-nums">
-                {" "}
-                ({formatShare(1, tokens)})
-              </span>
-            ) : null;
-          })()}
+          {/* One post's share of that token's supply — the figure that makes
+              dilution visible at the moment it happens rather than in a wallet
+              screen later.
+
+              ⚠ ONLY WHERE IT CARRIES INFORMATION, because this sits INSIDE a
+              sentence somebody wrote and every character of it is a tax on
+              reading them.
+
+              - Not at 100%: a sole holding is what EVERY new name is, so the
+                figure says nothing while breaking the prose. The wallet already
+                reports those as `1-of-1`.
+              - Not twice: supply is counted per POST, so a word named three
+                times in one post necessarily prints the same number three
+                times. Once, at its first mention. */}
+          {figured.has(seg.start) && (
+            <span className="text-amber-400/60 font-normal tabular-nums">
+              {" "}
+              ({formatShare(1, tickerSupply?.[seg.symbol] ?? 1)})
+            </span>
+          )}
         </button>
       );
     } else {
