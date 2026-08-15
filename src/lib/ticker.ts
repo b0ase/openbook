@@ -195,11 +195,39 @@ export function leaderboardHref(path: string[]): string {
   return `/leaderboard/${path.map(tickerSlug).join("/")}`;
 }
 
-/** Parse `/$openbook/$test` → `["OPENBOOK","TEST"]`. Non-ticker segments are ignored. */
+/**
+ * Parse `/$openbook/$test` → `["OPENBOOK","TEST"]`. Non-ticker segments are
+ * ignored.
+ *
+ * ⚠ DECODE BEFORE TESTING FOR THE `$`, NOT AFTER. `$` is a legal path character
+ * so it usually survives a URL intact — but it does not always, and this used to
+ * filter on the RAW segment: `%24memeplex` failed `startsWith("$")` and was
+ * dropped before it was ever decoded. Every reader of a path went silently
+ * empty on the encoded form — `/leaderboard/%24memeplex` 404'd as a name nobody
+ * had written, and a shared thread link opened the feed instead of the thread.
+ * The bug is invisible in the common case, which is what let it live.
+ */
 export function parseTickerPath(pathname: string): string[] {
   return pathname
     .split("/")
+    .map(decodeSegment)
     .filter((seg) => seg.startsWith("$"))
-    .map((seg) => canonicalTicker(decodeURIComponent(seg)))
+    .map((seg) => canonicalTicker(seg))
     .filter(isValidTicker);
+}
+
+/**
+ * A path segment, decoded, or unchanged if it cannot be.
+ *
+ * `decodeURIComponent` THROWS on a malformed escape (`%zz`, a lone `%`), and a
+ * URL is attacker-supplied — an uncaught throw here would turn a junk address
+ * into a server error rather than a page that simply names no ticker.
+ */
+function decodeSegment(seg: string): string {
+  if (!seg.includes("%")) return seg;
+  try {
+    return decodeURIComponent(seg);
+  } catch {
+    return seg;
+  }
 }

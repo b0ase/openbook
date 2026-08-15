@@ -13,6 +13,8 @@ import {
   findTickers,
   isValidTicker,
   LEGACY_ROOT_TICKER,
+  leaderboardHref,
+  parseTickerPath,
   ROOT_HREF,
   ROOT_TICKER,
   tickerHref,
@@ -160,5 +162,60 @@ describe("tickerHref", () => {
 
   it("addresses an ordinary ticker by its whole path", () => {
     expect(tickerHref(["TEST"])).toBe("/$test");
+  });
+});
+
+describe("parseTickerPath", () => {
+  // Untested until 2026-08-15, which is how the bug below survived: it is the
+  // function every URL goes through — the leaderboard's route params, the
+  // feed's popstate handler, the cold load of a shared thread link.
+
+  it("reads a path", () => {
+    expect(parseTickerPath("/$openbooks/$test")).toEqual([ROOT_TICKER, "TEST"]);
+    expect(parseTickerPath("/$test")).toEqual(["TEST"]);
+  });
+
+  it("⚠ DECODES BEFORE TESTING FOR THE $, not after", () => {
+    // The whole bug. `$` is a legal path character so it usually survives a URL
+    // intact — but Next hands route params percent-encoded, and the filter ran
+    // on the RAW segment: `%24work` failed `startsWith("$")` and was dropped
+    // before anything decoded it. `/leaderboard/$work` 404'd as a name nobody
+    // had ever written, for every ticker on the board.
+    expect(parseTickerPath("/%24work")).toEqual(["WORK"]);
+    expect(parseTickerPath("/%24openbooks/%24test")).toEqual([ROOT_TICKER, "TEST"]);
+    expect(parseTickerPath("/$openbooks/%24test")).toEqual([ROOT_TICKER, "TEST"]);
+  });
+
+  it("round-trips what leaderboardHref and tickerHref emit, encoded or not", () => {
+    // The two directions must agree — a link the app writes has to parse back
+    // to the name it was written for, however the browser chose to escape it.
+    const path = [ROOT_TICKER, "MEMEPLEX"];
+    expect(parseTickerPath(leaderboardHref(path).replace("/leaderboard", ""))).toEqual(path);
+    expect(parseTickerPath(tickerHref(path))).toEqual(path);
+    expect(parseTickerPath(tickerHref(path).replaceAll("$", "%24"))).toEqual(path);
+  });
+
+  it("ignores segments that are not tickers", () => {
+    expect(parseTickerPath("/leaderboard/$test")).toEqual(["TEST"]);
+    expect(parseTickerPath("/")).toEqual([]);
+    expect(parseTickerPath("/about/contact")).toEqual([]);
+  });
+
+  it("does not admit a price or a bare $ through the path either", () => {
+    // The consensus parse rule decides here as everywhere else — a URL is not a
+    // second place where `$50` becomes a ticker.
+    expect(parseTickerPath("/$50")).toEqual([]);
+    expect(parseTickerPath("/$")).toEqual([]);
+    expect(parseTickerPath("/%2450")).toEqual([]);
+  });
+
+  it("survives a malformed escape instead of throwing", () => {
+    // ⚠ `decodeURIComponent` throws on `%zz` or a lone `%`, and a URL is
+    // attacker-supplied — an uncaught throw turns a junk address into a server
+    // error rather than a page that simply names no ticker.
+    expect(() => parseTickerPath("/%zz")).not.toThrow();
+    expect(parseTickerPath("/%zz")).toEqual([]);
+    expect(parseTickerPath("/%")).toEqual([]);
+    expect(parseTickerPath("/$test/%e0%a4%a")).toEqual(["TEST"]);
   });
 });
