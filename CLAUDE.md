@@ -259,12 +259,33 @@ Read these to understand the full picture:
 
 These are non-negotiable. Do not bend them without explicit approval from the user.
 
+> **Where these came from (noted 2026-08-15).** All eight were written by **upstream OpenCook**
+> between 2026-04-03 and 2026-05-05 — months before the fork. None were reviewed when $OpenBooks
+> inherited them, and they have been obeyed as house rules ever since. Most hold on their own
+> merits and are kept deliberately.
+>
+> Rule 6 did not hold. It was added in a commit whose own message says it *"removed two instances
+> of user's name from CLAUDE.md"* — upstream's author de-personalising his own file. Because it
+> says "the user" rather than a name, the referent moved when the project changed hands, and the
+> rule began telling assistants to keep the current owner's name off his own copyright notice. It
+> is rewritten below. It is also mostly theatre in its original form: upstream's name survives in
+> this repo in four places, and what an author actually exposes is the email in their commit
+> metadata, which no rule about file contents can reach.
+>
+> Same treatment DIRECTION.md gives upstream's positions — **inherited is not the same as
+> adopted**, and the difference should be visible on the page rather than discovered by an
+> assistant enforcing a rule against the owner's interests.
+
 1. **Read DECISIONS.md before proposing changes to identity, security, or fairness.** If a relevant decision exists, acknowledge it before proceeding. Do not relitigate settled decisions — if you want to challenge one, quote the original rationale, state what has changed, and ask first.
 2. **No file deletes without confirmation.** Before deleting any file (not in node_modules/.next/build), state what will be deleted and why, and wait for explicit confirmation.
 3. **Flag security regressions explicitly.** If a change weakens a control marked FIXED in SECURITY_AUDIT.md (removing rate limiting, relaxing signature verification, etc.), flag it as a security regression and require confirmation.
 4. **Every session that modifies code must end with a git commit.** SESSION_LOG entry written, then commit. No leaving modified files uncommitted at session end.
 5. **Update DECISIONS.md immediately when a decision is made**, not at session end. Decisions made mid-session affect subsequent work.
-6. **No personal information in repo files.** Never write names, emails, usernames, or other identifying information into any committed file. Repo files are public — personal details belong only in memory files (which are local and not committed).
+6. **No INCIDENTAL personal information in repo files.** Never write names, emails, usernames, addresses or other identifying details into a committed file as a side effect — in comments, fixtures, logs, config, sample content, test data or paths. Repo files are public and effectively permanent, and this is where the leak actually happens.
+   - **Deliberate attribution is different, and is allowed wherever it is load-bearing:** copyright notices and `LICENSE`, `AUTHORS`, security and DMCA contacts, and the operator/jurisdiction fields in `legal/*.md`. These are published *on purpose* — anonymous copyright is weaker copyright, and a DMCA agent nobody can name does not function. This board's entire proposition is *own what you post*; a build rule that strips authorship out of the repository argues against the product inside it.
+   - **Never invent one.** Add a name or address only where the owner has stated it. If it has not been stated, ask.
+   - ⚠ **Do NOT "fix" a name out of `LICENSE` or a legal document on the strength of this rule.** That is exactly what the previous wording caused (see the note above). The copyright line in `LICENSE` is deliberate and stays.
+   - This rule governs FILE CONTENTS only. Commit author metadata is a separate exposure it cannot reach.
 7. **Transaction handlers must use `requireIdentity()`.** Any handler needing a signed BSV identity (post, boot, tip, any future transaction) begins with `if (!requireIdentity() || !identity) return;` per the "Universal pattern: transaction action requires sign-in" section above. Do not directly call `signPost`, `clientSideBoot`, or any other wif-using service from a UI handler without this gate — it would silently fail when the user is locked instead of opening the SignInModal.
 8. **Always ask before pushing to origin.** Commit locally without permission (per Hard Rule #4 — sessions must end with a git commit), but `git push` requires explicit user approval each time. Don't chain `git commit && git push` in one command. Don't assume "if I just committed, the user wants me to push" — they may want to test on another device, review the diff, or stage multiple commits before publishing. Push is a public action that affects the GitHub repo, deploy hooks, and any subscribers; commit is local. Treat them as different in tone and confirmation.
 
