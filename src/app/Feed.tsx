@@ -6,6 +6,7 @@ import { HomeScreenWelcomeGate } from "@/components/HomeScreenWelcomeGate";
 import { InAppPromptModal } from "@/components/InAppPromptModal";
 import { InstallPitch } from "@/components/InstallPitch";
 import { IosStorageToast } from "@/components/IosStorageToast";
+import { Notice } from "@/components/Notice";
 import { SignInModal } from "@/components/SignInModal";
 import { SupportAddress } from "@/components/SupportAddress";
 import { BootProvider, useBootContext } from "@/contexts/BootContext";
@@ -21,6 +22,7 @@ import {
   parseTickerPath,
   ROOT_HREF,
   tickerHref,
+  titleCaseTicker,
 } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { BootboardData, Post } from "@/types";
@@ -131,6 +133,17 @@ function FeedContent({
   // the feed's scroll machinery is left completely untouched while it is open,
   // so closing it needs no restoration. See ThreadView's header comment.
   const [threadRootId, setThreadRootId] = useState<number | null>(null);
+  /**
+   * Why the last ticker click did not open a thread.
+   *
+   * ⚠ A CLICK THAT DOES NOTHING IS INDISTINGUISHABLE FROM A BROKEN SITE. Opening
+   * a thread crosses the network, so it can fail for reasons the reader cannot
+   * see — an unclaimed name, or a tab left open across a deploy whose server
+   * actions no longer exist (the feed keeps polling through that, because it
+   * goes through a route handler, so the page looks perfectly alive while every
+   * ticker is dead until a reload).
+   */
+  const [tickerNotice, setTickerNotice] = useState<string | null>(null);
   const [userAddress, setUserAddress] = useState("");
   const [userBalance, setUserBalance] = useState<number | undefined>(undefined);
   // Network fee the boot tx needs on top of bootPrice (from the tx builder on an
@@ -651,20 +664,49 @@ function FeedContent({
       }
       return;
     }
-    const resolved = await resolveTickers([symbol]);
+    setTickerNotice(null);
+
+    // Resolved and traced TOGETHER: the path does not depend on the hit, and two
+    // sequential round trips is a second of a click doing nothing visible, which
+    // reads as a broken link just as much as an outright failure does.
+    let resolved: Awaited<ReturnType<typeof resolveTickers>>;
+    let path: string[];
+    try {
+      [resolved, path] = await Promise.all([resolveTickers([symbol]), getTickerPath(symbol)]);
+    } catch {
+      // ⚠ NEVER SWALLOW THIS. The usual cause is a tab held open across a deploy:
+      // server-action ids are build-specific, so every action from a stale bundle
+      // 404s while the feed — a route handler — keeps polling happily. Silently
+      // returning left the reader clicking a link that would not open and no way
+      // to know a reload was all it needed.
+      setTickerNotice(`Couldn't open $${titleCaseTicker(symbol)} — try reloading the page.`);
+      return;
+    }
+
     const hit = resolved[symbol];
-    // An unclaimed symbol is a normal answer — posts written before the registry
-    // existed contain tickers nobody registered. Do nothing rather than open an
-    // empty thread or throw.
-    if (!hit) return;
+    if (!hit) {
+      // An unclaimed symbol is a normal answer, not a fault — posts written
+      // before the registry existed name tickers nobody ever registered. Said
+      // out loud, because from the reader's side it is the same dead click.
+      setTickerNotice(`$${titleCaseTicker(symbol)} hasn't been claimed yet — no thread to open.`);
+      return;
+    }
+
     setThreadRootId(hit.root_id);
     // Make the open thread addressable WITHOUT navigating: pushState changes the
     // URL and adds a history entry (so Back closes the thread) while leaving the
     // feed mounted. A real navigation would remount it and lose the scroll
     // position, which is the reason ThreadView is an overlay in the first place.
-    const path = await getTickerPath(symbol);
     window.history.pushState({ ticker: symbol }, "", tickerHref(path.length ? path : [symbol]));
   }, []);
+
+  // The notice is transient — it explains one click, and must not sit over the
+  // feed afterwards implying something is still wrong.
+  useEffect(() => {
+    if (!tickerNotice) return;
+    const t = setTimeout(() => setTickerNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [tickerNotice]);
 
   // Close on Back, rather than letting Back leave the site while a thread is open.
   useEffect(() => {
@@ -949,6 +991,11 @@ function FeedContent({
 
       {/* Boot failure toast */}
       <BootToast message={bootError} />
+
+      {/* Why a ticker click did not open a thread. Below the boot toast in the
+          tree but never both at once in practice — one follows a tap on a name,
+          the other a tap on a boot. */}
+      <Notice message={tickerNotice} />
 
       {/* iOS post-install ITP heads-up — fires once on first standalone launch
           (navigator.standalone === true). Mount point inside FeedContent

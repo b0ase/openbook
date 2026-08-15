@@ -151,7 +151,20 @@ export function PostForm({
   }, [isPending]);
 
   const performSubmit = useCallback(
-    (currentIdentity: NonNullable<typeof identity>, content: string): void => {
+    (
+      currentIdentity: NonNullable<typeof identity>,
+      content: string,
+      /**
+       * Called once the post has actually landed, or failed to.
+       *
+       * ⚠ THE CALLER MAY BE HOLDING THE ONLY COPY. An agent exchange exists
+       * nowhere but in this tab's memory until it is stored, so a publisher that
+       * clears its own state optimistically destroys the transcript on any
+       * failure — the paid path can reject for a dozen ordinary reasons, and the
+       * conversation is not reproducible by asking again.
+       */
+      onDone?: (ok: boolean, reason?: string) => void
+    ): void => {
       if (!formRef.current) return;
       const formData = new FormData(formRef.current);
       formData.set("author", currentIdentity.name);
@@ -179,6 +192,21 @@ export function PostForm({
       }
 
       startTransition(async () => {
+        try {
+          await submitOnce();
+        } catch (e) {
+          // ⚠ A THROW HERE USED TO HANG THE BUTTON ON "Posting…" FOREVER. Signing,
+          // the mode lookup, the dynamic imports and the transaction builder can
+          // all reject, and an unhandled rejection inside a transition leaves the
+          // pending flag set with nothing to clear it — the post is dead and the
+          // UI still says it is in progress.
+          const reason = e instanceof Error ? e.message : "unknown_error";
+          onPostRejected?.(tempId, reason);
+          onDone?.(false, reason);
+        }
+      });
+
+      async function submitOnce(): Promise<void> {
         const sig = await sign(content);
         if (sig) {
           formData.set("signature", sig.signature);
@@ -230,6 +258,7 @@ export function PostForm({
             // anyway — reporting here keeps their draft recoverable instead of
             // showing a generic server rejection.
             onPostRejected?.(tempId, paid.status);
+            onDone?.(false, paid.status);
             return;
           }
           formData.set("raw_tx", paid.rawTx);
@@ -238,8 +267,11 @@ export function PostForm({
         const result = await createPost(formData);
         if (!result.ok) {
           onPostRejected?.(tempId, result.reason);
+          onDone?.(false, result.reason);
+          return;
         }
-      });
+        onDone?.(true);
+      }
     },
     [onPostCreated, onPostRejected, sign, parentId]
   );
@@ -277,7 +309,13 @@ export function PostForm({
         }),
       });
       if (!res.ok || !res.body) {
-        setAgentError("The agent is unavailable right now.");
+        // ⚠ SAY WHAT THE SERVER SAID. `/api/agent` answers failures with plain,
+        // already-user-facing text — "Agent is busy", "Slow down", "no API key
+        // configured" — and flattening all of them into one sentence turned
+        // four different, differently-actionable states into a shrug. The
+        // generic line is the fallback for a body that arrives empty.
+        const reason = await res.text().catch(() => "");
+        setAgentError(reason.trim() || "The agent is unavailable right now.");
         setAgentStreaming(false);
         return;
       }
@@ -453,9 +491,22 @@ export function PostForm({
           if (!requireIdentity() || !identity) return;
           const transcript = formatTranscript(chain);
           if (!transcript) return;
-          setChain([]);
           setAgentError(null);
-          performSubmit(identity, transcript);
+          // ⚠ THE TRANSCRIPT STAYS UNTIL IT IS STORED. It exists only in this
+          // tab, and paid posting can reject for a dozen ordinary reasons — so
+          // clearing on the click threw away a conversation that asking again
+          // would not reproduce.
+          performSubmit(identity, transcript, (ok, reason) => {
+            if (ok) {
+              setChain([]);
+              return;
+            }
+            setAgentError(
+              reason === "insufficient_funds"
+                ? "Not enough funds to post this exchange — it is still here."
+                : "Couldn't post that exchange — it is still here, try again."
+            );
+          });
         }}
       />
       {/* Drop target is the whole compose box, not just the textarea: aiming a

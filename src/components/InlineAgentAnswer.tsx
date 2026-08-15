@@ -114,7 +114,12 @@ export function InlineAgentTranscript({
           <span className="text-[10px] leading-relaxed text-zinc-600">
             Not posted yet &mdash; ask again to continue.
           </span>
-          {onPublish && (
+          {/* ⚠ NOTHING TO PUBLISH UNTIL THE MACHINE HAS ANSWERED. If the agent
+              call failed the chain holds a lone question, and posting that spends
+              real money to anchor half a conversation — a record of a human/AI
+              exchange in which the AI never spoke. Offering the button anyway
+              made the failure look like a normal thing to publish. */}
+          {onPublish && chain.some((t) => t.role === "agent" && t.text.trim()) && (
             <button
               type="button"
               onClick={onPublish}
