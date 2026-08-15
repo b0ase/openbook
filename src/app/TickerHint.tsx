@@ -29,6 +29,24 @@ interface TickerState {
   threads: number;
 }
 
+/**
+ * The denominator the hint's percentage is drawn against.
+ *
+ * ⚠ AN UNCLAIMED NAME IS ALWAYS 100%, WHATEVER ELSE MENTIONS IT. Counting other
+ * threads produced `$Ticker · 50% · unclaimed — you'd be starting it`, which
+ * says two opposite things at once: you cannot be starting something you already
+ * hold half of. Mentions are free and confer nothing, so a word appearing
+ * elsewhere does not dilute a claim nobody has made — the founding act is whole
+ * by definition, and the figure beside it has to agree.
+ *
+ * A CLAIMED name keeps the saturation reading: one use out of however many
+ * threads cite it, which is what tells a citation apart from a founding.
+ */
+export function hintShareTotal(claimed: boolean, threads: number): number {
+  if (!claimed) return 1;
+  return Math.max(1, threads);
+}
+
 export function TickerHint({ content }: { content: string }) {
   const [states, setStates] = useState<TickerState[]>([]);
 
@@ -66,9 +84,7 @@ export function TickerHint({ content }: { content: string }) {
   return (
     <div className="mt-1.5 space-y-1">
       {states.map((s) => {
-        // Include the post being written, so a brand-new name reads 100% rather
-        // than 0% — the author is about to become its first use.
-        const total = Math.max(1, s.threads + (s.claimed ? 0 : 1));
+        const total = hintShareTotal(s.claimed, s.threads);
         // Shared with the thread header and the wallet — see lib/share.ts for why
         // this must not be formatted locally.
         const pct = formatShare(1, total);
@@ -83,7 +99,7 @@ export function TickerHint({ content }: { content: string }) {
             <span className="text-zinc-500">
               {s.claimed ? (
                 <>
-                  already claimed — you're linking to it
+                  already claimed — you're citing it
                   {s.threads > 1 && ` · used in ${s.threads} threads`}
                 </>
               ) : (
