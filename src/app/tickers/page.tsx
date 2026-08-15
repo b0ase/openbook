@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SiteNav } from "@/components/SiteNav";
 import { siteOrigin } from "@/lib/site-origin";
 import { listTickers } from "../actions";
 import { TickerDirectory } from "./TickerDirectory";
@@ -38,6 +39,7 @@ export default async function TickersPage() {
   const tickers = await listTickers();
   return (
     <div className="min-h-[100dvh] bg-black text-white">
+      <SiteNav />
       <TickerDirectory initial={tickers} />
     </div>
   );

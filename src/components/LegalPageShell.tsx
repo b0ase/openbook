@@ -1,16 +1,18 @@
-import Link from "next/link";
 import { LegalDoc } from "./LegalDoc";
+import { SiteNav } from "./SiteNav";
 
-/** Shared shell for the /terms and /privacy pages: back link, a clear DRAFT
- *  banner (the legal/*.md are not yet lawyer-final), and the rendered doc. */
+/** Shared shell for the /terms and /privacy pages: the site nav, a clear DRAFT
+ *  banner (the legal/*.md are not yet lawyer-final), and the rendered doc.
+ *
+ *  The bespoke "← Back to OpenBooks" link is gone: `SiteNav`'s wordmark is the
+ *  way home on every other page, and two different controls for one action is
+ *  how a site ends up feeling like several sites. */
 export function LegalPageShell({ markdown }: { markdown: string }) {
   return (
     <main className="h-[100dvh] overflow-y-auto bg-black text-zinc-200">
+      <SiteNav />
       <div className="mx-auto max-w-2xl px-5 py-8">
-        <Link href="/" className="text-xs text-amber-400 transition-colors hover:text-amber-300">
-          ← Back to OpenBooks
-        </Link>
-        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-xs leading-relaxed text-amber-200/90">
+        <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-xs leading-relaxed text-amber-200/90">
           <strong className="font-semibold">Draft — not final.</strong> This is a working draft and
           will be finalized before public launch. It is not legal advice.
         </div>

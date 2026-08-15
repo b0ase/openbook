@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SiteNav } from "@/components/SiteNav";
 import { leaderboardHref, titleCaseTicker } from "@/lib/ticker";
 import { listTickerBoards } from "../actions";
 
@@ -42,6 +43,7 @@ export default async function LeaderboardIndex() {
 
   return (
     <div className="min-h-[100dvh] bg-black text-white">
+      <SiteNav />
       <div className="mx-auto w-full max-w-2xl px-4 py-6">
         <h1 className="text-lg font-semibold tracking-tight">
           <span className="text-amber-400">Leaderboards</span>

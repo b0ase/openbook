@@ -1,5 +1,6 @@
 "use client";
 
+import { SiteNavLinks } from "@/components/SiteNav";
 import { IdentityChip } from "./IdentityBar";
 
 interface HeaderProps {
@@ -45,22 +46,9 @@ export function Header({
               slides under it on a narrow screen — a second line stays clear of
               it at every width and costs ~14px of header.
 
-              Wording matches what these pages already call themselves ("All
-              names" on the leaderboard footer), so the same place is not called
-              two things depending on where you came from. */}
-          <nav className="mt-1 flex items-center gap-2.5 text-[11px] leading-none text-zinc-500">
-            <a href="/tickers" className="hover:text-amber-400 transition-colors">
-              Names
-            </a>
-            <span aria-hidden="true" className="text-zinc-700">
-              ·
-            </span>
-            {/* The INDEX, not one token's board — `$OpenBooks` is one token
-                among those listed, not a stand-in for all of them. */}
-            <a href="/leaderboard" className="hover:text-amber-400 transition-colors">
-              Holders
-            </a>
-          </nav>
+              Shared with every other page via SiteNav, so the same two links
+              cannot drift apart depending on where you are standing. */}
+          <SiteNavLinks className="mt-1" />
         </div>
 
         <div className="absolute left-1/2 -translate-x-1/2">

@@ -38,19 +38,24 @@ export function SupportAddress({ address }: { address: string | null }) {
     }
   };
 
+  // ⚠ NOT GREY, AND NOT 11px. This is an ADDRESS people are being asked to send
+  // money to: if it cannot be read confidently it cannot be checked against what
+  // their wallet shows, and an unverifiable payment address is worse than no
+  // address at all. It was zinc-500/600 on black — decorative weight for the one
+  // string on the page that has to be read character by character.
   return (
     <button
       type="button"
       onClick={copy}
       title="Copy the address that funds on-chain posting"
-      className="w-full flex items-center justify-center gap-2 px-4 py-1.5 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors border-b border-zinc-900"
+      className="w-full flex items-center justify-center gap-2 px-4 py-2 text-[13px] transition-colors border-b border-zinc-900"
     >
-      <span className="hidden sm:inline text-zinc-600">Posts are paid for on-chain —</span>
-      <span className="text-zinc-600">keep it running:</span>
-      <span className="font-mono text-amber-500/80 truncate max-w-[46vw] sm:max-w-none">
+      <span className="hidden sm:inline text-white">Posts are paid for on-chain —</span>
+      <span className="text-white">keep it running:</span>
+      <span className="font-mono font-medium text-amber-400 truncate max-w-[46vw] sm:max-w-none">
         {address}
       </span>
-      <span className={`transition-opacity ${copied ? "text-emerald-500" : "text-zinc-600"}`}>
+      <span className={`transition-opacity ${copied ? "text-emerald-400" : "text-white/70"}`}>
         {copied ? "copied" : "copy"}
       </span>
     </button>
