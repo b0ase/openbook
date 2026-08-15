@@ -474,20 +474,41 @@ export async function getTickerPath(symbol: string): Promise<string[]> {
  * threads at least ties the figure to separate conversations. This is DISPLAY
  * ONLY and must never feed allocation — mentions are free, and anything free that
  * confers value destroys the anchor (TOKENS.md).
+ *
+ * ⚠ READS `ticker_mentions`, THE SAME EDGE TABLE AS `getTickerSupply`. It used to
+ * run `UPPER(content) LIKE '%$SYM%'`, which has NO WORD BOUNDARY however much the
+ * comment beside it claimed one: `$TICKER` matched the post naming `$Tickeragents`
+ * and the compose box announced `$Ticker · 50% · unclaimed`, while the feed —
+ * reading the edge table — rendered the same name at 100%. Two counts of "who
+ * says this word", one of them a substring search, disagreeing on screen at the
+ * same moment.
+ *
+ * The edge rows are written by `distinctTickers`, the one consensus-critical
+ * parse rule, so this now agrees with what gets rendered, what gets CLAIMED, and
+ * what supply reports — by construction rather than by two patterns being kept
+ * in step. It also drops a full-table scan per symbol for one indexed lookup.
  */
 export async function getTickerUsage(symbols: string[]): Promise<Record<string, number>> {
-  const wanted = symbols.map(canonicalTicker).filter(isValidTicker);
+  const wanted = [...new Set(symbols.map(canonicalTicker).filter(isValidTicker))].slice(0, 200);
   if (!wanted.length) return {};
-  const out: Record<string, number> = {};
-  const stmt = db.prepare(
-    "SELECT COUNT(DISTINCT root_id) AS n FROM posts WHERE UPPER(content) LIKE ?"
-  );
-  for (const sym of wanted) {
-    // `$SYM` followed by a non-alphanumeric or end — mirrors the parse rule's word
-    // boundary closely enough for a display count.
-    const row = stmt.get(`%$${sym}%`) as { n: number };
-    out[sym] = row?.n ?? 0;
-  }
+
+  // Every requested symbol answers, so a name nobody has used reads 0 rather
+  // than absent — the caller is a hint that must render either way.
+  const out: Record<string, number> = Object.fromEntries(wanted.map((s) => [s, 0]));
+  const placeholders = wanted.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      // COALESCE because `root_id` is nullable (ADD COLUMN cannot backfill) and
+      // COUNT(DISTINCT …) drops NULLs silently — a thread rooted before the
+      // threading migration would otherwise not be counted at all.
+      `SELECT m.symbol AS symbol, COUNT(DISTINCT COALESCE(p.root_id, p.id)) AS n
+         FROM ticker_mentions m
+         JOIN posts p ON p.id = m.post_id
+        WHERE m.symbol IN (${placeholders})
+        GROUP BY m.symbol`
+    )
+    .all(...wanted) as { symbol: string; n: number }[];
+  for (const r of rows) out[r.symbol] = r.n;
   return out;
 }
 

@@ -47,6 +47,7 @@ import {
   getThread,
   getTickerPath,
   getTickerSupply,
+  getTickerUsage,
   isReservedTicker,
   listTickers,
   releaseTickers,
@@ -425,6 +426,59 @@ describe("token supply is counted from mentions", () => {
     // The renderer draws no figure when a symbol is absent; a 0% would read as
     // "worthless" instead of "not a token yet".
     expect(await getTickerSupply(["NOBODYSAIDTHIS"])).toEqual({});
+  });
+});
+
+describe("usage and supply count the same word", () => {
+  // The bug this pins, seen live: the compose box said `$Ticker · 50% ·
+  // unclaimed` while the feed rendered the very same name at 100%. Usage was a
+  // `LIKE '%$SYM%'` scan with NO word boundary — despite a comment claiming one
+  // — so `$TICKER` was credited with the thread that named `$Tickeragents`.
+  // Supply read the edge table and disagreed on screen at the same moment.
+
+  it("does not let $Branch absorb $Branchoffice", async () => {
+    await post("only $Branchoffice is named here");
+    expect(await getTickerUsage(["BRANCH"])).toEqual({ BRANCH: 0 });
+    expect(await getTickerUsage(["BRANCHOFFICE"])).toEqual({ BRANCHOFFICE: 1 });
+  });
+
+  it("agrees with supply on a name used across several threads", async () => {
+    await post("claiming $Branch");
+    await post("a separate thread citing $Branch");
+    const [usage, supply] = await Promise.all([
+      getTickerUsage(["BRANCH"]),
+      getTickerSupply(["BRANCH"]),
+    ]);
+    // Two posts, two roots — the two counts coincide here, and the point is that
+    // they are now derived from the same rows rather than from two patterns.
+    expect(usage.BRANCH).toBe(2);
+    expect(supply.BRANCH).toBe(2);
+  });
+
+  it("counts THREADS, not posts — a reply does not add a second use", async () => {
+    // The distinction the figure is named for: raw mentions are free and
+    // unbounded, so it must not be inflatable by talking to yourself in one
+    // thread. Supply legitimately counts both posts; usage counts one thread.
+    await post("claiming $Branch");
+    // `createPost` returns no id, so the row is read back — same as the
+    // threading suite does.
+    const rootId = (db.prepare("SELECT MAX(id) AS id FROM posts").get() as { id: number }).id;
+    await post("citing $Branch in a reply", rootId);
+    expect((await getTickerUsage(["BRANCH"])).BRANCH).toBe(1);
+    expect((await getTickerSupply(["BRANCH"])).BRANCH).toBe(2);
+  });
+
+  it("ignores a $ that is not a ticker at all", async () => {
+    // Read from the edge table, so the consensus parse rule decides — the old
+    // substring scan had no way to know `US$20` was not a mention.
+    await post("it cost $50 and US$20, and foo$Branch is not a mention");
+    expect(await getTickerUsage(["BRANCH"])).toEqual({ BRANCH: 0 });
+  });
+
+  it("answers ZERO for a name nobody has used", async () => {
+    // Unlike supply, which omits it: the hint renders a figure either way, and
+    // an absent key there would have been an undefined denominator.
+    expect(await getTickerUsage(["NOBODYSAIDTHIS"])).toEqual({ NOBODYSAIDTHIS: 0 });
   });
 });
 
