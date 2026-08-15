@@ -5,6 +5,7 @@ import { BootIcon } from "@/components/icons/BootIcon";
 import { useBootContext } from "@/contexts/BootContext";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useBoot } from "@/hooks/useBoot";
+import { titleCaseTicker } from "@/lib/ticker";
 import type { BootboardData } from "@/types";
 
 function formatDuration(seconds: number): string {
@@ -98,13 +99,21 @@ function HistoryRow({
           <BootIcon size={11} />
         )}
       </button>
-      <span className="text-zinc-500 shrink-0">{entry.author_name}</span>
+      <span className="text-zinc-500 shrink-0">
+        {displayIdentity(entry.boosted_by_nym, entry.author_name, entry.boosted_by)}
+      </span>
       <span className="shrink-0">·</span>
       <span className="shrink-0">{formatDuration(entry.duration_seconds)}</span>
       <span className="shrink-0">·</span>
       <span className="truncate">{entry.content}</span>
     </div>
   );
+}
+
+/** A claimed $Nym outranks the generated handle wherever an identity is shown. */
+function displayIdentity(nym: string | null | undefined, fallback: string | null, address: string) {
+  if (nym) return `$${titleCaseTicker(nym)}`;
+  return fallback ?? address;
 }
 
 export function Bootboard({
@@ -191,7 +200,14 @@ export function Bootboard({
           {expanded && (
             <div className="animate-[slideUp_0.2s_ease-out_backwards] mt-2 pt-2 border-t border-zinc-800/40">
               <div className="flex items-center gap-2 text-[11px] text-zinc-600 mb-1.5">
-                <span>booted by {current.boosted_by_name ?? current.boosted_by}</span>
+                <span>
+                  boosted by{" "}
+                  {displayIdentity(
+                    current.boosted_by_nym,
+                    current.boosted_by_name,
+                    current.boosted_by
+                  )}
+                </span>
               </div>
               {history.length > 0 && (
                 <div

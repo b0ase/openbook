@@ -141,6 +141,21 @@ export function applyNymMigration(database: Db): void {
     )
   `);
   database.exec("CREATE INDEX IF NOT EXISTS idx_nyms_symbol ON nyms(symbol)");
+
+  // nyms.address — the SAME identity, addressed the other way.
+  //
+  // ⚠ WITHOUT THIS THERE IS NO JOIN BETWEEN A SPENDER AND THEIR NAME. Posts
+  // carry a `pubkey` and `nyms` is keyed on pubkey, so a post resolves its
+  // author's name — but `bootboard.boosted_by` and `payouts.recipient_address`
+  // are ADDRESSES, and an address cannot be turned back into a pubkey in SQL.
+  // The result was one identity shown two ways on the same screen: `$B0ase` as
+  // an author and `anon_xxxx` the moment they spent.
+  //
+  // ⚠ DERIVED SERVER-SIDE FROM THE VERIFIED PUBKEY, NEVER SUPPLIED BY THE
+  // CLIENT. Accepting an address from the caller would let anyone display
+  // somebody else's name as the spender on a boost they made.
+  addColumnIfMissing(database, "nyms", "address", "address TEXT");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_nyms_address ON nyms(address)");
 }
 
 /**

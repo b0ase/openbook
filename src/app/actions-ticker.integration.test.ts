@@ -40,6 +40,7 @@ import { ROOT_TICKER } from "@/lib/ticker";
 import {
   claimNym,
   createPost,
+  getBootboard,
   getNym,
   getNyms,
   getPosts,
@@ -803,5 +804,72 @@ describe("the feed shows a claimed $Nym instead of anon_xxxx", () => {
     await post("no name here");
     const posts = await getPosts();
     expect(posts[0].author_nym).toBeNull();
+  });
+});
+
+describe("a claimed $Nym follows the identity when it SPENDS, not just when it writes", () => {
+  it("attaches the nym's address at claim time, derived from the verified pubkey", async () => {
+    const key = PrivateKey.fromRandom();
+    const pubkey = key.toPublicKey().toString();
+    const content = "I'm $Spender";
+
+    const fd = new FormData();
+    fd.set("symbol", "SPENDER");
+    fd.set("content", content);
+    fd.set("author", "anon_spnd");
+    fd.set("pubkey", pubkey);
+    fd.set(
+      "signature",
+      key.sign(Array.from(new TextEncoder().encode(content))).toDER("hex") as string
+    );
+    expect((await claimNym(fd)).ok).toBe(true);
+
+    const row = db.prepare("SELECT address FROM nyms WHERE pubkey = ?").get(pubkey) as {
+      address: string | null;
+    };
+    // ⚠ Derived server-side. Accepting an address from the caller would let
+    // anyone display someone else's name as the spender on their boost.
+    expect(row.address).toBe(key.toPublicKey().toAddress().toString());
+  });
+
+  it("resolves the spender's nym on the boost board", async () => {
+    const key = PrivateKey.fromRandom();
+    const pubkey = key.toPublicKey().toString();
+    const address = key.toPublicKey().toAddress().toString();
+    const content = "I'm $Booster";
+    const fd = new FormData();
+    fd.set("symbol", "BOOSTER");
+    fd.set("content", content);
+    fd.set("author", "anon_bstr");
+    fd.set("pubkey", pubkey);
+    fd.set(
+      "signature",
+      key.sign(Array.from(new TextEncoder().encode(content))).toDER("hex") as string
+    );
+    await claimNym(fd);
+
+    await post("something worth boosting");
+    const postId = lastId();
+    db.prepare("INSERT INTO bootboard (post_id, boosted_by, boosted_by_name) VALUES (?, ?, ?)").run(
+      postId,
+      address,
+      "anon_bstr"
+    );
+
+    const board = await getBootboard();
+    expect(board.current?.boosted_by_nym).toBe("BOOSTER");
+  });
+
+  it("leaves the spender's nym null for an identity that never claimed one", async () => {
+    await post("plain post");
+    const postId = lastId();
+    db.prepare("INSERT INTO bootboard (post_id, boosted_by, boosted_by_name) VALUES (?, ?, ?)").run(
+      postId,
+      "1SomeAddressWithNoNym",
+      "anon_none"
+    );
+
+    const board = await getBootboard();
+    expect(board.current?.boosted_by_nym ?? null).toBeNull();
   });
 });

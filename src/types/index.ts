@@ -87,6 +87,10 @@ export interface BootboardRow {
   post_id: number;
   boosted_by: string;
   boosted_by_name: string | null;
+  /** The spender's claimed `$Nym`, canonical, or null. Shown INSTEAD of
+   *  `boosted_by_name` — an identity must not read as `$B0ase` when it writes
+   *  and `anon_xxxx` when it spends. */
+  boosted_by_nym?: string | null;
   booted_at: string;
   held_until: string | null;
   content: string;
@@ -98,6 +102,10 @@ export interface BootboardHistoryRow {
   post_id: number;
   boosted_by: string;
   boosted_by_name: string | null;
+  /** The spender's claimed `$Nym`, canonical, or null. Shown INSTEAD of
+   *  `boosted_by_name` — an identity must not read as `$B0ase` when it writes
+   *  and `anon_xxxx` when it spends. */
+  boosted_by_nym?: string | null;
   booted_at: string;
   held_until: string;
   duration_seconds: number;

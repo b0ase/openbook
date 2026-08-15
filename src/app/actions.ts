@@ -608,6 +608,19 @@ export async function claimNym(formData: FormData): Promise<NymResult> {
   // One identity, one public name: adopting a new one replaces the old rather
   // than accumulating. The old ticker is still owned — only the display changes.
   //
+  // ⚠ DERIVED HERE, NEVER ACCEPTED. The address is computed from the pubkey the
+  // ticker claim was already verified against — taking one from the caller would
+  // let anybody attach their name to somebody else's spending.
+  let address: string | null = null;
+  try {
+    const { PublicKey } = await getBsvSdk();
+    address = PublicKey.fromString(pubkey).toAddress().toString();
+  } catch {
+    // A nym with no address still works everywhere it is keyed on pubkey; only
+    // the spender lookup degrades, which is better than refusing the claim.
+    address = null;
+  }
+
   // ⚠ BOTH CONSTRAINTS HAVE TO BE HANDLED, not just the pubkey one. `nyms` is
   // unique on symbol as well, and an upsert keyed on pubkey alone throws a raw
   // SQLite error the moment that symbol is already recorded against SOMEBODY
@@ -619,9 +632,9 @@ export async function claimNym(formData: FormData): Promise<NymResult> {
   db.transaction(() => {
     db.prepare("DELETE FROM nyms WHERE symbol = ? AND pubkey <> ?").run(symbol, pubkey);
     db.prepare(
-      `INSERT INTO nyms (pubkey, symbol) VALUES (?, ?)
-         ON CONFLICT(pubkey) DO UPDATE SET symbol = excluded.symbol`
-    ).run(pubkey, symbol);
+      `INSERT INTO nyms (pubkey, symbol, address) VALUES (?, ?, ?)
+         ON CONFLICT(pubkey) DO UPDATE SET symbol = excluded.symbol, address = excluded.address`
+    ).run(pubkey, symbol, address);
   })();
 
   return { ok: true, symbol };
@@ -1422,9 +1435,17 @@ export async function getPostCounts(
 export async function getBootboard(): Promise<BootboardData> {
   const current = db
     .prepare(`
-    SELECT b.*, p.content, p.author_name, p.signature
+    SELECT b.*, p.content, p.author_name, p.signature,
+      pn.symbol AS author_nym, bn.symbol AS boosted_by_nym
     FROM bootboard b
     JOIN posts p ON p.id = b.post_id
+    -- The post author joins by pubkey, the SPENDER by address: the two are
+    -- recorded differently (a post carries a pubkey, a boost carries an
+    -- address). Without the second join one identity reads as its nym when it
+    -- writes and as anon_xxxx the moment it spends.
+    -- NOTE: no backticks in this comment -- it lives inside a template literal.
+    LEFT JOIN nyms pn ON pn.pubkey = p.pubkey
+    LEFT JOIN nyms bn ON bn.address = b.boosted_by
     WHERE b.held_until IS NULL
     ORDER BY b.booted_at DESC
     LIMIT 1
@@ -1435,9 +1456,12 @@ export async function getBootboard(): Promise<BootboardData> {
     .prepare(`
     SELECT b.post_id, b.boosted_by, b.boosted_by_name, b.booted_at, b.held_until,
       CAST((julianday(b.held_until) - julianday(b.booted_at)) * 86400 AS INTEGER) as duration_seconds,
-      p.content, p.author_name
+      p.content, p.author_name,
+      pn.symbol AS author_nym, bn.symbol AS boosted_by_nym
     FROM bootboard b
     JOIN posts p ON p.id = b.post_id
+    LEFT JOIN nyms pn ON pn.pubkey = p.pubkey
+    LEFT JOIN nyms bn ON bn.address = b.boosted_by
     WHERE b.held_until IS NOT NULL
     ORDER BY b.held_until DESC
     LIMIT 50
