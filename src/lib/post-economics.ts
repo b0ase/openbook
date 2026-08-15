@@ -113,7 +113,17 @@ export interface PostPrice {
   floored: boolean;
 }
 
-function markupPercent(): number {
+/**
+ * The configured markup.
+ *
+ * ⚠ EXPORTED SO THERE IS EXACTLY ONE OF THESE. `getPostingMode` had its own copy
+ * and re-introduced the `Number("") === 0` bug this function exists to avoid:
+ * with the env var unset the client was told 0%, built no platform output, and
+ * the server then refused the post for underpayment — AFTER the author had
+ * broadcast and paid. Client and server must read the same number from the same
+ * place or the user funds a transaction we then reject.
+ */
+export function configuredMarkupPercent(): number {
   // ⚠ CHECK FOR EMPTY BEFORE CONVERTING. `Number("")` is 0, not NaN — so an
   // env var that is present but blank (trivially easy to produce in a hosting
   // dashboard) would read as a 0% markup and silently switch off ALL revenue,
@@ -152,7 +162,7 @@ export function postPrice(
   const pct =
     requested !== undefined && Number.isFinite(requested) && requested >= 0
       ? requested
-      : markupPercent();
+      : configuredMarkupPercent();
   // The markup is taken on the cost we actually incur (the miner fee plus the
   // satoshi we hand the author), not on an invented notional price.
   const cost = networkFeeSats + INSCRIPTION_SATS;
@@ -187,4 +197,16 @@ export function postPrice(
 export function isPaidPostingEnabled(): boolean {
   const v = (process.env.PAID_POSTING ?? "").trim().toLowerCase();
   return v === "true" || v === "1";
+}
+
+/**
+ * The least the platform may be paid for a post to be accepted.
+ *
+ * ⚠ DERIVED FROM THE CONFIGURED MARKUP, NOT A CONSTANT. Demanding a floor while
+ * the markup is 0 makes at-cost posting impossible — and it fails in the worst
+ * possible way, because the author has already broadcast by the time the server
+ * checks. Zero markup means zero required.
+ */
+export function minimumPlatformSats(): number {
+  return configuredMarkupPercent() === 0 ? 0 : MIN_ECONOMIC_OUTPUT_SATS;
 }

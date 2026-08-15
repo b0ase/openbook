@@ -13,7 +13,11 @@ import {
   urlHash,
 } from "@/lib/link-preview-store";
 import { verifyPaidPost } from "@/lib/paid-post";
-import { isPaidPostingEnabled, MIN_ECONOMIC_OUTPUT_SATS } from "@/lib/post-economics";
+import {
+  configuredMarkupPercent,
+  isPaidPostingEnabled,
+  minimumPlatformSats,
+} from "@/lib/post-economics";
 import { rateLimit } from "@/lib/rate-limit";
 import {
   FREE_BOOT_COST_SATS,
@@ -221,11 +225,12 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
       content: content.trim(),
       authorAddress,
       platformAddress: getServerAddress(),
-      // ⚠ A FLOOR, NOT THE QUOTED PRICE. The author has ALREADY broadcast and
-      // already paid by the time we see this — rejecting for a few satoshis of
-      // legitimate fee drift would take their money and give them no post. The
-      // floor only has to stop a post that paid the platform nothing.
-      minPlatformSats: MIN_ECONOMIC_OUTPUT_SATS,
+      // ⚠ A FLOOR, NOT THE QUOTED PRICE, AND DERIVED FROM THE SAME CONFIG THE
+      // CLIENT WAS QUOTED FROM. The author has ALREADY broadcast and already
+      // paid by the time we see this — rejecting for a few satoshis of drift, or
+      // for a markup the client was never told to include, takes their money and
+      // gives them no post.
+      minPlatformSats: minimumPlatformSats(),
     });
     if (!verdict.ok) return { ok: false, reason: "invalid_payment" };
 
@@ -932,11 +937,14 @@ export interface PostingMode {
  */
 export async function getPostingMode(): Promise<PostingMode> {
   const paid = isPaidPostingEnabled();
-  const raw = Number((process.env.POST_MARKUP_PERCENT ?? "").trim());
   return {
     paid,
     platformAddress: paid ? getServerAddress() : null,
-    markupPercent: Number.isFinite(raw) && raw >= 0 ? raw : 10,
+    // ⚠ THE SAME RESOLVER THE SERVER USES. A second copy here previously read a
+    // blank env var as 0% (`Number("") === 0`), so the client built no platform
+    // output and the server rejected the post for underpayment — after the
+    // author had already paid for the broadcast.
+    markupPercent: configuredMarkupPercent(),
   };
 }
 

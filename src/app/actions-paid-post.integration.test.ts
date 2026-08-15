@@ -42,10 +42,10 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { MIN_ECONOMIC_OUTPUT_SATS } from "@/lib/post-economics";
+import { MIN_ECONOMIC_OUTPUT_SATS, postPrice } from "@/lib/post-economics";
 import { buildInscriptionScript, INSCRIPTION_SATS } from "@/services/bsv/inscription";
 import { logPostOnChain } from "@/services/bsv/onchain";
-import { createPost } from "./actions";
+import { createPost, getPostingMode } from "./actions";
 
 // ⚠ A REAL base58 address, unlike the "1PlatformAddressForTests" placeholder
 // the other suites use. Those only ever hand it back from a mock; this suite
@@ -221,4 +221,61 @@ describe("paid posting", () => {
     // No outpoint: an OP_RETURN record has no ownable output to point at.
     expect(row.vout).toBeNull();
   });
+});
+
+/**
+ * ⚠ THE REGRESSION THIS SUITE EXISTED WITHOUT.
+ *
+ * Every test above builds its transaction from a hand-written fixture, so all of
+ * them passed while the CLIENT was being quoted a different price from the one
+ * the SERVER demanded. The first real paid post was rejected as underpaid —
+ * after the author had broadcast and paid — because `getPostingMode` read a
+ * blank `POST_MARKUP_PERCENT` as 0% (`Number("") === 0`) and built no platform
+ * output.
+ *
+ * So these assert the contract that actually matters: WHATEVER getPostingMode
+ * TELLS THE CLIENT, createPost MUST ACCEPT.
+ */
+describe("the quote the client is given is one the server accepts", () => {
+  for (const [label, envValue] of [
+    ["unset", undefined],
+    ["blank", ""],
+    ["explicit zero (at-cost)", "0"],
+    ["ten percent", "10"],
+  ] as [string, string | undefined][]) {
+    it(`agrees when POST_MARKUP_PERCENT is ${label}`, async () => {
+      process.env.POST_MARKUP_PERCENT = envValue;
+
+      const mode = await getPostingMode();
+      expect(mode.paid).toBe(true);
+
+      // Price it exactly as the compose box does.
+      const price = postPrice(800, { markupPercent: mode.markupPercent });
+
+      const me = identity();
+      const content = `quote agreement: ${label}`;
+      const tx = new Transaction();
+      tx.addOutput({
+        lockingScript: buildInscriptionScript({
+          address: me.address,
+          contentType: "application/json",
+          data: Utils.toArray(
+            JSON.stringify({ v: 1, app: "openbooks", type: "post", content }),
+            "utf8"
+          ),
+        }),
+        satoshis: INSCRIPTION_SATS,
+      });
+      // The client only adds a platform output when the quote says to.
+      if (price.platformFeeSats > 0 && mode.platformAddress) {
+        tx.addOutput({
+          lockingScript: new P2PKH().lock(mode.platformAddress),
+          satoshis: price.platformFeeSats,
+        });
+      }
+
+      const res = await createPost(form(me, content, tx.toHex()));
+      expect(res).toEqual({ ok: true });
+    });
+  }
 });
