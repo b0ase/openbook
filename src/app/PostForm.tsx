@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { InlineAgentAnswer } from "@/components/InlineAgentAnswer";
+import { InlineAgentTranscript } from "@/components/InlineAgentAnswer";
 import { InstallBookmark } from "@/components/InstallBookmark";
 import { PermanenceGate } from "@/components/PermanenceGate";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useMediaUpload } from "@/hooks/useMediaUpload";
 import { useVoiceToText } from "@/hooks/useVoiceToText";
+import { type AgentTurn, appendTurn, formatTranscript, hashTurn } from "@/lib/agent-record";
 import { parseSlashCommand } from "@/lib/slash";
 import { ACCEPTED_MIME } from "@/lib/upload";
 import { AgentChat } from "./AgentChat";
@@ -61,12 +62,9 @@ export function PostForm({
   const [showPermanenceGate, setShowPermanenceGate] = useState(false);
   // The inline agent answer. Ephemeral — see InlineAgentAnswer for why it is
   // never posted.
-  const [agentAsk, setAgentAsk] = useState<{
-    question: string;
-    answer: string;
-    streaming: boolean;
-    error: string | null;
-  } | null>(null);
+  const [chain, setChain] = useState<AgentTurn[]>([]);
+  const [agentStreaming, setAgentStreaming] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
   const pendingPostRef = useRef<{
     identity: NonNullable<typeof identity>;
     content: string;
@@ -252,39 +250,87 @@ export function PostForm({
    * deleted global click-catcher did wrong.
    */
   const askAgent = useCallback(async (question: string) => {
-    setAgentAsk({ question, answer: "", streaming: true, error: null });
+    setAgentError(null);
+    setAgentStreaming(true);
+
+    // The question joins the chain BEFORE the answer exists, so a record of
+    // what was asked survives even if the model call fails.
+    let working: AgentTurn[] = [];
+    setChain((prev) => {
+      working = [...prev, appendTurn(prev, "human", question)];
+      return working;
+    });
+
     try {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [{ from: "user", text: question }] }),
+        // The WHOLE exchange goes up, so a follow-up means what it says —
+        // "what about that?" is unanswerable without the turns before it.
+        body: JSON.stringify({
+          messages: [
+            ...working.map((t) => ({ from: t.role === "human" ? "user" : "agent", text: t.text })),
+          ],
+        }),
       });
       if (!res.ok || !res.body) {
-        setAgentAsk({
-          question,
-          answer: "",
-          streaming: false,
-          error: await res.text().catch(() => "The agent is unavailable right now."),
-        });
+        setAgentError("The agent is unavailable right now.");
+        setAgentStreaming(false);
         return;
       }
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      const prevHash = working[working.length - 1]?.hash ?? null;
       let acc = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         acc += decoder.decode(value, { stream: true });
-        setAgentAsk({ question, answer: acc, streaming: true, error: null });
+        const text = acc;
+        setChain([
+          ...working,
+          { role: "agent", text, prevHash, hash: hashTurn(prevHash, "agent", text) },
+        ]);
       }
-      setAgentAsk({ question, answer: acc, streaming: false, error: null });
+
+      const finalTurn: AgentTurn = {
+        role: "agent",
+        text: acc,
+        prevHash,
+        hash: hashTurn(prevHash, "agent", acc),
+      };
+
+      // ⚠ ATTESTED BY THE SERVER THAT RAN THE MODEL, not by us. Without this the
+      // record only proves nothing changed after publication — it says nothing
+      // about what the model actually returned. A failure here is NOT fatal: the
+      // turn stays, marked unattested, because silently dropping the answer
+      // would be worse than publishing an honestly-labelled claim.
+      try {
+        const att = await fetch("/api/agent/attest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prevHash, text: acc }),
+        });
+        if (att.ok) {
+          const j = (await att.json()) as {
+            attested?: boolean;
+            signature?: string;
+            pubkey?: string;
+          };
+          if (j.attested && j.signature && j.pubkey) {
+            finalTurn.attestation = { signature: j.signature, pubkey: j.pubkey };
+          }
+        }
+      } catch {
+        /* unattested — rendered as such */
+      }
+
+      setChain([...working, finalTurn]);
     } catch {
-      setAgentAsk({
-        question,
-        answer: "",
-        streaming: false,
-        error: "Couldn't reach the agent — try again.",
-      });
+      setAgentError("Couldn't reach the agent — try again.");
+    } finally {
+      setAgentStreaming(false);
     }
   }, []);
 
@@ -301,12 +347,7 @@ export function PostForm({
     const command = parseSlashCommand(trimmed);
     if (command?.name === "agent") {
       if (!command.arg) {
-        setAgentAsk({
-          question: "",
-          answer: "",
-          streaming: false,
-          error: "Ask a question after /agent — for example, /agent what is this board for?",
-        });
+        setAgentError("Ask a question after /agent — for example, /agent what is this board for?");
         return;
       }
       formRef.current.reset();
@@ -377,15 +418,28 @@ export function PostForm({
     >
       {/* The agent's answer sits ABOVE the box it was asked from, so the
           question and the reply read in order and the composer stays put. */}
-      {agentAsk && (
-        <InlineAgentAnswer
-          question={agentAsk.question}
-          answer={agentAsk.answer}
-          streaming={agentAsk.streaming}
-          error={agentAsk.error}
-          onDismiss={() => setAgentAsk(null)}
-        />
-      )}
+      <InlineAgentTranscript
+        chain={chain}
+        streaming={agentStreaming}
+        error={agentError}
+        onDismiss={() => {
+          setChain([]);
+          setAgentError(null);
+        }}
+        publishing={isPending}
+        onPublish={() => {
+          // Published through the ORDINARY post path: signed by the human, paid
+          // for by the human, anchored like any other post. They asked, they
+          // paid, they own the record — which is what keeps "own what you post"
+          // true of an exchange with a machine.
+          if (!requireIdentity() || !identity) return;
+          const transcript = formatTranscript(chain);
+          if (!transcript) return;
+          setChain([]);
+          setAgentError(null);
+          performSubmit(identity, transcript);
+        }}
+      />
       {/* Drop target is the whole compose box, not just the textarea: aiming a
           drag at a one-line input is fiddly, and a drop that lands two pixels
           outside would otherwise navigate the tab to the file. `preventDefault`

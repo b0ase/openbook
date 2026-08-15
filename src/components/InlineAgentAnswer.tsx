@@ -1,66 +1,118 @@
 "use client";
 
+import type { AgentTurn } from "@/lib/agent-record";
+
 /**
- * The platform agent's answer, shown in place above the compose box.
+ * The running human/AI exchange, printed above the compose box.
  *
- * ⚠ EPHEMERAL BY DESIGN — THIS IS NOT A POST. It is never stored, never
- * anchored, and mints no token. That is deliberate rather than unfinished:
- * a posted answer would be permanent and on-chain, which means an agent
- * hallucination could not be unwritten, and it would immediately raise a
- * question the token model has not answered — who OWNS a token the agent
- * produced? Under *revenue follows ownership* that is not cosmetic.
+ * ⚠ IT IS A CONVERSATION, NOT A FEED. Both are rendered from the same screen,
+ * and the feed means one specific thing on this board — permanent, owned,
+ * on-chain. So this is deliberately unlike a post: no author chip, no boost
+ * button, no timestamp, and an explicit line saying what it is. Somebody
+ * reading quickly must not mistake an exchange for something already published.
  *
- * The route the model already has: the reader can copy an answer into their own
- * post, which makes THEM the author and owner. "Own what you post" stays true
- * because a person posted it.
+ * ⚠ EACH TURN SHOWS WHETHER IT IS ATTESTED. The hash chain proves nothing was
+ * altered after the fact; only the server's signature speaks to what the model
+ * actually returned. An unattested agent turn is what the poster SAYS the agent
+ * replied, and this must never render it as verified — that is the difference
+ * between a record and a decoration.
  */
-export function InlineAgentAnswer({
-  question,
-  answer,
+export function InlineAgentTranscript({
+  chain,
   streaming,
   error,
   onDismiss,
+  onPublish,
+  publishing,
 }: {
-  question: string;
-  answer: string;
+  chain: AgentTurn[];
   streaming: boolean;
   error: string | null;
   onDismiss: () => void;
+  onPublish?: () => void;
+  publishing?: boolean;
 }) {
+  if (!chain.length && !error) return null;
+
   return (
     <div className="mb-2 rounded-xl border border-amber-400/20 bg-[#0f0f0f] px-3 py-2.5">
       <div className="flex items-start justify-between gap-3">
-        <span className="min-w-0 text-[11px] text-zinc-500">
-          <span className="text-amber-400">Ask AI</span>
-          {question && <span className="text-zinc-600"> · {question}</span>}
-        </span>
+        <span className="text-[11px] text-amber-400">Ask AI</span>
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Dismiss answer"
+          aria-label="Dismiss"
           className="-m-2 shrink-0 p-2 text-zinc-500 hover:text-zinc-300 transition-colors"
         >
           ✕
         </button>
       </div>
 
-      <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-zinc-200">
-        {error ? (
-          <span className="text-amber-400">{error}</span>
-        ) : answer ? (
-          answer
-        ) : (
-          <span className="text-zinc-600">Thinking…</span>
+      <div className="mt-1 max-h-64 space-y-2 overflow-y-auto">
+        {/* ⚠ KEYED ON `prevHash`, not on `hash` and not on the index. A turn is
+            re-hashed on every streamed chunk, so keying on its OWN hash would
+            remount the node mid-answer and drop the reader's scroll position.
+            `prevHash` identifies the same turn throughout — the chain is
+            append-only so no two turns share one — and unlike an index it does
+            not silently reuse state if the list ever changes shape. */}
+        {chain.map((turn) => (
+          <div key={turn.prevHash ?? "root"}>
+            <div className="flex items-baseline gap-2">
+              <span
+                className={`shrink-0 text-[10px] font-medium ${
+                  turn.role === "human" ? "text-zinc-400" : "text-amber-400"
+                }`}
+              >
+                {turn.role === "human" ? "You" : "AI"}
+              </span>
+              {turn.role === "agent" && (
+                <span
+                  title={
+                    turn.attestation
+                      ? "Signed by the server that ran the model"
+                      : "Not signed — this is what was shown, but the server did not attest it"
+                  }
+                  className={`shrink-0 font-mono text-[9px] ${
+                    turn.attestation ? "text-emerald-500" : "text-zinc-600"
+                  }`}
+                >
+                  {turn.attestation ? "attested" : "unattested"} · {turn.hash.slice(0, 8)}
+                </span>
+              )}
+            </div>
+            <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-zinc-200">
+              {turn.text}
+              {streaming && turn === chain[chain.length - 1] && turn.role === "agent" && (
+                <span className="ml-0.5 animate-pulse text-amber-400">▍</span>
+              )}
+            </p>
+          </div>
+        ))}
+        {streaming && chain[chain.length - 1]?.role === "human" && (
+          <p className="text-[13px] text-zinc-600">Thinking…</p>
         )}
-        {streaming && answer && <span className="ml-0.5 animate-pulse text-amber-400">▍</span>}
-      </p>
+      </div>
 
-      {/* Said plainly, because the whole board is built on the opposite
-          promise. Everything else typed here is permanent; this is not. */}
-      {!streaming && (answer || error) && (
-        <p className="mt-1.5 text-[10px] text-zinc-600">
-          Not posted &mdash; only you can see this. Copy it into a post to keep it.
-        </p>
+      {error && <p className="mt-1.5 text-[12px] text-amber-400">{error}</p>}
+
+      {!streaming && chain.length > 0 && (
+        <div className="mt-2 flex items-center justify-between gap-3 border-t border-zinc-800/60 pt-2">
+          {/* Said plainly: everything else typed into this box is permanent, and
+              this is not — until the human chooses to publish it. */}
+          <span className="text-[10px] leading-relaxed text-zinc-600">
+            Not posted yet &mdash; ask again to continue.
+          </span>
+          {onPublish && (
+            <button
+              type="button"
+              onClick={onPublish}
+              disabled={publishing}
+              className="shrink-0 rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-medium text-black transition-colors hover:bg-amber-400 disabled:opacity-40"
+            >
+              {publishing ? "Posting…" : "Post this exchange"}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
