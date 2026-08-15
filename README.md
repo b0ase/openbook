@@ -117,4 +117,11 @@ OpenBook is the first proof that this works — the seed planted before anyone e
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
+
+$OpenBooks is a fork of [OpenCook](https://github.com/Challotes/opencook), which is MIT
+licensed and copyright © 2026 BSVibes contributors. MIT asks that the copyright notice and
+the permission notice travel with the code, so the upstream notice is kept in `LICENSE`
+alongside this project's own. Posts 1–2023 in the feed came from upstream and are signed by
+their original authors — see `src/lib/fork-point.ts` and [DIRECTION.md](DIRECTION.md), which
+distinguishes upstream's positions from this fork's throughout.
