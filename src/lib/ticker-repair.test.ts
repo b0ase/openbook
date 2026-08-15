@@ -16,7 +16,6 @@
 import Database from "better-sqlite3";
 import { beforeEach, describe, expect, it } from "vitest";
 import { applyTickerMigration } from "./db";
-import { ROOT_TICKER } from "./ticker";
 
 type Db = ReturnType<typeof Database>;
 let db: Db;
@@ -67,11 +66,16 @@ describe("repairing the inverted tree", () => {
   it("turns $branch/$test the right way up", () => {
     applyTickerMigration(db);
     const rows = Object.fromEntries(tickerRows().map((r) => [r.symbol, r.parent_symbol]));
-    // $test was claimed at the root post, so it hangs off the root token —
-    // asserted via ROOT_TICKER rather than a literal, so the root's NAME can
-    // change (it went from OPENBOOK to OPENBOOKS when the board took the plural)
-    // without this test pinning the old one.
-    expect(rows.TEST).toBe(ROOT_TICKER);
+    // $test was claimed at a root post with nothing enclosing it, so it is
+    // TOP-LEVEL and has no parent at all.
+    //
+    // ⚠ It used to assert `ROOT_TICKER` here. Reversed 2026-08-15: parenting
+    // every feed-level claim to `$OpenBooks` put a prefix on every top-level
+    // token, which therefore told you nothing about any of them, and made the
+    // root simultaneously a member of the ticker set and the container of it.
+    // Real branching — the `BRANCH → TEST` line below — is what parentage is
+    // for, and it is untouched.
+    expect(rows.TEST).toBeNull();
     // $branch was named inside $test's thread, so $test is its parent.
     expect(rows.BRANCH).toBe("TEST");
   });

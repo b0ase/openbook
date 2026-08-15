@@ -229,20 +229,24 @@ describe("a new ticker starts its OWN thread", () => {
 });
 
 describe("the tree is the right way round", () => {
-  it("builds $OpenBook/$Parent/$Child, not the reverse", async () => {
+  it("builds $Parent/$Child, not the reverse", async () => {
     // The reported bug was `$branch/$test` — the tree upside down — because the
     // parent was inferred without requiring it to have been claimed EARLIER.
     await post("starting $Foxtrot");
     const foxRoot = lastId();
     await post("inside it, $Golf", foxRoot);
 
-    expect(await getTickerPath("GOLF")).toEqual([ROOT_TICKER, "FOXTROT", "GOLF"]);
-    expect(await getTickerPath("FOXTROT")).toEqual([ROOT_TICKER, "FOXTROT"]);
+    expect(await getTickerPath("GOLF")).toEqual(["FOXTROT", "GOLF"]);
+    expect(await getTickerPath("FOXTROT")).toEqual(["FOXTROT"]);
   });
 
-  it("parents a top-level claim to the root token", async () => {
+  it("leaves a top-level claim UNPARENTED — no root prefix", async () => {
+    // Reversed 2026-08-15. Parenting every feed-level claim to `$OpenBooks`
+    // asserted a lineage true of every top-level token, so it said nothing
+    // about any of them, and made the root both a member of the ticker set and
+    // the container of it.
     await post("just $Hotel on its own");
-    expect(await getTickerPath("HOTEL")).toEqual([ROOT_TICKER, "HOTEL"]);
+    expect(await getTickerPath("HOTEL")).toEqual(["HOTEL"]);
   });
 });
 
@@ -334,7 +338,7 @@ describe("a repeat mention is an INVOCATION, not a claim", () => {
     await post("citing $Branch a third time");
 
     const path = await getTickerPath("BRANCH");
-    expect(path).toEqual([ROOT_TICKER, "BRANCH"]);
+    expect(path).toEqual(["BRANCH"]);
     expect(path.filter((s) => s === "BRANCH")).toHaveLength(1);
   });
 
@@ -386,9 +390,9 @@ describe("the root ticker is claimable like any other", () => {
     expect(await resolveTickers(["OPENBOOK"])).toEqual({});
   });
 
-  it("puts a top-level claim under the root, named or not", async () => {
+  it("leaves a top-level claim unparented, named or not", async () => {
     await post("an ordinary idea, $Zulu");
-    expect(await getTickerPath("ZULU")).toEqual([ROOT_TICKER, "ZULU"]);
+    expect(await getTickerPath("ZULU")).toEqual(["ZULU"]);
   });
 });
 
@@ -615,7 +619,7 @@ describe("the index — searchTickers / listTickers", () => {
     const parentRoot = lastId();
     await post("$Child inside it", parentRoot);
     const child = (await searchTickers("child"))[0];
-    expect(child?.path).toEqual([ROOT_TICKER, "PARENT", "CHILD"]);
+    expect(child?.path).toEqual(["PARENT", "CHILD"]);
   });
 
   it("returns nothing for an empty or junk query rather than everything", async () => {

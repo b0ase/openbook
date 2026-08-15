@@ -1,6 +1,6 @@
 import path from "node:path";
 import Database from "better-sqlite3";
-import { distinctTickers, isRootTicker, ROOT_TICKER } from "./ticker";
+import { distinctTickers, isRootTicker } from "./ticker";
 
 let db: ReturnType<typeof Database>;
 
@@ -316,9 +316,13 @@ export function applyTickerMigration(database: Db): void {
   // is what makes the tree in TOKENS.md real rather than notional: a token branches
   // from the token it was named inside, and a parent takes a share of each child.
   //
-  // The root token has parent NULL and is its own top. Everything claimed in the
-  // main feed (a thread with no ticker of its own) parents to the root, so the
-  // whole board reads as one tree: $OPENBOOK / $CHILD / $GRANDCHILD.
+  // ⚠ A ticker claimed in the MAIN FEED is TOP-LEVEL, parent NULL — it does not
+  // parent to the root. It used to ("so the whole board reads as one tree:
+  // $OPENBOOK / $CHILD / $GRANDCHILD"), which made the root both a member of the
+  // ticker set and the container of it, and put a prefix on every top-level
+  // token that therefore distinguished none of them. See `repairTickerParents`
+  // for the full reversal note. Parentage now records only REAL branching: a
+  // ticker named inside another ticker's thread.
   addColumnIfMissing(database, "tickers", "parent_symbol", "parent_symbol TEXT");
   database.exec("CREATE INDEX IF NOT EXISTS idx_tickers_parent ON tickers(parent_symbol)");
 
@@ -407,15 +411,29 @@ function repairTickerParents(database: Db): void {
           cursor =
             (parentOf.get(cursor) as { parent_id: number | null } | undefined)?.parent_id ?? null;
         }
-        // Nothing above it carries a ticker → it hangs off the root token, so the
-        // whole board stays one tree.
-        // ⚠ THIS LINE IS THE ROOT RENAME'S MIGRATION. Parents are recomputed
-        // from scratch on every boot, so pointing the fallback at ROOT_TICKER
-        // re-parents every top-level ticker from `OPENBOOK` to `OPENBOOKS` on
-        // the next start — no migration script, no backfill, and it self-heals
-        // if it is ever run against a half-renamed database.
-        const parent = found ?? ROOT_TICKER;
-        if (bySymbol.has(parent) || isRootTicker(parent)) {
+        // Nothing above it carries a ticker → it is TOP-LEVEL, parent NULL.
+        //
+        // ⚠ THIS FALLBACK USED TO BE `ROOT_TICKER`, "so the whole board reads as
+        // one tree: $OPENBOOK / $CHILD / $GRANDCHILD". Reversed 2026-08-15,
+        // deliberately, and the original reasoning is quoted because it was not
+        // wrong so much as empty: a claim made on the open feed was parented to
+        // the root because NOTHING enclosed it, not because it related to the
+        // board. A prefix that appears on every top-level token distinguishes no
+        // token from any other — it cost eleven characters of every URL and made
+        // real ancestry ($Memeplex/$Words, genuinely branched inside another
+        // thread) indistinguishable from the automatic kind.
+        //
+        // It also made the root a member of the set AND the container of it: its
+        // own address collapses to `/` while it stayed a mandatory prefix on
+        // everyone else's. `$OpenBooks` is now one name among many.
+        //
+        // ⚠ NO MIGRATION SCRIPT IS NEEDED, for the reason the old comment gives:
+        // parents are recomputed from scratch on every boot, so changing this
+        // line re-parents every affected row on the next start, and self-heals.
+        // Genuine enclosure is untouched — `found` is set by walking the reply
+        // chain, and only the "nothing above it" case lands here.
+        const parent = found;
+        if (parent === null || bySymbol.has(parent) || isRootTicker(parent)) {
           if (t.parent_symbol !== parent) update.run(parent, t.symbol);
         }
       }

@@ -382,7 +382,13 @@ function registerTickers(
     const enclosing = db
       .prepare("SELECT symbol FROM tickers WHERE root_id = ? ORDER BY post_id ASC LIMIT 1")
       .get(rootId) as { symbol: string } | undefined;
-    const parent = enclosing?.symbol ?? ROOT_TICKER;
+    // ⚠ NULL, not the root. A claim made on the open feed is TOP-LEVEL: nothing
+    // enclosed it, and parenting it to `$OpenBooks` asserted a lineage true of
+    // every top-level token, which therefore said nothing about any of them. See
+    // the reversal note in `repairTickerParents` — that pass recomputes parents
+    // on every boot, so this default and its fallback must agree or the boot
+    // will simply undo what is written here.
+    const parent = enclosing?.symbol ?? null;
 
     const insert = db.prepare(
       "INSERT OR IGNORE INTO tickers (symbol, post_id, root_id, pubkey, parent_symbol) VALUES (?, ?, ?, ?, ?)"

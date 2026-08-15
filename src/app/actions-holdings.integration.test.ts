@@ -37,7 +37,6 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { ROOT_TICKER } from "@/lib/ticker";
 import {
   createPost,
   getHoldings,
@@ -219,20 +218,22 @@ describe("getHoldings", () => {
     const held = await getHoldings(alice.pubkey);
     const child = held.find((h) => h.path.at(-1) === "CHILD");
     expect(child).toBeDefined();
-    expect(child?.path).toEqual([ROOT_TICKER, "PARENT", "CHILD"]);
+    expect(child?.path).toEqual(["PARENT", "CHILD"]);
   });
 
-  it("hangs an unparented claim off the root token", async () => {
+  it("leaves an unparented claim TOP-LEVEL, with no root prefix", async () => {
     const alice = author("anon_alic");
     // Two sibling root posts: $Loose is not written inside $Other's thread, so
-    // its only ancestor is the root token. Pinned because this is the case the
-    // test above originally confused with real nesting.
+    // it has no ancestor at all. Pinned because this is the case the test above
+    // originally confused with real nesting — and because it used to be given
+    // the root as a parent, a prefix every top-level token shared and which
+    // therefore distinguished none of them.
     await alice.post("one idea, $Other");
     await alice.post("an unrelated idea, $Loose");
 
     const held = await getHoldings(alice.pubkey);
     const loose = held.find((h) => h.path.at(-1) === "LOOSE");
-    expect(loose?.path).toEqual([ROOT_TICKER, "LOOSE"]);
+    expect(loose?.path).toEqual(["LOOSE"]);
   });
 
   it("still reports an unnamed thread, with an empty path", async () => {
@@ -303,7 +304,7 @@ describe("getTickerLeaderboard", () => {
     await alice.post("branching into $Child", parentRoot);
 
     const board = await getTickerLeaderboard("CHILD");
-    expect(board?.path).toEqual([ROOT_TICKER, "PARENT", "CHILD"]);
+    expect(board?.path).toEqual(["PARENT", "CHILD"]);
   });
 
   it("returns null for a name nobody has written — not an empty board", async () => {
