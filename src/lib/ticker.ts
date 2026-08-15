@@ -103,9 +103,20 @@ export function isValidTicker(symbol: string): boolean {
 }
 
 /**
- * The root token. Every ticker claimed outside another ticker's thread parents to
- * this, so the whole board is one tree rather than a scattering of unrelated
- * names — and the main feed is simply this token's thread.
+ * The root token — the board's own name, and the main feed is its thread.
+ *
+ * ⚠ IT IS NOT A NAMESPACE. It used to be: "every ticker claimed outside another
+ * ticker's thread parents to this, so the whole board is one tree". Reversed
+ * 2026-08-15 — a prefix carried by every top-level name distinguished none of
+ * them, and it made the root both a member of the ticker set and the container
+ * of it. `$OpenBooks` is one name among many; only REAL branching (a ticker
+ * named inside another ticker's thread) sets a parent now.
+ *
+ * ⚠ IT IS ALSO NOT THE REPOSITORY TOKEN, and must never be reused as one. This
+ * symbol's units are one per post that named it, held by whoever wrote those
+ * posts. A repo token is a fixed supply held by an issuer. One string cannot be
+ * both without telling a board holder they own equity they do not — see
+ * FORKS.md, "Which token this is, and which it is not".
  */
 export const ROOT_TICKER = "OPENBOOKS";
 
