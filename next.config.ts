@@ -85,7 +85,11 @@ const nextConfig: NextConfig = {
               // img-src already accepts: the host learns a viewer's IP, bounded by
               // referrerPolicy="no-referrer" and `preload="none"`.
               "media-src 'self' https: blob:",
-              "connect-src 'self' https://api.whatsonchain.com https://arc.taal.com https://arc.gorillapool.io",
+              // `ordinals.gorillapool.io` is the ORDINALS broadcast + policy host: a
+              // paid post goes there first so the inscription is indexed promptly.
+              // Without it here the POST is blocked by CSP and reads as a rejected
+              // broadcast rather than a blocked request.
+              "connect-src 'self' https://api.whatsonchain.com https://arc.taal.com https://arc.gorillapool.io https://ordinals.gorillapool.io",
               "font-src 'self'",
               // ⚠ AN ALLOWLIST, NOT `https:` LIKE img-src AND media-src ABOVE.
               // Those two accept any host because posted media lives wherever

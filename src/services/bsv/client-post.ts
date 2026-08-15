@@ -34,6 +34,7 @@ import {
   utxoKey,
 } from "./client-boot";
 import { buildInscriptionScript, INSCRIPTION_SATS } from "./inscription";
+import { oneSatBroadcaster } from "./one-sat-broadcaster";
 
 export type ClientPostResult =
   | {
@@ -177,7 +178,22 @@ export async function clientSidePost(
 
     const txid = tx.id("hex");
     try {
-      const result = await tx.broadcast(new ARC("https://arc.gorillapool.io"));
+      // ⚠ ORDINALS ENDPOINT FIRST. An inscription that is mined but never
+      // indexed is, to every wallet and marketplace, not an inscription — and
+      // this endpoint feeds GorillaPool's indexer directly instead of waiting
+      // for it to notice the transaction on-chain.
+      let result = await tx.broadcast(oneSatBroadcaster());
+
+      if (result.status === "error") {
+        // ⚠ RE-BROADCASTING THE SAME BYTES IS SAFE; REBUILDING IS NOT. The
+        // transaction is already signed, so the fallback sends an IDENTICAL
+        // payload with an identical txid — if the first attempt actually landed,
+        // the second is a no-op rather than a second payment. (Rebuilding after
+        // a timeout is what mints a new txid and double-pays; that is why this
+        // reuses `tx` and never re-selects UTXOs.)
+        result = await tx.broadcast(new ARC("https://arc.gorillapool.io"));
+      }
+
       if (result.status === "error") {
         return { status: "broadcast_failed", error: result.description ?? "broadcast rejected" };
       }
