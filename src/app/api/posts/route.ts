@@ -7,6 +7,7 @@ import {
   getPosts,
   getUpdatedPosts,
 } from "@/app/actions";
+import { CLIENT_BUILD_ID } from "@/lib/build-id";
 import { rateLimit } from "@/lib/rate-limit";
 import { sweepOrphans } from "@/services/bsv/anchor-sweep";
 import { sweepPreviews } from "@/services/link-preview-sweep";
@@ -61,5 +62,15 @@ export async function GET(request: NextRequest) {
     previewIds.length > 0 ? getPostPreviews(previewIds) : Promise.resolve([]),
   ]);
 
-  return NextResponse.json({ posts, bootboard, updated, counts, previews });
+  // The running build. Lets an open tab notice it is older than the server
+  // (see lib/build-id.ts) — carried on the poll the feed already makes rather
+  // than a second request, so detection costs nothing.
+  return NextResponse.json({
+    posts,
+    bootboard,
+    updated,
+    counts,
+    previews,
+    buildId: CLIENT_BUILD_ID,
+  });
 }

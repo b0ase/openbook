@@ -20,7 +20,35 @@ import type { NextConfig } from "next";
  */
 const IS_DEV = process.env.NODE_ENV !== "production";
 
+/**
+ * One identifier per build, readable from BOTH the client bundle and the server.
+ *
+ * ⚠ WHY THIS EXISTS: a tab left open across a deploy keeps working just enough
+ * to be confusing. Feed polling goes through a ROUTE HANDLER, which survives a
+ * deploy, so posts keep arriving and the page looks perfectly alive — while
+ * every SERVER ACTION the old bundle knows about has been replaced and now fails
+ * with `UnrecognizedActionError`. In practice that meant claiming a name, opening
+ * a ticker, and transferring one all failed with generic "try again" copy, and
+ * one of them failed SILENTLY (an owned-names list that catches the error and
+ * renders an empty section, so the feature simply appears not to exist).
+ *
+ * Baked in at build time so the client's copy is frozen into its bundle while
+ * the server always reports the running build — a mismatch is therefore exactly
+ * "this tab is older than the server", which is the condition worth telling the
+ * user about. Prefers the deploy's commit SHA where the host provides one so the
+ * value is meaningful in logs; falls back to build time, which only has to be
+ * unique per build, not descriptive.
+ */
+const BUILD_ID =
+  process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 12) ??
+  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ??
+  String(Date.now());
+
 const nextConfig: NextConfig = {
+  generateBuildId: () => BUILD_ID,
+  // Inlined into the client bundle at build time. Read via `CLIENT_BUILD_ID`
+  // in `src/lib/build-id.ts` rather than directly, so there is one spelling.
+  env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
   reactCompiler: true,
   turbopack: {
     resolveAlias: {

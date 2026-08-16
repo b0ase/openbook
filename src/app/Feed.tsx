@@ -122,6 +122,7 @@ function FeedContent({
     posts: serverPosts,
     bootboard,
     refresh,
+    staleBuild,
   } = useFeedPolling({
     initialPosts,
     initialBootboard,
@@ -1002,6 +1003,28 @@ function FeedContent({
           tree but never both at once in practice — one follows a tap on a name,
           the other a tap on a boot. */}
       <Notice message={tickerNotice} />
+
+      {/* ⚠ A TAB OLDER THAN THE SERVER LOOKS FINE AND IS NOT. Polling goes
+          through a route handler, so posts keep arriving after a deploy while
+          every server action this bundle knows about has been replaced. The
+          user sees a live feed where posting, claiming a name and opening a
+          ticker all fail — one of them silently. Nothing here can be fixed by
+          retrying, so this is the one prompt that asks for a reload rather than
+          offering a retry. */}
+      {staleBuild && (
+        <div className="fixed inset-x-0 bottom-0 z-[70] flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="flex items-center gap-3 rounded-full border border-amber-400/30 bg-[#0f0f0f] px-4 py-2 shadow-[0_4px_24px_rgba(0,0,0,0.6)]">
+            <span className="text-xs text-zinc-300">There's a newer version of the site.</span>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-full bg-amber-500 px-3 py-1 text-xs font-medium text-black hover:bg-amber-400"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* iOS post-install ITP heads-up — fires once on first standalone launch
           (navigator.standalone === true). Mount point inside FeedContent

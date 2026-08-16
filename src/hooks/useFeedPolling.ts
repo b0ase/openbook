@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isStaleBuild } from "@/lib/build-id";
 import { hasLink } from "@/lib/linkify";
 import type { BootboardData, Post, PostPreviewUpdate } from "@/types";
 
@@ -14,6 +15,9 @@ interface FeedPollingResult {
   counts?: { id: number; boot_count: number; reply_count: number }[];
   // Previews that finished unfurling after the client already had the post.
   previews?: PostPreviewUpdate[];
+  /** The build the SERVER is running — see lib/build-id.ts. Optional so a
+      response from an older server simply reads as "no information". */
+  buildId?: string;
 }
 
 interface UseFeedPollingOptions {
@@ -33,6 +37,15 @@ export function useFeedPolling({
 }: UseFeedPollingOptions) {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [bootboard, setBootboard] = useState<BootboardData>(initialBootboard);
+  /**
+   * This tab is running an older build than the server.
+   *
+   * ⚠ ONE-WAY. Once true it stays true: the bundle in this tab cannot become
+   * current again without a reload, so allowing it to flip back would hide the
+   * warning the moment a request happened to be served by an older instance
+   * mid-rollout — precisely when the user most needs to be told.
+   */
+  const [staleBuild, setStaleBuild] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFetchingRef = useRef(false);
   const pausedRef = useRef(paused);
@@ -96,6 +109,7 @@ export function useFeedPolling({
       if (!res.ok) return;
       const data: FeedPollingResult = await res.json();
 
+      if (isStaleBuild(data.buildId)) setStaleBuild(true);
       setBootboard(data.bootboard);
 
       // tx_id confirmations (posts that just gained a chain icon)
@@ -194,5 +208,5 @@ export function useFeedPolling({
     };
   }, [fetchFeed, intervalMs]);
 
-  return { posts, setPosts, bootboard, setBootboard, refresh: fetchFeed };
+  return { posts, setPosts, bootboard, setBootboard, staleBuild, refresh: fetchFeed };
 }
