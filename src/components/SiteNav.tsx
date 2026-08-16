@@ -1,3 +1,4 @@
+import { SiteIdentity } from "./SiteIdentity";
 import { SupportAddress } from "./SupportAddress";
 
 /**
@@ -60,7 +61,10 @@ export function SiteNav({ supportAddress = null }: { supportAddress?: string | n
             <span className="text-white group-hover:text-zinc-300 transition-colors">Book</span>
           </span>
         </a>
-        <SiteNavLinks />
+        <div className="flex items-center gap-3">
+          <SiteNavLinks />
+          <SiteIdentity />
+        </div>
       </div>
       {/* ⚠ THE SAME BAR THE FEED SHOWS, ON EVERY PAGE. The treasury line only
           existed on the front page, so every other page quietly dropped the one
