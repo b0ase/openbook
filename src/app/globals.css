@@ -1,7 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
+  /* ⚠ PURE BLACK, AND IT HAS TO MATCH THE CHROME. This was #0a0a0a while every
+     page container and the tab bar use `bg-black` (#000). The difference is
+     invisible anywhere the page covers the viewport — and glaringly visible in
+     an installed iOS PWA, where the safe-area strip below the `h-[100dvh]` box
+     is painted by the BODY. That strip read as a grey bar under the tab bar.
+     Any off-black here reappears as a seam at the bottom of the screen. */
+  --background: #000000;
   --foreground: #ededed;
 }
 

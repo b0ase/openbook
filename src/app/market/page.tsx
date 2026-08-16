@@ -76,19 +76,16 @@ export default async function MarketPage() {
                     href={leaderboardHref(b.path)}
                     className="flex items-baseline justify-between gap-3 py-3 transition-colors hover:text-amber-300"
                   >
-                    <span className="min-w-0 truncate">
-                      {/* Ancestry dimmed, leaf emphasised — the same treatment the
-                        thread header and the leaderboards give a path, so one
-                        name looks like itself everywhere it appears. */}
-                      {b.path.slice(0, -1).map((seg) => (
-                        <span key={seg} className="text-zinc-600">
-                          ${titleCaseTicker(seg)}
-                          <span className="text-zinc-700">/</span>
-                        </span>
-                      ))}
-                      <span className="font-medium text-amber-400">
-                        ${titleCaseTicker(b.symbol)}
-                      </span>
+                    {/* ⚠ THE LEAF ONLY, NO ANCESTRY. A nested token rendered as
+                        `$Memeplex/$Words` beside plain `$Ticker` rows made two
+                        different KINDS of thing appear in one list — and a market
+                        lists assets, where `$Words` is the asset and its parent is
+                        provenance. The path still shows on the board itself and in
+                        the leaderboards, where the hierarchy IS the subject; here
+                        it only made the list read inconsistently. `leaderboardHref`
+                        still takes the full path, so the link is unchanged. */}
+                    <span className="min-w-0 truncate font-medium text-amber-400">
+                      ${titleCaseTicker(b.symbol)}
                     </span>
                     <span className="shrink-0 text-right font-mono text-[11px] tabular-nums text-zinc-500">
                       {b.total} {b.total === 1 ? "unit" : "units"}
