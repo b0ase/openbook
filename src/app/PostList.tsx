@@ -6,6 +6,7 @@ import { useBootContext } from "@/contexts/BootContext";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useBoot } from "@/hooks/useBoot";
 import { FORK_POINT_ID, isInheritedPost } from "@/lib/fork-point";
+import { titleCaseTicker } from "@/lib/ticker";
 import type { Post } from "@/types";
 import { Manifesto } from "./Manifesto";
 import { PostContent } from "./PostContent";
@@ -492,6 +493,38 @@ export function PostList({
                   />
                 </div>
               </div>
+              {/* ⚠ THE REPLY, ON THE SCREEN THE READER IS ALREADY LOOKING AT.
+                  A reply lived behind a ~20px icon in the right gutter, visually
+                  identical to the boost control above it — so an agent answering
+                  a direct question was invisible, and the whole feature read as
+                  broken for hours while it was in fact working. Showing the
+                  newest reply inline is the difference between a board that
+                  answers you and one that appears not to. */}
+              {post.latest_reply_content && (
+                <button
+                  type="button"
+                  onClick={() => onOpenThread?.(post.id)}
+                  className="mt-2 ml-3 flex w-[calc(100%-0.75rem)] gap-2 border-l-2 border-zinc-800 pl-3 text-left transition-colors hover:border-amber-400/40"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="text-[11px] font-medium text-zinc-400">
+                      {post.latest_reply_nym
+                        ? `$${titleCaseTicker(post.latest_reply_nym)}`
+                        : post.latest_reply_author}
+                    </span>{" "}
+                    <span className="text-[13px] leading-relaxed text-zinc-300 break-words">
+                      {post.latest_reply_content.length > 180
+                        ? `${post.latest_reply_content.slice(0, 179).trimEnd()}\u2026`
+                        : post.latest_reply_content}
+                    </span>
+                    {(post.reply_count ?? 0) > 1 && (
+                      <span className="ml-1 text-[11px] text-zinc-600">
+                        · {post.reply_count} replies
+                      </span>
+                    )}
+                  </span>
+                </button>
+              )}
             </article>
           </Fragment>
         ))}

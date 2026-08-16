@@ -86,6 +86,10 @@ export type PostPreviewUpdate = { id: number } & PostPreviewFields;
 export type Post = PostRow & {
   boot_count: number;
   reply_count: number;
+  /** Newest reply in this thread, for the inline preview in the feed. */
+  latest_reply_content?: string | null;
+  latest_reply_author?: string | null;
+  latest_reply_nym?: string | null;
 } & Partial<PostPreviewFields>;
 
 // ── Bootboard ──────────────────────────────────────────────────────────────

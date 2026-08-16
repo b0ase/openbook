@@ -1539,7 +1539,16 @@ const POST_SELECT = `
          lp.image_url   as preview_image,
          lp.site_name   as preview_site_name,
          lp.status      as preview_status,
-         ny.symbol      as author_nym
+         ny.symbol      as author_nym,
+         -- ⚠ THE LATEST REPLY, INLINE. A reply lives behind a ~20px icon in the
+         -- gutter, so an agent answering you was invisible on the one screen you
+         -- were watching — the feature looked dead for hours while it worked.
+         -- Carried on the SAME select as reply_count so the preview can never
+         -- describe a different revision of the thread than the count beside it,
+         -- and so surfacing it costs no extra round trip.
+         lr.content     as latest_reply_content,
+         lr.author_name as latest_reply_author,
+         lrn.symbol     as latest_reply_nym
   FROM posts p
   LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
     ON bc.post_id = p.id
@@ -1547,6 +1556,15 @@ const POST_SELECT = `
     SELECT root_id, COUNT(*) as reply_count FROM posts WHERE parent_id IS NOT NULL GROUP BY root_id
   ) rc
     ON rc.root_id = p.id
+  LEFT JOIN (
+    SELECT r.root_id, r.content, r.author_name, r.pubkey
+      FROM posts r
+      JOIN (SELECT root_id, MAX(id) AS id FROM posts WHERE parent_id IS NOT NULL GROUP BY root_id) m
+        ON m.id = r.id
+  ) lr
+    ON lr.root_id = p.id
+  LEFT JOIN nyms lrn
+    ON lrn.pubkey = lr.pubkey
   LEFT JOIN link_previews lp
     ON lp.url_hash = p.preview_hash
   -- The author's public name, joined LIVE rather than denormalised onto the
