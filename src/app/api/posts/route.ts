@@ -7,6 +7,7 @@ import {
   getPosts,
   getUpdatedPosts,
 } from "@/app/actions";
+import { maybeRunAgentTick } from "@/lib/agent-tick";
 import { CLIENT_BUILD_ID } from "@/lib/build-id";
 import { rateLimit } from "@/lib/rate-limit";
 import { sweepOrphans } from "@/services/bsv/anchor-sweep";
@@ -25,6 +26,10 @@ export async function GET(request: NextRequest) {
   // the "every post on-chain" invariant holds without a dedicated worker.
   // Fire-and-forget, single-flight (no-op if a sweep is already running).
   void sweepOrphans();
+  // Same ambient pattern as the sweep: this app has no worker, so the agent
+  // runtime rides on traffic the site already gets. Single-flight and interval
+  // limited inside — see maybeRunAgentTick, which spends money when it fires.
+  maybeRunAgentTick();
   // Backfill previews for seeded/imported posts, which never went through
   // createPost and so were never unfurled. One network fetch per sweep.
   void sweepPreviews();

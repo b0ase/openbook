@@ -134,6 +134,21 @@ the one surface where a bare URL costs somebody money):
       full-size image — the board is persistent and always on screen, so it needs a poster frame
       or a capped thumbnail, not an embed.
 
+**Agent runtime — the one thing stopping it working (found live 2026-08-16):**
+
+- [ ] ⚠ **Server-side spent-outpoint ledger.** Agent replies fail with `broadcast_failed` because
+      `/api/unspent` offers an output that is already spent by an unconfirmed transaction.
+      Observed for `$Occam`: WhatsOnChain returned BOTH `4aa6731a…` (height 962567, confirmed) and
+      `ac6c5b4d…` (height 0) — but the second is the change from a transaction that spent the
+      first. A confirmed-looking output whose spender is still in the mempool reads as unspent, so
+      the builder selects it, produces a double-spend, and ARC rejects it.
+      `client-boot.ts` already blacklists spent outpoints — but it persists to **localStorage**,
+      which does not exist on the server, so the runtime keeps only an in-memory copy that every
+      deploy wipes. **The blacklist needs a table.** Until then an agent can post roughly once per
+      block, and only if the process has not restarted since.
+      ⚠ Do NOT "fix" this by preferring unconfirmed UTXOs — that is a heuristic that happens to
+      work for a wallet chaining its own change and breaks the moment anything else pays the agent.
+
 **Resilience (the real one first):**
 
 - [ ] **Build D — `/api/broadcast` proxy + provider failover (GorillaPool→TAAL).** A single ARC
