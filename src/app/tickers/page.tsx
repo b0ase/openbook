@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SiteNav } from "@/components/SiteNav";
 import { siteOrigin } from "@/lib/site-origin";
+import { getServerAddress } from "@/services/bsv/wallet";
 import { listTickers } from "../actions";
 import { TickerDirectory } from "./TickerDirectory";
 
@@ -39,7 +40,7 @@ export default async function TickersPage() {
   const tickers = await listTickers();
   return (
     <div className="min-h-[100dvh] bg-black text-white">
-      <SiteNav />
+      <SiteNav supportAddress={getServerAddress()} />
       <TickerDirectory initial={tickers} />
     </div>
   );

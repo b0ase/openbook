@@ -1,3 +1,5 @@
+import { SupportAddress } from "./SupportAddress";
+
 /**
  * Site navigation, shared by the feed's header and by every other page.
  *
@@ -17,14 +19,18 @@
  * scroll state the feed deliberately owns.
  */
 
-/** The links themselves — "Names · Holders". */
+/** The links themselves — "Tickers · Leaderboard". */
 export function SiteNavLinks({ className = "" }: { className?: string }) {
   return (
     <nav
       className={`flex items-center gap-2.5 text-[11px] leading-none text-zinc-500 ${className}`}
     >
+      {/* ⚠ THE LABEL IS THE ROUTE. These read "Names" and "Holders", which named
+          neither the page you land on nor the URL you can see in the address
+          bar — so following one and trying to describe where you were took a
+          translation step. A nav label that has to be decoded is not a label. */}
       <a href="/tickers" className="hover:text-amber-400 transition-colors">
-        Names
+        Tickers
       </a>
       <span aria-hidden="true" className="text-zinc-700">
         ·
@@ -32,7 +38,7 @@ export function SiteNavLinks({ className = "" }: { className?: string }) {
       {/* The INDEX, not one token's board — `$OpenBooks` is one token among
           those listed, not a stand-in for all of them. */}
       <a href="/leaderboard" className="hover:text-amber-400 transition-colors">
-        Holders
+        Leaderboard
       </a>
     </nav>
   );
@@ -44,7 +50,7 @@ export function SiteNavLinks({ className = "" }: { className?: string }) {
  * The wordmark is the breadcrumb. Without it these pages are reachable and not
  * leaveable, which is the half of the problem a link row alone does not solve.
  */
-export function SiteNav() {
+export function SiteNav({ supportAddress = null }: { supportAddress?: string | null }) {
   return (
     <header className="border-b border-zinc-800 bg-black">
       <div className="mx-auto flex max-w-2xl items-center justify-between gap-4 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
@@ -56,6 +62,17 @@ export function SiteNav() {
         </a>
         <SiteNavLinks />
       </div>
+      {/* ⚠ THE SAME BAR THE FEED SHOWS, ON EVERY PAGE. The treasury line only
+          existed on the front page, so every other page quietly dropped the one
+          piece of chrome that says who pays for the thing you are reading. If it
+          is worth showing at all it is worth showing where people land — and
+          people land on a ticker page from a link far more often than on the
+          root. */}
+      {supportAddress && (
+        <div className="border-t border-zinc-900">
+          <SupportAddress address={supportAddress} />
+        </div>
+      )}
     </header>
   );
 }

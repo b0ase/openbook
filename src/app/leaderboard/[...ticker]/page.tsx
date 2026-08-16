@@ -4,6 +4,7 @@ import { SiteNav } from "@/components/SiteNav";
 import { formatShare } from "@/lib/share";
 import { siteOrigin } from "@/lib/site-origin";
 import { parseTickerPath, tickerHref, titleCaseTicker } from "@/lib/ticker";
+import { getServerAddress } from "@/services/bsv/wallet";
 import { getTickerLeaderboard } from "../../actions";
 
 /**
@@ -60,7 +61,7 @@ export default async function LeaderboardPage({ params }: Params) {
 
   return (
     <div className="min-h-[100dvh] bg-black text-white">
-      <SiteNav />
+      <SiteNav supportAddress={getServerAddress()} />
       <div className="mx-auto w-full max-w-2xl px-4 py-6">
         <h1 className="text-lg font-semibold tracking-tight">
           {board.path.slice(0, -1).map((seg) => (
