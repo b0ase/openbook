@@ -8,7 +8,7 @@
 >
 > Related: [THREADS.md](THREADS.md) — thread structure, the prerequisite for a token tree.
 >
-> Last updated: 2026-08-14
+> Last updated: 2026-08-16
 
 ## Why this document exists
 
@@ -1615,6 +1615,88 @@ change that sequencing, it names the artifact the milestone produces.
 - `src/lib/onchain-record.ts` — envelope + reader contract; a `token_mint` record type is
   additive and needs no `v` bump
 - `src/lib/db.ts` — `applyThreadingMigration`
+
+## A keyword is a living definition, and the agent maintains it (owner, 2026-08-16)
+
+**The reframing that produced this:** *"this is an attempt to reorganise the web according to
+tokenised keywords"*, and then *"words can update their meanings incrementally"*. Both came from
+the owner in conversation; everything below follows from taking them literally.
+
+### What a `$Ticker` is
+
+Not a topic thread that happens to have a name. **A keyword**, whose value is its usage — which is
+what makes mention-minting correct rather than a quirk. A keyword's worth in the world is its
+search volume, and supply that grows when people write `$pink` is a serviceable proxy for it. The
+competitor here is not another message board; it is the keyword auction, which rents attention
+against words nobody is allowed to own.
+
+### The definition is a PRIOR, not an anchor
+
+A new ticker's thread is seeded with the word's definition, so a keyword is never born empty and a
+per-ticker agent has something to reason from. But that seed does not fix the meaning — the corpus
+does, and it moves. `$pink` may start as a colour and become whatever the thread makes it. Nobody
+fixed "cloud" in 2005.
+
+This is what answers the polysemy objection: choosing one sense at genesis would freeze a word
+forever, and a word that cannot drift is not a word.
+
+⚠ **THE DEFINITION MUST NOT BE AN INSCRIBED POST.**
+- **Copyright.** Cambridge and most dictionaries are protected, and an inscription is permanent
+  republication at scale — the one form of infringement that cannot be taken down. Use
+  Wiktionary/Wikipedia (CC BY-SA) with attribution, or nothing.
+- **Minting.** A post mints a token, so an auto-seeded definition would mint a unit of every word
+  in English to whoever ran the importer. The platform quietly holding a share of the entire
+  language is a position that should be taken deliberately if at all, never as a side effect.
+- **Revisability.** The whole point is that meaning moves. Attach the definition as attributed,
+  versioned thread metadata; if it must be on-chain, inscribe a source URL and a hash rather than
+  the text.
+- Proper nouns and coinages (`$B0ase`, `$Memeplex`) have no entry. Degrade to silence, never to a
+  wrong definition.
+
+### What the agent is FOR
+
+This is the first answer that makes a per-ticker agent necessary rather than decorative. An agent
+performing a persona is a toy — the owner said so plainly: *"there's no point letting them argue
+over nothing"*. An agent whose function is to **maintain the living definition of its own word**,
+re-derived from its thread as the corpus grows, versioned and timestamped, is a product.
+
+The agent is a **tenant of the keyword, not the keyword itself**. Its body is the corpus; its job
+is to keep the corpus's meaning current; it is paid per invocation, and that payment covers its own
+API call. This is the owner's earlier `meaning.md` idea made dynamic.
+
+### The consequence for OWNERSHIP — and the squatting fix
+
+Follow it through:
+
+1. The corpus is the meaning.
+2. The meaning is what makes the keyword valuable.
+3. Therefore the people who wrote the corpus are the people who made the value.
+
+So **ownership should track share of the corpus, not who typed the word first.**
+
+⚠ **FIRST-MENTION-WINS IS KEYWORD SQUATTING**, and under a keyword thesis it is fatal rather than
+untidy. The valuable words are `$insurance`, `$mortgage`, `$hotel`; the current rule hands each to
+whoever types it once. Paid posting does not fix it — it raises the squatter's cost to a fraction
+of a penny against an asset worth thousands, and anyone can script it. The owner already holds
+thirteen tickers acquired by mentioning them in passing, which is the mechanism demonstrating
+itself.
+
+Semantic-contribution ownership dissolves it: squatting an empty keyword gets you a word with no
+meaning and a unit of nothing. It is also the position the fork was founded on — *being paid for a
+contribution isn't the same as owning a piece of it* — which first-mention-wins currently
+contradicts.
+
+### Open, and genuinely hard
+
+**Does a definition revision mint the agent a unit of its own word?** If it does, an agent slowly
+acquires itself, which is either elegant or a slow rug pull depending on who is holding. The
+argument for **non-minting**: the agent is a tenant paid per invocation, and the word belongs to
+the people who filled it. Not settled.
+
+Also unsettled: whether a `$Nym` (a speaker) and a `$Ticker` (a keyword) should behave identically
+at all. A name's page currently shows both what it said and what was said about it, undifferentiated
+— which the owner correctly called incoherent. If a ticker is a keyword, "posts by $Occam" is the
+wrong frame entirely: the keyword's thread is the asset, and the agent is how you interrogate it.
 
 ## Upstream relationship
 
