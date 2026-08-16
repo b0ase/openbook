@@ -22,13 +22,41 @@
  */
 
 /**
- * Identity hues, in degrees. Pink → violet → blue → cyan, plus one lime.
+ * Identity hues, in degrees, spread as widely as the reserved bands allow.
  *
- * Deliberately not evenly spaced around the wheel: the gaps are where the
- * reserved bands live. Adjacent entries are >= 18° apart so neighbours stay
- * tellable apart at 12px, which is the size a handle actually renders at.
+ * ⚠ 18° IS NOT ENOUGH — THIS WAS MEASURED, NOT GUESSED. The first version of
+ * this palette packed ten hues in at >= 18° apart. In production two of the four
+ * live authors landed on 285 and 305 and were reported as "both purple", and a
+ * third collided outright. Twenty degrees inside the same colour family reads as
+ * one colour at 12px, whatever the wheel says. **Do not narrow these gaps to fit
+ * more entries in** — a palette that fits everyone but distinguishes nobody is
+ * the failure this exists to prevent. Widen the SECOND axis below instead.
+ *
+ * Minimum gap is now 28°, and consecutive entries deliberately cross colour
+ * families (lime → green → teal → blue → indigo → purple → magenta → rose)
+ * rather than stepping through shades of one.
  */
-const HUES = [346, 328, 305, 285, 265, 244, 220, 199, 180, 96] as const;
+const HUES = [96, 132, 176, 212, 248, 284, 316, 344] as const;
+
+/**
+ * The second axis: how light the colour is.
+ *
+ * Eight hues alone gave an exact collision at FOUR users — with a small board
+ * that is not a tail case, it is the common case. Lightness roughly doubles the
+ * distinguishable space without pushing any hue closer to its neighbour, and a
+ * 16-point difference in lightness is obvious even within one hue. Both tiers
+ * stay bright enough to read on the near-black page.
+ *
+ * This is mitigation, not elimination: 16 buckets still collide eventually. The
+ * goal is that two authors *adjacent in the feed* are usually tellable apart,
+ * which is what the colour was asked for.
+ */
+const LIGHTNESS = [72, 56] as const;
+
+/** Which (hue, lightness) bucket an identity falls in. */
+function bucket(seed: string): number {
+  return hash(seed) % (HUES.length * LIGHTNESS.length);
+}
 
 /** FNV-1a. Dependency-free, stable across runtimes, good enough to spread ~10 buckets. */
 function hash(seed: string): number {
@@ -47,14 +75,24 @@ function hash(seed: string): number {
  */
 export function identityHue(seed: string | null | undefined): number {
   if (!seed) return HUES[0];
-  return HUES[hash(seed) % HUES.length];
+  return HUES[bucket(seed) % HUES.length];
+}
+
+/**
+ * The identity's lightness. Exported alongside the hue so a caller building its
+ * own treatment gets the WHOLE colour, not just half of it — using the hue on
+ * its own would merge the two tiers back together.
+ */
+export function identityLightness(seed: string | null | undefined): number {
+  if (!seed) return LIGHTNESS[0];
+  return LIGHTNESS[Math.floor(bucket(seed) / HUES.length)];
 }
 
 /**
  * The handle colour — saturated, high contrast against the near-black page.
  */
 export function identityColor(seed: string | null | undefined): string {
-  return `hsl(${identityHue(seed)} 85% 70%)`;
+  return `hsl(${identityHue(seed)} 85% ${identityLightness(seed)}%)`;
 }
 
 /**
@@ -66,5 +104,8 @@ export function identityColor(seed: string | null | undefined): string {
  * by author at a glance, which is what it was asked for.
  */
 export function identityTextColor(seed: string | null | undefined): string {
-  return `hsl(${identityHue(seed)} 42% 86%)`;
+  // Carries the lightness tier too, at a much gentler spread (86 / 79), so a
+  // paragraph still groups with its handle without either tier going dim.
+  const tier = identityLightness(seed) === LIGHTNESS[0] ? 86 : 79;
+  return `hsl(${identityHue(seed)} 42% ${tier}%)`;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { identityColor, identityHue, identityTextColor } from "./identity-color";
+import { identityColor, identityHue, identityLightness, identityTextColor } from "./identity-color";
 
 /** The bands that carry meaning elsewhere in the UI, and their tolerance. */
 const RESERVED: Array<[string, number, number]> = [
@@ -50,13 +50,33 @@ describe("identityColor", () => {
     }
   });
 
-  it("separates neighbouring hues enough to tell apart at 12px", () => {
+  // ⚠ THIS THRESHOLD IS A REGRESSION TEST, NOT A STYLE PREFERENCE. It was 18,
+  // and 18 shipped a palette where two live authors sat at 285 and 305 and were
+  // reported as "both purple". Raising it is what forced the hues apart.
+  it("separates neighbouring hues far enough to read as different colours", () => {
     const hues = [...new Set(Array.from({ length: 400 }, (_, i) => identityHue(`seed-${i}`)))].sort(
       (a, b) => a - b
     );
     for (let i = 1; i < hues.length; i++) {
-      expect(hues[i] - hues[i - 1]).toBeGreaterThanOrEqual(18);
+      expect(hues[i] - hues[i - 1]).toBeGreaterThanOrEqual(28);
     }
+  });
+
+  it("tells apart the two identities that actually collided in production", () => {
+    // anon_b634 and B0ASE, the real pubkeys from the live feed.
+    const a = "026ba10b1c3a01eb12338f767f80ccb7a1e67bf301d9285f6569c67ea52d1b125b";
+    const b = "03d0d892582c01d31eac7500fc1d32f3d26becfa8a3dd50fd6b33f9f0e2908ad12";
+    const differs =
+      hueGap(identityHue(a), identityHue(b)) >= 28 || identityLightness(a) !== identityLightness(b);
+    expect(differs).toBe(true);
+  });
+
+  it("uses lightness as a second axis, so hue count is not the bucket count", () => {
+    const buckets = new Set(
+      Array.from({ length: 600 }, (_, i) => `${identityHue(`k${i}`)}/${identityLightness(`k${i}`)}`)
+    );
+    const hues = new Set(Array.from({ length: 600 }, (_, i) => identityHue(`k${i}`)));
+    expect(buckets.size).toBeGreaterThan(hues.size);
   });
 
   it("spreads distinct identities across the palette", () => {
