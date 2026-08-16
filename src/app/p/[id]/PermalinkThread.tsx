@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getAddenda, getThread } from "@/app/actions";
+import { getAddenda, getRoomAccess, getThread } from "@/app/actions";
 import { PostContent } from "@/app/PostContent";
 import { PostForm } from "@/app/PostForm";
 import { useIdentityContext } from "@/contexts/IdentityContext";
+import type { RoomAccess } from "@/lib/room-access";
+import { titleCaseTicker } from "@/lib/ticker";
 import type { Post } from "@/types";
 
 /**
@@ -23,6 +25,13 @@ export function PermalinkThread({ post }: { post: Post }) {
   const [thread, setThread] = useState<Post[] | null>(null);
   const [addenda, setAddenda] = useState<Post[]>([]);
   const [composing, setComposing] = useState(false);
+  /**
+   * ⚠ THE SAME DOOR AS THE THREAD OVERLAY. Without this, a room's replies were
+   * readable to anyone with the permalink — the one URL most likely to be
+   * shared with somebody who has not paid. A gate on one surface and not the
+   * other is not a gate.
+   */
+  const [access, setAccess] = useState<RoomAccess | null>(null);
   const { identity } = useIdentityContext();
   // Only the author can append — the server enforces it; this just avoids
   // offering a control that would always be refused.
@@ -42,6 +51,14 @@ export function PermalinkThread({ post }: { post: Post }) {
   }, [rootId]);
 
   useEffect(() => {
+    void getRoomAccess(rootId, identity?.pubkey ?? null)
+      // Unknown stays LOCKED here rather than open: a failed lookup on a page a
+      // stranger reached by link must not fall open.
+      .then(setAccess)
+      .catch(() => setAccess({ symbol: null, gated: true, held: 0, priceSats: 0 }));
+  }, [rootId, identity?.pubkey]);
+
+  useEffect(() => {
     void getAddenda(post.id)
       .then(setAddenda)
       .catch(() => setAddenda([]));
@@ -50,7 +67,10 @@ export function PermalinkThread({ post }: { post: Post }) {
   // Addenda are the author revising themselves; replies are other people
   // answering. Mixing them would make a correction look like a conversation.
   const addendumIds = new Set(addenda.map((a) => a.id));
-  const replies = (thread ?? []).filter((p) => p.id !== post.id && !addendumIds.has(p.id));
+  const locked = access === null || (access.gated && access.held === 0);
+  const replies = locked
+    ? []
+    : (thread ?? []).filter((p) => p.id !== post.id && !addendumIds.has(p.id));
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-5">
@@ -118,7 +138,26 @@ export function PermalinkThread({ post }: { post: Post }) {
         </>
       )}
 
-      {thread !== null && replies.length === 0 && (
+      {/* The door, in its compact form: the permalink is a reading surface, so
+          it points at the room rather than trying to sell a ticket inline. */}
+      {access?.gated && access.held === 0 && access.symbol && (
+        <div className="mt-5 rounded-lg border border-amber-400/20 bg-amber-400/[0.03] px-4 py-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-amber-500/70">Members only</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-zinc-400">
+            The replies here are in{" "}
+            <span className="text-amber-400">${titleCaseTicker(access.symbol)}</span>. One unit of
+            that token is the ticket in — {access.priceSats.toLocaleString()} sats.
+          </p>
+          <a
+            href={`/$${access.symbol.toLowerCase()}`}
+            className="mt-2 inline-block text-[12px] text-amber-400 underline underline-offset-2 hover:text-amber-300"
+          >
+            Open the room
+          </a>
+        </div>
+      )}
+
+      {thread !== null && !locked && replies.length === 0 && (
         <p className="mt-5 text-[13px] text-zinc-600">No replies yet.</p>
       )}
 

@@ -23,6 +23,7 @@ import {
 } from "@/lib/post-economics";
 import { MAX_POST_CHARS } from "@/lib/post-length";
 import { rateLimit } from "@/lib/rate-limit";
+import { mayEnter, type RoomAccess, roomAccess } from "@/lib/room-access";
 import {
   FREE_BOOT_COST_SATS,
   hasDailyBudget,
@@ -71,6 +72,7 @@ export interface CreatePostResult {
     | "invalid_signature"
     | "rejected_content"
     | "invalid_parent"
+    | "room_ticket_required"
     /** Paid posting is on and no funded transaction was supplied. */
     | "payment_required"
     /** A transaction was supplied but does not do what it claims. */
@@ -176,6 +178,25 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   if (parentId !== null) {
     rootId = resolveThreadRoot(parentId);
     if (rootId === null) return { ok: false, reason: "invalid_parent" };
+
+    /**
+     * ⚠ A NAMED THREAD IS A ROOM, AND SPEAKING IN IT COSTS A TICKET.
+     *
+     * This is the enforcement that actually holds, and it holds because
+     * `pubkey` HAS ALREADY BEEN VERIFIED against the signature above — so the
+     * key we check for a ticket is one the author has proved they control. The
+     * reading side of the gate is a product boundary rather than a
+     * cryptographic one, for the reasons set out in `room-access.ts`; this side
+     * is not.
+     *
+     * Checked BEFORE the post exists, so naming the room's own ticker in the
+     * reply cannot buy you in on the way through the door. A ticket is bought
+     * with `/buy`, which is a root post and therefore never blocked by this.
+     *
+     * The board's own thread is not a room — `roomTickerFor` refuses to gate
+     * the root — so the main feed is unaffected.
+     */
+    if (!mayEnter(rootId, pubkey)) return { ok: false, reason: "room_ticket_required" };
   }
 
   /**
@@ -1928,6 +1949,22 @@ export async function getAddenda(postId: number): Promise<Post[]> {
       `${POST_SELECT} WHERE p.parent_id = ? AND COALESCE(p.is_addendum, 0) = 1 ORDER BY p.id ASC`
     )
     .all(Math.floor(postId)) as Post[];
+}
+
+/**
+ * Whether this reader may take part in a thread, and what the door costs.
+ *
+ * ⚠ THE READING GATE IS A PRODUCT BOUNDARY, NOT SECRECY — see `room-access.ts`.
+ * The pubkey arrives unsigned, and holdings are public, so this answers "should
+ * this reader be shown the room" rather than "can this reader be stopped". What
+ * cannot be bypassed is SPEAKING: `createPost` checks the same rule against a
+ * signature-verified key.
+ */
+export async function getRoomAccess(rootId: number, pubkey: string | null): Promise<RoomAccess> {
+  if (!Number.isInteger(rootId) || rootId <= 0) {
+    return { symbol: null, gated: false, held: 0, priceSats: 0 };
+  }
+  return roomAccess(rootId, typeof pubkey === "string" && pubkey ? pubkey : null);
 }
 
 export async function getPostById(id: number): Promise<Post | null> {

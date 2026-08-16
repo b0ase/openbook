@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav } from "@/components/BottomNav";
+import { RoomGate } from "@/components/RoomGate";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { readCachedNym } from "@/lib/nym-cache";
+import type { RoomAccess } from "@/lib/room-access";
 import { formatShare } from "@/lib/share";
 import { distinctTickers, isRootTicker, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
 import {
   getPostsByNym,
+  getRoomAccess,
   getThread,
   getThreadShare,
   getThreadTicker,
@@ -101,7 +104,18 @@ export function ThreadView({
   const [optimistic, setOptimistic] = useState<OptimisticReply[]>([]);
   const [share, setShare] = useState<{ mine: number; total: number } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const { identity } = useIdentityContext();
+  const { identity, sign } = useIdentityContext();
+  /**
+   * Whether this reader holds a ticket to this room, and what one costs.
+   *
+   * `null` while unknown — and the room is NOT shown during that gap. Rendering
+   * the conversation first and gating a beat later would show every non-holder
+   * the thing they have not paid for, which is the only failure mode of a door
+   * that actually matters.
+   */
+  const [access, setAccess] = useState<RoomAccess | null>(null);
+  const [buying, setBuying] = useState(false);
+  const [buyError, setBuyError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const thread = await getThread(rootId);
@@ -147,6 +161,17 @@ export function ThreadView({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Re-read on identity change as well as on thread change: buying a ticket, or
+  // signing in as somebody who already holds one, has to open the door without
+  // a reload.
+  const refreshAccess = useCallback(async () => {
+    setAccess(await getRoomAccess(rootId, identity?.pubkey ?? null));
+  }, [rootId, identity?.pubkey]);
+
+  useEffect(() => {
+    void refreshAccess();
+  }, [refreshAccess]);
 
   // The ticker is immutable once claimed (first claim wins), so it is fetched
   // once per thread rather than on the poll.
@@ -254,6 +279,25 @@ export function ThreadView({
     void refresh();
     onBooted?.();
   }, [refresh, onBooted]);
+
+  /**
+   * Locked out: this thread is a room and the reader holds no ticket.
+   *
+   * ⚠ `access === null` IS NOT LOCKED AND IS NOT OPEN — it is unknown, and the
+   * render below treats it as "show nothing but the root yet". Guessing either
+   * way for one frame either flashes a paid room at somebody who has not paid
+   * or flashes a paywall at somebody who has.
+   */
+  const locked = access?.gated && access.held === 0;
+  const accessUnknown = access === null;
+
+  /**
+   * ⚠ THE ROOT POST STAYS VISIBLE, THE REPLIES DO NOT. The root is already
+   * public — it is in the main feed, and it is what somebody clicked to get
+   * here — so hiding it would only make the door meaningless by hiding what is
+   * behind it. The conversation is the thing the ticket buys.
+   */
+  const visiblePosts = locked || accessUnknown ? posts.filter((p) => p.parent_id === null) : posts;
 
   const replyCount = Math.max(0, posts.length - 1);
 
@@ -384,7 +428,7 @@ export function ThreadView({
           )}
 
           <div className="divide-y divide-zinc-800/60">
-            {posts.map((post) => {
+            {visiblePosts.map((post) => {
               const isRoot = post.parent_id === null;
               return (
                 <article key={post.id} className={`py-3.5 ${isRoot ? "" : "pl-4"}`}>
@@ -474,6 +518,36 @@ export function ThreadView({
               </div>
             )}
 
+            {/* ⚠ THE DOOR, WHERE THE CONVERSATION WOULD HAVE BEEN. Placed after
+                the root post so a buyer can see what they are buying into, and
+                in place of the replies, which are what a ticket buys. */}
+            {locked && access && (
+              <RoomGate
+                access={access}
+                onClose={onClose}
+                onBuy={async (text) => {
+                  if (!identity || buying) return;
+                  setBuying(true);
+                  setBuyError(null);
+                  const { executeBuy } = await import("@/services/bsv/buy-units");
+                  const res = await executeBuy({ identity, sign, text });
+                  setBuying(false);
+                  if (!res.ok) {
+                    setBuyError(res.message);
+                    return;
+                  }
+                  // The door opens by re-reading holdings, not by assuming — the
+                  // server decides who holds what.
+                  await refreshAccess();
+                  await refresh();
+                }}
+              />
+            )}
+            {buying && (
+              <p className="py-6 text-center text-[13px] text-zinc-500">Buying your ticket…</p>
+            )}
+            {buyError && <p className="py-3 text-center text-[13px] text-red-400">{buyError}</p>}
+
             {pending.map((op) => (
               <article key={op.id} className={`py-3.5 pl-4 ${op.failed ? "opacity-50" : ""}`}>
                 <div className="border-l border-zinc-800 pl-3">
@@ -511,17 +585,23 @@ export function ThreadView({
       {/* Same keyboard-collapse `group` treatment as the feed's compose area.
           NO safe-area padding of its own any more — the tab bar below carries it
           now, and doubling it left a band of empty black under the composer. */}
-      <div className="shrink-0">
-        <div className="group mx-auto max-w-2xl px-4 pb-3 pt-2 transition-all duration-200 pointer-coarse:has-[textarea:focus,.compose-send:focus]:pb-2">
-          <PostForm
-            parentId={rootId}
-            compact
-            placeholder="Reply…"
-            onPostCreated={handleReplyCreated}
-            onPostRejected={handleReplyRejected}
-          />
+      {/* ⚠ NO COMPOSER AT A DOOR YOU HAVE NOT PAID. `createPost` would refuse
+          the reply anyway (the write gate is signature-verified), so offering
+          the box would only invite somebody to type something that cannot be
+          sent. */}
+      {!locked && !accessUnknown && (
+        <div className="shrink-0">
+          <div className="group mx-auto max-w-2xl px-4 pb-3 pt-2 transition-all duration-200 pointer-coarse:has-[textarea:focus,.compose-send:focus]:pb-2">
+            <PostForm
+              parentId={rootId}
+              compact
+              placeholder="Reply…"
+              onPostCreated={handleReplyCreated}
+              onPostRejected={handleReplyRejected}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ⚠ THE TAB BAR BELONGS HERE TOO. This overlay covers the whole viewport
           — including the bar the rest of the app keeps — so opening a thread

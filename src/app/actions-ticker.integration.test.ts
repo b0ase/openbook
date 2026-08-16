@@ -58,12 +58,41 @@ import {
   searchTickers,
 } from "./actions";
 
+/**
+ * Keys this suite has posted with, so a REPLY can be signed by the person who
+ * founded the thread.
+ *
+ * ⚠ WHY REPLIES REUSE THE FOUNDER'S KEY. Every post here is otherwise a fresh
+ * key, because `createPost` rate-limits per pubkey and this suite runs 70-odd
+ * posts. That collides with the room gate: a named thread needs a ticket to
+ * reply into, and a fresh key never has one. Granting a ticket by hand was
+ * tried and rejected — a granted holding is a `ticker_mentions` row, so it
+ * inflates the very supply and usage figures several of these tests assert on.
+ * The founder already holds a unit (they named the word), so signing as them
+ * adds no rows and changes no counts. The door itself is tested in
+ * `actions-room.integration.test.ts`.
+ */
+const keysByPubkey = new Map<string, PrivateKey>();
+
+/** The key that authored the root of the thread `parentId` belongs to. */
+function founderKeyFor(parentId: number): PrivateKey | null {
+  const row = db
+    .prepare(
+      `SELECT p.pubkey AS pubkey FROM posts p
+        WHERE p.id = (SELECT COALESCE(root_id, id) FROM posts WHERE id = ?)`
+    )
+    .get(parentId) as { pubkey: string | null } | undefined;
+  return (row?.pubkey && keysByPubkey.get(row.pubkey)) || null;
+}
+
 async function post(content: string, parentId?: number) {
-  const key = PrivateKey.fromRandom();
+  const key = (parentId !== undefined && founderKeyFor(parentId)) || PrivateKey.fromRandom();
+  const pubkey = key.toPublicKey().toString();
+  keysByPubkey.set(pubkey, key);
   const fd = new FormData();
   fd.set("content", content);
   fd.set("author", "anon_t1ck");
-  fd.set("pubkey", key.toPublicKey().toString());
+  fd.set("pubkey", pubkey);
   fd.set(
     "signature",
     key.sign(Array.from(new TextEncoder().encode(content))).toDER("hex") as string
