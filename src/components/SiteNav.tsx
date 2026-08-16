@@ -53,7 +53,9 @@ export function SiteNavLinks({ className = "" }: { className?: string }) {
  */
 export function SiteNav({ supportAddress = null }: { supportAddress?: string | null }) {
   return (
-    <header className="border-b border-zinc-800 bg-black">
+    // `shrink-0`: the tab pages are flex columns, and without it a long page
+    // squeezes the header instead of scrolling the region between it and the bar.
+    <header className="shrink-0 border-b border-zinc-800 bg-black">
       <div className="mx-auto flex max-w-2xl items-center justify-between gap-4 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
         <a href="/" className="group">
           <span className="text-lg font-semibold tracking-tight leading-none">

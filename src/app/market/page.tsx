@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { AppProviders } from "@/components/AppProviders";
-import { BOTTOM_NAV_HEIGHT_CLASS, BottomNav } from "@/components/BottomNav";
+import { BottomNav } from "@/components/BottomNav";
 import { SiteNav } from "@/components/SiteNav";
 import { siteOrigin } from "@/lib/site-origin";
 import { leaderboardHref, titleCaseTicker } from "@/lib/ticker";
@@ -52,57 +52,64 @@ export default async function MarketPage() {
 
   return (
     <AppProviders>
-      <div className={`min-h-[100dvh] bg-black text-white ${BOTTOM_NAV_HEIGHT_CLASS}`}>
+      <div className="flex h-[100dvh] flex-col bg-black text-white">
         <SiteNav supportAddress={getServerAddress()} />
-        <div className="mx-auto w-full max-w-2xl px-4 py-6">
-          <h1 className="text-lg font-semibold tracking-tight">
-            <span className="text-amber-400">Market</span>
-          </h1>
-          <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
-            Every token, how many units exist, and how many people hold one. A unit is minted for
-            each post that names it.{" "}
-            {/* Said plainly rather than left to be discovered by tapping. */}
-            <span className="text-zinc-600">Nothing is for sale yet.</span>
-          </p>
+        {/* The ONLY scrolling region. Everything outside it — the header above and
+            the tab bar below — is fixed by structure rather than by
+            `position: fixed`, so neither can be scrolled away or mispositioned. */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+          <div className="mx-auto w-full max-w-2xl px-4 py-6">
+            <h1 className="text-lg font-semibold tracking-tight">
+              <span className="text-amber-400">Market</span>
+            </h1>
+            <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
+              Every token, how many units exist, and how many people hold one. A unit is minted for
+              each post that names it.{" "}
+              {/* Said plainly rather than left to be discovered by tapping. */}
+              <span className="text-zinc-600">Nothing is for sale yet.</span>
+            </p>
 
-          <ol className="mt-5 divide-y divide-zinc-800/60">
-            {boards.map((b) => (
-              <li key={b.symbol}>
-                <a
-                  href={leaderboardHref(b.path)}
-                  className="flex items-baseline justify-between gap-3 py-3 transition-colors hover:text-amber-300"
-                >
-                  <span className="min-w-0 truncate">
-                    {/* Ancestry dimmed, leaf emphasised — the same treatment the
+            <ol className="mt-5 divide-y divide-zinc-800/60">
+              {boards.map((b) => (
+                <li key={b.symbol}>
+                  <a
+                    href={leaderboardHref(b.path)}
+                    className="flex items-baseline justify-between gap-3 py-3 transition-colors hover:text-amber-300"
+                  >
+                    <span className="min-w-0 truncate">
+                      {/* Ancestry dimmed, leaf emphasised — the same treatment the
                         thread header and the leaderboards give a path, so one
                         name looks like itself everywhere it appears. */}
-                    {b.path.slice(0, -1).map((seg) => (
-                      <span key={seg} className="text-zinc-600">
-                        ${titleCaseTicker(seg)}
-                        <span className="text-zinc-700">/</span>
+                      {b.path.slice(0, -1).map((seg) => (
+                        <span key={seg} className="text-zinc-600">
+                          ${titleCaseTicker(seg)}
+                          <span className="text-zinc-700">/</span>
+                        </span>
+                      ))}
+                      <span className="font-medium text-amber-400">
+                        ${titleCaseTicker(b.symbol)}
                       </span>
-                    ))}
-                    <span className="font-medium text-amber-400">${titleCaseTicker(b.symbol)}</span>
-                  </span>
-                  <span className="shrink-0 text-right font-mono text-[11px] tabular-nums text-zinc-500">
-                    {b.total} {b.total === 1 ? "unit" : "units"}
-                    <span className="text-zinc-700"> · </span>
-                    {/* The number the owner actually asked for: how many PEOPLE
+                    </span>
+                    <span className="shrink-0 text-right font-mono text-[11px] tabular-nums text-zinc-500">
+                      {b.total} {b.total === 1 ? "unit" : "units"}
+                      <span className="text-zinc-700"> · </span>
+                      {/* The number the owner actually asked for: how many PEOPLE
                         hold one, not just how many units were minted. A word held
                         by forty people is a different asset from one word held
                         forty times by its author. */}
-                    {b.holders} {b.holders === 1 ? "holder" : "holders"}
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ol>
+                      {b.holders} {b.holders === 1 ? "holder" : "holders"}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ol>
 
-          {boards.length === 0 && (
-            <p className="mt-8 text-center text-sm text-zinc-600">
-              No tokens yet. Name something with a $Ticker and it appears here.
-            </p>
-          )}
+            {boards.length === 0 && (
+              <p className="mt-8 text-center text-sm text-zinc-600">
+                No tokens yet. Name something with a $Ticker and it appears here.
+              </p>
+            )}
+          </div>
         </div>
         <BottomNav />
       </div>

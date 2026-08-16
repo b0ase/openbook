@@ -65,29 +65,26 @@ const TABS: { key: Tab; label: string; href: string }[] = [
 ];
 
 /**
- * Height the bar occupies, for callers that must not let content hide behind it.
+ * ⚠ NEVER `position: fixed`. THE BAR VANISHED ON iOS IN STANDALONE PWA.
  *
- * Exported rather than duplicated as a magic number: the feed pins a composer to
- * the bottom, and a padding value that drifts from the bar's real height puts the
- * post button underneath it — which is invisible in a screenshot and obvious the
- * moment somebody tries to post.
+ * The tab pages used to pin it with `fixed inset-x-0 bottom-0` and pad their
+ * content by a `BOTTOM_NAV_HEIGHT_CLASS` to clear it. In an installed PWA on iOS
+ * the bar simply DISAPPEARED on those pages, while the feed's — which already
+ * sat in the flow — was fine. Both the fixed variant and the padding constant
+ * are gone rather than left as options, because an option that only breaks in an
+ * installed app on one platform is not one anybody will test before using it.
+ *
+ * Every page is now the feed's shape: a fixed-height flex column whose MIDDLE row
+ * is the only thing that scrolls. The bar is the last row. Its position is then
+ * structural rather than something a viewport can get wrong, and content cannot
+ * slip behind it because the scroll region ends where the bar begins.
  */
-export const BOTTOM_NAV_HEIGHT_CLASS = "pb-[calc(3.5rem+env(safe-area-inset-bottom))]";
-
-/**
- * `inFlow` drops the fixed positioning so the bar sits as a normal last row of a
- * flex column — the feed's shape, where the scroll area ends above it and content
- * structurally cannot slip behind. Straight from bChat, which needed the same
- * escape hatch for the same reason. Standalone pages omit it and pad instead.
- */
-export function BottomNav({ inFlow = false }: { inFlow?: boolean }) {
+export function BottomNav() {
   const pathname = usePathname();
 
   return (
     <nav
-      className={`z-50 border-t border-zinc-900 bg-black pb-[env(safe-area-inset-bottom)] ${
-        inFlow ? "w-full shrink-0" : "fixed inset-x-0 bottom-0"
-      }`}
+      className="z-50 w-full shrink-0 border-t border-zinc-900 bg-black pb-[env(safe-area-inset-bottom)]"
       aria-label="Main"
     >
       <div className="mx-auto grid max-w-2xl grid-cols-5">

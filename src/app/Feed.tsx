@@ -991,7 +991,7 @@ function FeedContent({
           It is inside the feed's own flex column rather than fixed, so the
           scroll area ends above it and content structurally cannot slip behind.
           The toasts pinned at `bottom-24` clear both. */}
-      <BottomNav inFlow />
+      <BottomNav />
 
       {/* Fund address modal */}
       {showFundModal && userAddress && (

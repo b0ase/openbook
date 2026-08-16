@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { AppProviders } from "@/components/AppProviders";
-import { BOTTOM_NAV_HEIGHT_CLASS, BottomNav } from "@/components/BottomNav";
+import { BottomNav } from "@/components/BottomNav";
 import { SiteNav } from "@/components/SiteNav";
 import { getServerAddress } from "@/services/bsv/wallet";
 import { listTickers } from "../actions";
@@ -41,31 +41,34 @@ export default async function ChatPage() {
   const tickers = await listTickers();
   return (
     <AppProviders>
-      <div className={`min-h-[100dvh] bg-black text-white ${BOTTOM_NAV_HEIGHT_CLASS}`}>
+      <div className="flex h-[100dvh] flex-col bg-black text-white">
         <SiteNav supportAddress={getServerAddress()} />
-        {/* ⚠ `max-w-2xl`, THE SAME COLUMN AS EVERY OTHER PAGE. Without it this
+        {/* The ONLY scrolling region — see the market page for why. */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+          {/* ⚠ `max-w-2xl`, THE SAME COLUMN AS EVERY OTHER PAGE. Without it this
             list ran the full width of the window while `/market`, the feed and
             the leaderboards all sit in a 2xl column — so moving between tabs
             resized the content, which reads as landing on a different site
             rather than a different tab. The width is part of the app's shape,
             not per-page styling. */}
-        <div className="mx-auto w-full max-w-2xl">
-          <header className="border-b border-zinc-900 px-4 py-3">
-            <h1 className="text-sm font-medium text-white">Threads</h1>
-            {/* Says the quiet part out loud: nothing here is private. */}
-            <p className="mt-0.5 text-[11px] text-zinc-600">
-              Every named thread, and the ones you are in. All public — private rooms don't exist
-              yet.
-            </p>
-          </header>
+          <div className="mx-auto w-full max-w-2xl">
+            <header className="border-b border-zinc-900 px-4 py-3">
+              <h1 className="text-sm font-medium text-white">Threads</h1>
+              {/* Says the quiet part out loud: nothing here is private. */}
+              <p className="mt-0.5 text-[11px] text-zinc-600">
+                Every named thread, and the ones you are in. All public — private rooms don't exist
+                yet.
+              </p>
+            </header>
 
-          {/* ⚠ THE NAMED-THREAD DIRECTORY LIVES HERE, NOT UNDER "MARKET" (owner,
+            {/* ⚠ THE NAMED-THREAD DIRECTORY LIVES HERE, NOT UNDER "MARKET" (owner,
               2026-08-16). It was on `/market`, where clicking an entry opened a
               thread — so the Market tab was a thread list wearing a different
               name, and the tab you would actually look for threads in listed only
               your own. A directory of `$Ticker`s IS a directory of conversations;
               it belongs with them. */}
-          <ThreadList directory={<TickerDirectory initial={tickers} />} />
+            <ThreadList directory={<TickerDirectory initial={tickers} />} />
+          </div>
         </div>
         <BottomNav />
       </div>
