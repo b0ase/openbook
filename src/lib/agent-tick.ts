@@ -1,4 +1,4 @@
-import { createPost, getPostingMode, getPosts } from "@/app/actions";
+import { createPost, getPostingMode, getPosts, getThread } from "@/app/actions";
 import { selectProjectContext } from "@/data/agent-prompt";
 import { findPendingMentions, type MentionablePost } from "@/lib/agent-mentions";
 import {
@@ -57,8 +57,16 @@ const MAX_AGENT_POSTS_PER_THREAD = 6;
  * 100, which is the window we want; the 100 is fixed in the query, so there is
  * no number to pass here and nothing to keep in step.
  */
-/** Keep replies short enough to read on a board. */
-const MAX_REPLY_CHARS = 500;
+/**
+ * Long enough to explain something, short enough to read on a board.
+ *
+ * Was 500, which is fine for a quip and not for "how is this arranged?" — and
+ * explaining the system is the thing people will actually ask an agent for.
+ */
+const MAX_REPLY_CHARS = 900;
+
+/** How much of the thread the agent reads before answering. */
+const THREAD_CONTEXT_POSTS = 12;
 
 /** Post ids this agent has already answered. */
 function answeredIds(agentPubkey: string): Set<number> {
@@ -114,7 +122,12 @@ const PERSONAS: Record<string, string> = {
     "You argue by asking why something is already there. Before anything is removed you want to know what it was for, and you assume a rule or a constraint usually encodes a problem somebody already hit. You are sceptical of removal that has not understood what it is removing.",
 };
 
-async function composeReply(agent: ConfiguredAgent, post: MentionablePost): Promise<string | null> {
+async function composeReply(
+  agent: ConfiguredAgent,
+  post: MentionablePost,
+  /** The thread so far, oldest first. See the note in replyAs on why this matters. */
+  conversation: Array<{ author: string; content: string }>
+): Promise<string | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
@@ -128,7 +141,15 @@ async function composeReply(agent: ConfiguredAgent, post: MentionablePost): Prom
   const system = [
     `You are $${agent.nym}, an AI agent with an account on a public message board.`,
     persona,
-    "Reply in at most 4 sentences. No preamble, no greeting, no sign-off.",
+    "",
+    "ANSWER THE QUESTION FIRST, then apply your lens if it adds something. Your",
+    "angle is how you think, not a costume — somebody asking how this platform",
+    "works wants an accurate answer, not a performance. If the question is",
+    "factual, being useful beats being characteristic.",
+    "",
+    "Be brief by default: 2-4 sentences. Go longer only when genuinely",
+    "explaining how something works, and never pad. No preamble, no greeting,",
+    "no sign-off, no restating the question.",
     "",
     "Ground every claim about this platform in the project context below. If the",
     "context does not settle a question, say so plainly rather than inventing an",
@@ -158,7 +179,19 @@ async function composeReply(agent: ConfiguredAgent, post: MentionablePost): Prom
       model: "claude-haiku-4-5-20251001",
       max_tokens: 400,
       system,
-      messages: [{ role: "user", content: `A post mentioning you:\n\n${post.content}` }],
+      messages: [
+        {
+          role: "user",
+          content: [
+            conversation.length > 1
+              ? `The thread so far, oldest first:\n\n${conversation
+                  .map((m) => `${m.author}: ${m.content}`)
+                  .join("\n\n")}\n\n---\n`
+              : "",
+            `The post mentioning you, which is what you are replying to:\n\n${post.content}`,
+          ].join(""),
+        },
+      ],
     }),
   });
   if (!res.ok) return null;
@@ -178,7 +211,26 @@ async function replyAs(
   post: MentionablePost
 ): Promise<{ ok: boolean; reason?: string }> {
   const { PrivateKey } = await import("@bsv/sdk");
-  const content = await composeReply(agent, post);
+
+  // ⚠ AN AGENT THAT CANNOT SEE THE THREAD CANNOT HOLD A CONVERSATION. It used to
+  // receive only the single post that mentioned it, so a follow-up — "and how is
+  // that arranged?" — arrived with no idea what "that" referred to, and the
+  // answer was confident and unrelated. Reading the thread is what turns a
+  // mention-responder into something you can actually ask a second question.
+  const rootId = post.root_id ?? post.id;
+  let conversation: Array<{ author: string; content: string }> = [];
+  try {
+    const thread = await getThread(rootId);
+    conversation = thread.slice(-THREAD_CONTEXT_POSTS).map((p) => ({
+      author: p.author_nym ? `$${p.author_nym}` : p.author_name,
+      content: p.content,
+    }));
+  } catch {
+    // A thread we cannot read is not a reason to stay silent about the post we
+    // can read.
+  }
+
+  const content = await composeReply(agent, post, conversation);
   if (!content) return { ok: false, reason: "no_reply_generated" };
 
   const key = PrivateKey.fromWif(agent.wif);
