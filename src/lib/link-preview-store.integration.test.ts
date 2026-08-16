@@ -7,13 +7,14 @@
  */
 
 import Database from "better-sqlite3";
-import { describe, expect, it } from "vitest";
-import { applyLinkPreviewMigration, applyThreadingMigration } from "./db";
+import { beforeEach, describe, expect, it } from "vitest";
+import { applyLinkPreviewMigration, applyThreadingMigration, db } from "./db";
 import {
   attachPreviewToPost,
   firstLinkIn,
   getPreview,
   hasPreview,
+  nextStaleFailure,
   savePreview,
   urlHash,
 } from "./link-preview-store";
@@ -202,5 +203,86 @@ describe("wired into schema init", () => {
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='link_previews'")
         .get()
     ).toBeDefined();
+  });
+});
+
+/**
+ * Retrying a transient failure.
+ *
+ * ⚠ THE PROPERTY BEING PROTECTED BOTH WAYS. A cached failure exists so a hostile
+ * URL costs exactly one fetch however often it is posted; the retry exists so a
+ * site that was merely down for a minute is not blank forever. These pull in
+ * opposite directions, so both are asserted here together.
+ */
+describe("nextStaleFailure", () => {
+  beforeEach(() => {
+    db.exec("DELETE FROM link_previews");
+  });
+
+  /** A preview row with a chosen status and age. */
+  function seed(url: string, status: string, hoursAgo: number) {
+    savePreview(db, { url, status });
+    db.prepare("UPDATE link_previews SET fetched_at = datetime('now', ?) WHERE url_hash = ?").run(
+      `-${hoursAgo} hours`,
+      urlHash(url)
+    );
+  }
+
+  it("offers a transient failure once it has gone stale", () => {
+    seed("https://example.com/a", "timeout", 48);
+    expect(nextStaleFailure(db)).toBe("https://example.com/a");
+  });
+
+  it("does NOT offer a fresh failure — that is the anti-amplification guard", () => {
+    // Posting a bad link a thousand times must not buy a thousand requests.
+    seed("https://example.com/a", "timeout", 1);
+    expect(nextStaleFailure(db)).toBeNull();
+  });
+
+  it("never retries a verdict about the URL itself", () => {
+    // A private-address target does not become safe by waiting, and retrying it
+    // is the SSRF probe the guard chain exists to refuse.
+    for (const status of ["blocked_address", "invalid_url", "not_html"]) {
+      db.exec("DELETE FROM link_previews");
+      seed("https://example.com/bad", status, 24 * 365);
+      expect(nextStaleFailure(db)).toBeNull();
+    }
+  });
+
+  it("never retries a success", () => {
+    seed("https://example.com/good", "ok", 24 * 365);
+    expect(nextStaleFailure(db)).toBeNull();
+  });
+
+  it("drains oldest first", () => {
+    seed("https://example.com/newer", "fetch_failed", 30);
+    seed("https://example.com/older", "fetch_failed", 90);
+    expect(nextStaleFailure(db)).toBe("https://example.com/older");
+  });
+
+  it("stops offering a row once it has been re-fetched", () => {
+    seed("https://example.com/a", "timeout", 48);
+    expect(nextStaleFailure(db)).toBe("https://example.com/a");
+    // A retry writes a fresh row — success or failure, `fetched_at` moves.
+    savePreview(db, { url: "https://example.com/a", status: "timeout" });
+    expect(nextStaleFailure(db)).toBeNull();
+  });
+
+  it("a recovered link becomes a real preview for every post that shared it", () => {
+    seed("https://example.com/a", "timeout", 48);
+    savePreview(db, {
+      url: "https://example.com/a",
+      status: "ok",
+      title: "It works now",
+      description: "d",
+      imageUrl: "https://example.com/i.png",
+      siteName: "s",
+    });
+    // Keyed by url hash, so no post needs requeueing — they all already point here.
+    expect(getPreview(db, urlHash("https://example.com/a"))).toMatchObject({
+      status: "ok",
+      title: "It works now",
+    });
+    expect(nextStaleFailure(db)).toBeNull();
   });
 });

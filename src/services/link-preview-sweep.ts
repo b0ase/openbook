@@ -27,6 +27,7 @@ import {
   attachPreviewToPost,
   firstLinkIn,
   hasPreview,
+  nextStaleFailure,
   savePreview,
   urlHash,
 } from "@/lib/link-preview-store";
@@ -128,6 +129,47 @@ export async function sweepPreviews(db: DB = defaultDb): Promise<void> {
           row.id,
           Date.now() + Math.min(BASE_BACKOFF_MS * 2 ** (n - 1), MAX_BACKOFF_MS)
         );
+      }
+    }
+
+    // ⚠ RETRY A STALE TRANSIENT FAILURE, or a bad moment becomes permanent.
+    //
+    // A failure is recorded AND attached to the post, so the post leaves the
+    // `preview_hash IS NULL` queue above and is never reconsidered. That is right
+    // for a dead link and wrong for a site that was mid-deploy, briefly down, or
+    // had not added its OpenGraph tags yet — the page works today and still shows
+    // nothing because of one request months ago.
+    //
+    // Refreshing is done on the PREVIEW ROW rather than the post, which is what
+    // makes it cheap: rows are keyed by url hash, so one re-fetch fixes every post
+    // that ever shared that link, with no post requeueing at all.
+    //
+    // Runs only if the backfill above spent no request, keeping the one-fetch-per
+    // -sweep rule that stops this becoming an accidental crawler.
+    if (!fetched) {
+      const stale = nextStaleFailure(db);
+      if (stale) {
+        try {
+          const result = await unfurl(stale);
+          savePreview(
+            db,
+            result.ok
+              ? {
+                  url: result.url,
+                  status: "ok",
+                  title: result.data.title,
+                  description: result.data.description,
+                  imageUrl: result.data.image,
+                  siteName: result.data.siteName,
+                }
+              : { url: result.url, status: result.reason }
+          );
+          // Either way `fetched_at` moves forward, so a URL that is genuinely
+          // dead is not retried again for another day rather than every sweep.
+        } catch {
+          // Learned nothing. The row keeps its old `fetched_at` and comes back
+          // round on a later sweep.
+        }
       }
     }
   } catch (e) {
