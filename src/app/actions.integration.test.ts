@@ -55,7 +55,7 @@ vi.mock("next/headers", () => ({
 import { db } from "@/lib/db";
 import { isServerSpendDisabled } from "@/services/bsv/wallet";
 import { executeBoot } from "@/services/fairness/boot-orchestrator";
-import { bootPost, createPost, getPosts } from "./actions";
+import { bootPost, createPost, getAddenda, getPostCounts, getPosts } from "./actions";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -373,5 +373,94 @@ describe("bootPost — integration routing", () => {
     expect(result.success).toBe(true);
     expect(result.isFree).toBe(true);
     expect(result.txid).toBe("freetxid_abc123");
+  });
+});
+
+/**
+ * Addenda — corrections appended to a post, because a post cannot be edited.
+ *
+ * ⚠ THE PROPERTY UNDER TEST IS AUTHORSHIP, NOT PLUMBING. A client sends
+ * `addendum=1`; if the server trusted it, anyone could staple a "correction" onto
+ * somebody else's post and it would render as though that person had written it.
+ * That is worse than an edit — it is an edit attributed to a third party.
+ */
+describe("addenda", () => {
+  /** Post something, then return its id and the key that signed it. */
+  async function makeRootPost(content = "the original claim") {
+    const { fd, key, pubkey } = await makeSignedFormData(content);
+    const res = await createPost(fd);
+    expect(res.ok).toBe(true);
+    const row = db.prepare("SELECT id FROM posts WHERE content = ?").get(content) as { id: number };
+    return { id: row.id, key, pubkey };
+  }
+
+  /** A signed form from a SPECIFIC key, so authorship can be controlled. */
+  function signedAs(key: PrivateKey, content: string) {
+    const messageBytes = Array.from(new TextEncoder().encode(content));
+    const fd = new FormData();
+    fd.set("content", content);
+    fd.set("author", "anon_t3st");
+    fd.set("pubkey", key.toPublicKey().toString());
+    fd.set("signature", key.sign(messageBytes).toDER("hex") as string);
+    return fd;
+  }
+
+  it("lets the original author append a correction", async () => {
+    const root = await makeRootPost();
+    const fd = signedAs(root.key, "correction: drop 'closed source'");
+    fd.set("parent_id", String(root.id));
+    fd.set("addendum", "1");
+
+    expect((await createPost(fd)).ok).toBe(true);
+    const added = await getAddenda(root.id);
+    expect(added).toHaveLength(1);
+    expect(added[0].content).toContain("correction");
+  });
+
+  it("REFUSES an addendum from anyone else — the whole point", async () => {
+    const root = await makeRootPost("someone else's post");
+    const stranger = PrivateKey.fromRandom();
+    const fd = signedAs(stranger, "I am putting words in your mouth");
+    fd.set("parent_id", String(root.id));
+    fd.set("addendum", "1");
+
+    const res = await createPost(fd);
+    expect(res.ok).toBe(false);
+    expect(await getAddenda(root.id)).toHaveLength(0);
+  });
+
+  it("a stranger can still REPLY — only appending is restricted", async () => {
+    const root = await makeRootPost("open to replies");
+    const stranger = PrivateKey.fromRandom();
+    const fd = signedAs(stranger, "answering you");
+    fd.set("parent_id", String(root.id));
+    // no addendum flag
+
+    expect((await createPost(fd)).ok).toBe(true);
+    expect(await getAddenda(root.id)).toHaveLength(0);
+  });
+
+  it("an addendum is NOT counted as a reply", async () => {
+    const root = await makeRootPost("counted correctly");
+    const fd = signedAs(root.key, "my own correction");
+    fd.set("parent_id", String(root.id));
+    fd.set("addendum", "1");
+    await createPost(fd);
+
+    const [post] = await getPostCounts([root.id]);
+    // A correction must not read as somebody having answered you.
+    expect(post.reply_count).toBe(0);
+  });
+
+  it("addenda come back oldest first, since each corrects what came before", async () => {
+    const root = await makeRootPost("evolving claim");
+    for (const text of ["first correction", "second correction"]) {
+      const fd = signedAs(root.key, text);
+      fd.set("parent_id", String(root.id));
+      fd.set("addendum", "1");
+      await createPost(fd);
+    }
+    const added = await getAddenda(root.id);
+    expect(added.map((a) => a.content)).toEqual(["first correction", "second correction"]);
   });
 });

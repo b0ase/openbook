@@ -342,6 +342,33 @@ function relaxMeaningNotNull(database: Db): void {
  * re-upload under any extension — the point of a takedown is that the file
  * cannot simply come back.
  */
+/**
+ * Addenda — corrections appended to a post, never edits of it.
+ *
+ * ⚠ A POST CANNOT BE EDITED, WHICH IS WHY THIS EXISTS. Every post is anchored
+ * on-chain and carries a "View on chain" link, so rewriting the row would make
+ * the site contradict the ledger in the one place a reader might check. The
+ * board's whole claim is that what you wrote is yours and permanent; an editable
+ * post quietly withdraws it.
+ *
+ * ⚠ AN ADDENDUM IS A POST, NOT A NEW KIND OF ROW. It is a reply flagged with this
+ * column, so it inherits signing, paid posting, content screening and on-chain
+ * anchoring with no second pipeline and no new money path. The flag only changes
+ * how it is COUNTED and RENDERED: attached to its parent rather than listed as a
+ * reply, and excluded from `reply_count` so a correction does not read as
+ * somebody answering you.
+ *
+ * Who may append is enforced in `createPost`, not here: the signer's pubkey must
+ * equal the parent's. A column cannot express that, and a client-supplied flag
+ * must never be trusted to.
+ */
+export function applyAddendumMigration(database: Db): void {
+  addColumnIfMissing(database, "posts", "is_addendum", "is_addendum INTEGER NOT NULL DEFAULT 0");
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_posts_addendum ON posts(parent_id) WHERE is_addendum = 1"
+  );
+}
+
 export function applyUploadAuditMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS uploads (
@@ -770,6 +797,7 @@ try {
   applyTickerMeaningMigration(db);
   applyTickerBudgetMigration(db);
   applyUploadAuditMigration(db);
+  applyAddendumMigration(db);
   applyNymMigration(db);
   applyReservedTickerMigration(db);
 

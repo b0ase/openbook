@@ -38,6 +38,14 @@ interface PostFormProps {
    */
   parentId?: number;
   /**
+   * Post as an ADDENDUM to `parentId` rather than a reply.
+   *
+   * Only meaningful on your own post — the server verifies that the signer is the
+   * parent's author and rejects otherwise, so this flag is a UI affordance, not
+   * an authorisation.
+   */
+  addendum?: boolean;
+  /**
    * Drop the footer row (install bookmark, keyboard hint). Those belong to the
    * feed's primary compose box; inside a thread they are noise. The "Ask AI"
    * pill used to live there too, until the agent got its own tab.
@@ -50,6 +58,7 @@ export function PostForm({
   onPostCreated,
   onPostRejected,
   parentId,
+  addendum,
   compact,
   placeholder,
 }: PostFormProps): React.JSX.Element {
@@ -203,6 +212,8 @@ export function PostForm({
       // Server-side this is looked up, never trusted — a parent that doesn't
       // exist is rejected rather than stored (see createPost).
       if (parentId !== undefined) formData.set("parent_id", String(parentId));
+      // The server re-checks that the signer owns the parent; this only asks.
+      if (addendum) formData.set("addendum", "1");
 
       const tempId = Date.now();
       onPostCreated?.(content, currentIdentity.name, tempId);
@@ -291,7 +302,7 @@ export function PostForm({
         onDone?.(true);
       }
     },
-    [onPostCreated, onPostRejected, sign, parentId]
+    [onPostCreated, onPostRejected, sign, parentId, addendum]
   );
 
   /**

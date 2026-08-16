@@ -175,6 +175,35 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
     if (rootId === null) return { ok: false, reason: "invalid_parent" };
   }
 
+  /**
+   * An ADDENDUM — a correction appended to a post, because a post cannot be
+   * edited (it is anchored on-chain, and rewriting the row would make the site
+   * contradict the ledger the post links to).
+   *
+   * ⚠ ONLY THE ORIGINAL AUTHOR MAY APPEND, AND THE FLAG IS NOT TRUSTED. The
+   * client sends `addendum=1`; the parent's author is looked UP and compared to
+   * the VERIFIED signer. Without that check anyone could staple a "correction"
+   * onto someone else's post and it would render as though that person had
+   * written it — which is worse than an edit, because it is an edit attributed
+   * to a third party.
+   *
+   * An addendum is otherwise an ordinary reply, so it inherits signing, content
+   * screening, paid posting and on-chain anchoring with no second pipeline.
+   */
+  let isAddendum = false;
+  if (formData.get("addendum") === "1") {
+    if (parentId === null) return { ok: false, reason: "invalid_parent" };
+    const parent = db.prepare("SELECT pubkey FROM posts WHERE id = ?").get(parentId) as
+      | { pubkey: string | null }
+      | undefined;
+    // An unsigned parent has no author to be, so it can never be added to.
+    // `pubkey` here is the VERIFIED signer — the signature check above ran first.
+    if (!parent?.pubkey || parent.pubkey !== pubkey) {
+      return { ok: false, reason: "invalid_parent" };
+    }
+    isAddendum = true;
+  }
+
   // One transaction: a root post's own id is its root, so the row must exist
   // before root_id can be set. Splitting these would leave a window where a
   // crash yields a permanently unrooted post — the exact state the migration's
@@ -191,10 +220,12 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
        *  outpoint is known before the row exists and there is nothing to sweep. */
       txId: string | null;
       vout: number | null;
+      /** A correction appended by the post's own author — see the guard above. */
+      addendum: boolean;
     }): number => {
       const res = db
         .prepare(
-          "INSERT INTO posts (content, author_name, signature, pubkey, parent_id, root_id, tx_id, vout) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO posts (content, author_name, signature, pubkey, parent_id, root_id, tx_id, vout, is_addendum) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .run(
           args.content,
@@ -204,7 +235,8 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
           args.parent,
           args.root,
           args.txId,
-          args.vout
+          args.vout,
+          args.addendum ? 1 : 0
         );
       const id = res.lastInsertRowid as number;
       if (args.root === null) {
@@ -271,6 +303,7 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
     root: rootId,
     txId: paidTxId,
     vout: paidVout,
+    addendum: isAddendum,
   });
 
   // Claim any `$Ticker` in the post — FIRST CLAIM WINS, enforced by the PRIMARY
@@ -1678,7 +1711,10 @@ const POST_SELECT = `
   LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
     ON bc.post_id = p.id
   LEFT JOIN (
-    SELECT root_id, COUNT(*) as reply_count FROM posts WHERE parent_id IS NOT NULL GROUP BY root_id
+    -- ⚠ ADDENDA ARE NOT REPLIES. They are the author correcting themselves, so
+    -- counting one would show "1 reply" on a post nobody answered.
+    SELECT root_id, COUNT(*) as reply_count FROM posts
+     WHERE parent_id IS NOT NULL AND COALESCE(is_addendum, 0) = 0 GROUP BY root_id
   ) rc
     ON rc.root_id = p.id
   LEFT JOIN (
@@ -1778,6 +1814,26 @@ export async function getNewPosts(sinceId: number): Promise<Post[]> {
  * same post in the feed — same boost count, same reply count, same unfurl. A
  * thinner query here would make a shared link look like a different post.
  */
+/**
+ * Corrections the author appended to a post, oldest first.
+ *
+ * ⚠ ORDER IS PART OF THE MEANING. An addendum corrects what came before it, so a
+ * reader has to see them in the order they were written — reversing them would
+ * show the retraction before the claim.
+ *
+ * Returned separately from replies rather than mixed in: an addendum is the
+ * author revising themselves, and a reply is somebody else answering. Rendering
+ * them in one list would make a correction look like a conversation.
+ */
+export async function getAddenda(postId: number): Promise<Post[]> {
+  if (!Number.isFinite(postId) || postId <= 0) return [];
+  return db
+    .prepare(
+      `${POST_SELECT} WHERE p.parent_id = ? AND COALESCE(p.is_addendum, 0) = 1 ORDER BY p.id ASC`
+    )
+    .all(Math.floor(postId)) as Post[];
+}
+
 export async function getPostById(id: number): Promise<Post | null> {
   if (!Number.isFinite(id) || id <= 0) return null;
   const row = db.prepare(`${POST_SELECT} WHERE p.id = ?`).get(Math.floor(id)) as Post | undefined;
@@ -1880,7 +1936,12 @@ export async function getPostCounts(
     LEFT JOIN (SELECT post_id, COUNT(*) as boot_count FROM bootboard GROUP BY post_id) bc
       ON bc.post_id = p.id
     LEFT JOIN (
-      SELECT root_id, COUNT(*) as reply_count FROM posts WHERE parent_id IS NOT NULL GROUP BY root_id
+      -- ⚠ MUST MATCH POST_SELECT's reply_count EXACTLY, addendum filter included.
+      -- (No backticks in this comment -- it lives inside a template literal.)
+      -- This is the live count the feed polls; if the two drift, a post shows one
+      -- number on load and a different one five seconds later.
+      SELECT root_id, COUNT(*) as reply_count FROM posts
+       WHERE parent_id IS NOT NULL AND COALESCE(is_addendum, 0) = 0 GROUP BY root_id
     ) rc
       ON rc.root_id = p.id
     WHERE p.id IN (${placeholders})
