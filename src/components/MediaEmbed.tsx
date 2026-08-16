@@ -94,7 +94,7 @@ function DownloadLink({ url, label = "Download" }: { url: string; label?: string
  * response header are two independent controls on the same hole, because a PDF
  * can carry JavaScript and this one is served same-origin.
  */
-function PdfEmbed({ url }: { url: string }) {
+function PdfEmbed({ url, label }: { url: string; label?: string }) {
   const [open, setOpen] = useState(false);
   const selfHosted = isSelfHostedMedia(url);
 
@@ -104,7 +104,15 @@ function PdfEmbed({ url }: { url: string }) {
         <span aria-hidden className="text-[14px] leading-none">
           📄
         </span>
-        <span className="min-w-0 flex-1 truncate text-[12px] text-zinc-400">PDF document</span>
+        {/* The real filename when we have one. A stored name is a content hash,
+            so without this the card can only say "PDF document" — which tells a
+            reader nothing the icon has not already said. */}
+        <span
+          className="min-w-0 flex-1 truncate text-[12px] text-zinc-400"
+          title={label ?? undefined}
+        >
+          {label || "PDF document"}
+        </span>
         {selfHosted && (
           <button
             type="button"
@@ -138,7 +146,16 @@ function PdfEmbed({ url }: { url: string }) {
   );
 }
 
-export function MediaEmbed({ url, kind }: { url: string; kind: MediaKind }) {
+export function MediaEmbed({
+  url,
+  kind,
+  label,
+}: {
+  url: string;
+  kind: MediaKind;
+  /** Original filename, when the feed resolved one. Display only. */
+  label?: string;
+}) {
   const [failed, setFailed] = useState(false);
   // Our own uploads may fetch a first frame — see `isSelfHostedMedia`. A
   // stranger's file still gets `preload="none"`.
@@ -158,7 +175,7 @@ export function MediaEmbed({ url, kind }: { url: string; kind: MediaKind }) {
   }
 
   if (kind === "pdf") {
-    return <PdfEmbed url={url} />;
+    return <PdfEmbed url={url} label={label} />;
   }
 
   if (kind === "image") {

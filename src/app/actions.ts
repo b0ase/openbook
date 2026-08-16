@@ -34,6 +34,7 @@ import {
 } from "@/lib/ticker";
 import { getTickerMeaning } from "@/lib/ticker-meaning";
 import { tickerTransferAnnouncement, validateTransfer } from "@/lib/ticker-transfer";
+import { parseStoredName } from "@/lib/upload";
 import { generateAnonName } from "@/lib/utils";
 
 async function getBsvSdk() {
@@ -1114,6 +1115,40 @@ export async function listTickers(limit = 100): Promise<TickerHit[]> {
     }))
     .sort((a, b) => b.supply - a.supply || a.symbol.localeCompare(b.symbol))
     .slice(0, capped);
+}
+
+/**
+ * Original filenames for uploads currently on screen.
+ *
+ * ⚠ WHY THE NAME IS NOT IN THE POST. Stored names are content hashes, so a post
+ * carries `/m/<64 hex>.pdf` and nothing a reader can recognise — an attachment
+ * rendered as "PDF document" tells you only what you could already see from the
+ * icon. The real name lives in `uploads.original_name`, recorded at upload time.
+ *
+ * One call for every attachment on screen, for the same reason `getTickerSupply`
+ * takes a list rather than a symbol: a lookup per post would turn scrolling into
+ * a query storm.
+ *
+ * Keyed by STORED NAME (`<hash>.<ext>`), which is what the renderer can derive
+ * from a URL without knowing anything else. Missing rows are simply absent —
+ * uploads made before provenance existed have no name, and the card falls back
+ * to its generic label rather than showing a hash.
+ */
+export async function getAttachmentNames(names: string[]): Promise<Record<string, string>> {
+  const wanted = [...new Set(names)].filter((n) => parseStoredName(n) !== null).slice(0, 200);
+  if (!wanted.length) return {};
+
+  const placeholders = wanted.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT name, original_name FROM uploads
+        WHERE name IN (${placeholders}) AND original_name IS NOT NULL`
+    )
+    .all(...wanted) as Array<{ name: string; original_name: string }>;
+
+  const out: Record<string, string> = {};
+  for (const r of rows) out[r.name] = r.original_name;
+  return out;
 }
 
 export async function getTickerSupply(symbols: string[]): Promise<Record<string, number>> {

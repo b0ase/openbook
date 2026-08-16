@@ -22,6 +22,8 @@ import { readCachedNym } from "@/lib/nym-cache";
 // `useEffect` here would land too late and the user would see their read
 // position, permanence acknowledgement and backup flag all reset for one paint.
 import "@/lib/storage-keys";
+import { extractUrls } from "@/lib/link-preview";
+import { storedNameFromUrl } from "@/lib/media";
 import {
   distinctTickers,
   isRootTicker,
@@ -33,6 +35,7 @@ import {
 import { timeAgo } from "@/lib/utils";
 import type { BootboardData, Post } from "@/types";
 import {
+  getAttachmentNames,
   getForwardPosts,
   getOlderPosts,
   getOldestPosts,
@@ -177,6 +180,13 @@ function FeedContent({
    * one call — see `getTickerSupply` for why not one call per mention.
    */
   const [tickerSupply, setTickerSupply] = useState<Record<string, number>>({});
+  /**
+   * Original filenames for attachments on screen, keyed by stored name.
+   *
+   * Same shape and reason as `tickerSupply`: one call for everything visible,
+   * because a lookup per post would turn scrolling into a query storm.
+   */
+  const [attachmentNames, setAttachmentNames] = useState<Record<string, string>>({});
   const [olderPosts, setOlderPosts] = useState<Post[]>([]);
   // fewer than a full initial window ⇒ post #1 is already loaded (no older remain).
   const [liveHasMore, setLiveHasMore] = useState(() => initialPosts.length >= 100);
@@ -280,6 +290,42 @@ function FeedContent({
     for (const p of renderedPosts) for (const t of distinctTickers(p.content)) all.add(t);
     return [...all].sort().join(",");
   }, [renderedPosts]);
+
+  /**
+   * Every self-hosted upload named by a post currently rendered.
+   *
+   * Joined into a string for the same reason `visibleTickers` is: scrolling
+   * loads posts constantly but rarely introduces a new attachment, and this
+   * must not refetch because a boot count moved.
+   */
+  const visibleAttachments = useMemo(() => {
+    const all = new Set<string>();
+    for (const p of renderedPosts) {
+      for (const url of extractUrls(p.content, 8)) {
+        const name = storedNameFromUrl(url);
+        if (name) all.add(name);
+      }
+    }
+    return [...all].sort().join(",");
+  }, [renderedPosts]);
+
+  useEffect(() => {
+    if (!visibleAttachments) {
+      setAttachmentNames({});
+      return;
+    }
+    let live = true;
+    void getAttachmentNames(visibleAttachments.split(","))
+      .then((m) => {
+        if (live) setAttachmentNames(m);
+      })
+      .catch(() => {
+        // A missing filename falls back to the generic label, not a broken card.
+      });
+    return () => {
+      live = false;
+    };
+  }, [visibleAttachments]);
 
   // Keyed on the JOINED symbol list, not the post array: scrolling loads posts
   // constantly but rarely introduces a new ticker, and this should not refetch
@@ -834,6 +880,7 @@ function FeedContent({
             showInherited={showInherited}
             onToggleInherited={toggleInherited}
             tickerSupply={tickerSupply}
+            attachmentNames={attachmentNames}
             isLoadingOlder={isLoadingOlder}
             oldestServerId={oldestServerId}
             onBooted={refresh}

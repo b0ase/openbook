@@ -4,7 +4,7 @@ import { LinkPreviewCard } from "@/components/LinkPreviewCard";
 import { MediaEmbed, YouTubeEmbed } from "@/components/MediaEmbed";
 import { identityColor, identityTextColor } from "@/lib/identity-color";
 import { findUrls } from "@/lib/linkify";
-import { firstMedia } from "@/lib/media";
+import { firstMedia, storedNameFromUrl } from "@/lib/media";
 import { titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import { firstYouTube } from "@/lib/youtube";
@@ -27,6 +27,7 @@ export function PostContent({
   badge,
   onOpenTicker,
   tickerSupply,
+  attachmentNames,
 }: {
   post: Post;
   badge?: React.ReactNode;
@@ -34,6 +35,15 @@ export function PostContent({
   onOpenTicker?: (symbol: string) => void;
   /** Tokens issued per ticker — see PostText. */
   tickerSupply?: Record<string, number>;
+  /**
+   * Original filenames for uploads, keyed by stored name.
+   *
+   * Resolved in bulk by the feed rather than per card, because a lookup per post
+   * would turn scrolling into a query storm. Absent entries are normal — an
+   * upload predating provenance has no name — and the card falls back to its
+   * generic label rather than showing a hash.
+   */
+  attachmentNames?: Record<string, string>;
 }) {
   const urls = findUrls(post.content).map((u) => u.url);
   const media = firstMedia(urls);
@@ -123,7 +133,11 @@ export function PostContent({
           card. Both never render for the same post — a media file is not HTML, so
           the unfurl records `not_html` and the card declines to draw. */}
       {media ? (
-        <MediaEmbed url={media.url} kind={media.kind} />
+        <MediaEmbed
+          url={media.url}
+          kind={media.kind}
+          label={attachmentNames?.[storedNameFromUrl(media.url) ?? ""]}
+        />
       ) : youtube ? (
         <YouTubeEmbed id={youtube.id} />
       ) : (

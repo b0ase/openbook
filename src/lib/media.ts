@@ -66,6 +66,23 @@ export function downloadUrl(rawUrl: string): string | null {
   return `${rawUrl}${rawUrl.includes("?") ? "&" : "?"}download=1`;
 }
 
+/**
+ * The stored name (`<hash>.<ext>`) a self-hosted URL points at, or null.
+ *
+ * The key for looking an upload's original filename up. Shared so the feed's
+ * batch fetch and the renderer that consumes the result derive the SAME key —
+ * two different extractions here would produce a map whose entries no card ever
+ * matches, which fails as silently as it sounds.
+ */
+export function storedNameFromUrl(rawUrl: string): string | null {
+  if (!isSelfHostedMedia(rawUrl)) return null;
+  try {
+    return new URL(rawUrl).pathname.slice("/m/".length);
+  } catch {
+    return null;
+  }
+}
+
 /** The first media URL in a list, with its kind. */
 export function firstMedia(urls: string[]): { url: string; kind: MediaKind } | null {
   for (const url of urls) {

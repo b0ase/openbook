@@ -176,6 +176,43 @@ export function BootButton({
 // ── Reply button ─────────────────────────────────────────────────────────────
 
 /**
+ * Anything inside a post that already does something when you click it.
+ *
+ * ⚠ THIS LIST IS WHAT MAKES A CLICKABLE ROW SAFE. Tapping a post opens its
+ * thread, but a post is full of controls that mean something else — a `$Ticker`
+ * link, an image, video and audio controls, a PDF's Preview/Open/Download, the
+ * unfurl card, the boost button, "View on chain". Without this check every one
+ * of them would ALSO open the thread, so following a link would yank the reader
+ * into an overlay they did not ask for.
+ */
+const INTERACTIVE = "a, button, video, audio, iframe, input, textarea, select, label, summary";
+
+/**
+ * Whether a click on a post row should open its thread.
+ *
+ * Three things have to be true, and each one is a bug people actually hit in
+ * feeds that get this wrong:
+ *
+ *  - it is a plain left click. Cmd/ctrl/shift-click and middle click belong to
+ *    the browser (open in a new tab), and hijacking them is infuriating.
+ *  - the click did not land on a control. See `INTERACTIVE`.
+ *  - the reader is not selecting text. Dragging across a post to copy it ends in
+ *    a click event, and opening an overlay at that moment throws away both the
+ *    selection and their place in the feed.
+ */
+function openThreadFromRowClick(
+  e: React.MouseEvent<HTMLElement>,
+  post: Post,
+  onOpenThread?: (rootId: number) => void
+) {
+  if (!onOpenThread) return;
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
+  if ((window.getSelection()?.toString().length ?? 0) > 0) return;
+  onOpenThread(post.root_id ?? post.id);
+}
+
+/**
  * Opens the thread for a post. Reading a thread needs no identity — the
  * sign-in gate lives on the reply composer inside the thread view, so tapping
  * through to read never prompts anyone to sign in (same rule as the AI chat and
@@ -341,6 +378,8 @@ interface PostListProps {
   onToggleInherited?: () => void;
   /** Tokens issued per ticker — see PostText. */
   tickerSupply?: Record<string, number>;
+  /** Original filenames for uploads, keyed by stored name — see PostContent. */
+  attachmentNames?: Record<string, string>;
 }
 
 export function PostList({
@@ -368,6 +407,7 @@ export function PostList({
   showInherited,
   onToggleInherited,
   tickerSupply,
+  attachmentNames,
 }: PostListProps) {
   // Re-render every 60s to keep timeAgo labels fresh
   const [, setTick] = useState(0);
@@ -433,6 +473,13 @@ export function PostList({
                 <div className="flex-1 h-px bg-amber-500/50" />
               </div>
             )}
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: the row click is a
+                POINTER CONVENIENCE, not the accessible path. `ReplyButton` in the
+                gutter is a real focusable button that opens the same thread, so
+                nothing here is keyboard- or screen-reader-inaccessible. Giving the
+                article a role and a key handler would instead nest the post's own
+                links, buttons and media controls inside an interactive element,
+                which is worse for assistive tech than leaving it presentational. */}
             <article
               data-post-id={post.id}
               ref={(el) => {
@@ -442,7 +489,8 @@ export function PostList({
                   observerRef.current.observe(el);
                 }
               }}
-              className="py-3.5 group"
+              onClick={(e) => openThreadFromRowClick(e, post, onOpenThread)}
+              className={`py-3.5 group ${onOpenThread ? "cursor-pointer" : ""}`}
             >
               <div className="flex items-center gap-3">
                 <div className="flex-1 min-w-0">
@@ -450,6 +498,7 @@ export function PostList({
                     post={post}
                     onOpenTicker={onOpenTicker}
                     tickerSupply={tickerSupply}
+                    attachmentNames={attachmentNames}
                     badge={
                       /* ⚠ AN INHERITED POST IS LABELLED BEFORE ANYTHING ELSE. These
                          rows are other people's words, written on another board.
