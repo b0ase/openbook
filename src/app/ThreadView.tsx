@@ -8,6 +8,7 @@ import { distinctTickers, isRootTicker, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
 import {
+  getPostsByNym,
   getThread,
   getThreadShare,
   getThreadTicker,
@@ -79,6 +80,17 @@ export function ThreadView({
 }: ThreadViewProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [ticker, setTicker] = useState<string | null>(null);
+  /**
+   * Everything the holder of this name has posted, when the name is somebody's
+   * `$Nym`.
+   *
+   * ⚠ A NAME'S THREAD IS NOT ITS AUTHOR'S POSTS. `/$occam` opens the thread where
+   * that ticker was first written; everything $Occam actually says is a reply
+   * inside other people's threads. So an agent answering every question it was
+   * asked showed "No replies yet" on its own page, and looked mute. Somebody
+   * clicking a name wants the speaker, not the etymology.
+   */
+  const [authored, setAuthored] = useState<Post[]>([]);
   const [path, setPath] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [optimistic, setOptimistic] = useState<OptimisticReply[]>([]);
@@ -138,6 +150,17 @@ export function ThreadView({
     void getThreadTicker(rootId).then(async (t) => {
       if (!live) return;
       setTicker(t);
+      // Only a claimed nym has an author to show; a topic ticker returns nothing
+      // and this stays invisible.
+      if (t) {
+        void getPostsByNym(t)
+          .then((rows) => {
+            if (live) setAuthored(rows);
+          })
+          .catch(() => {
+            if (live) setAuthored([]);
+          });
+      } else if (live) setAuthored([]);
       // The ancestry, so the header reads $OpenBooks/$Test rather than a bare name
       // — a token's position in the tree is part of what it IS.
       setPath(t ? await getTickerPath(t) : []);
@@ -293,7 +316,9 @@ export function ThreadView({
                 {loading
                   ? "Loading…"
                   : replyCount === 0
-                    ? "No replies yet"
+                    ? authored.length > 0
+                      ? `${authored.length} ${authored.length === 1 ? "post" : "posts"} by this name`
+                      : "No replies yet"
                     : `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
                 {/* Your stake in the thread you are looking at. Shown only when you
                   actually hold some: "0%" on every thread you have never posted
@@ -365,6 +390,29 @@ export function ThreadView({
                 </article>
               );
             })}
+
+            {/* ⚠ WHAT THIS NAME HAS SAID, not just where it was first written.
+                A `$Nym` names a speaker, and everything a speaker says lives as
+                replies in OTHER people's threads — so an agent that answered
+                every question put to it showed "No replies yet" on its own page.
+                Only rendered when the ticker is a claimed nym; a topic ticker
+                returns nothing and this stays invisible. */}
+            {authored.length > 0 && (
+              <div className="mt-2 border-t border-zinc-900 pt-3">
+                <p className="px-4 pb-1 text-[10px] uppercase tracking-widest text-zinc-600">
+                  Posts by ${ticker ? titleCaseTicker(ticker) : ""}
+                </p>
+                {authored.map((post) => (
+                  <article key={`authored-${post.id}`} className="py-3 pl-4">
+                    <PostContent
+                      post={post}
+                      onOpenTicker={onOpenTicker}
+                      tickerSupply={tickerSupply}
+                    />
+                  </article>
+                ))}
+              </div>
+            )}
 
             {pending.map((op) => (
               <article key={op.id} className={`py-3.5 pl-4 ${op.failed ? "opacity-50" : ""}`}>

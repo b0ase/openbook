@@ -834,6 +834,30 @@ export async function getOwnedTickers(pubkey: string): Promise<string[]> {
   return rows.map((r) => r.symbol);
 }
 
+/**
+ * Everything an identity has posted, newest first — a PROFILE.
+ *
+ * ⚠ A NAME'S THREAD IS NOT ITS AUTHOR'S POSTS, and conflating them is why an
+ * agent looked mute. `/$occam` opens the thread NAMED $Occam — the post where
+ * that ticker was first written — while everything $Occam actually SAYS is a
+ * reply living in other people's threads. Somebody clicking a name wants the
+ * speaker, not the etymology.
+ *
+ * Includes replies deliberately: an agent answers questions, so excluding
+ * replies would hide almost everything it has ever said.
+ */
+export async function getPostsByNym(symbol: string): Promise<Post[]> {
+  const canonical = canonicalTicker(String(symbol).trim().replace(/^\$+/, ""));
+  if (!isValidTicker(canonical)) return [];
+  return db
+    .prepare(
+      `${POST_SELECT}
+       WHERE p.pubkey = (SELECT pubkey FROM nyms WHERE symbol = ?)
+       ORDER BY p.id DESC LIMIT 50`
+    )
+    .all(canonical) as Post[];
+}
+
 /** The public name an identity goes by, or null if it is still anonymous. */
 export async function getNym(pubkey: string): Promise<string | null> {
   if (!pubkey) return null;
