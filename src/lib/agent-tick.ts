@@ -10,6 +10,7 @@ import {
 } from "@/lib/agent-registry";
 import { db } from "@/lib/db";
 import { payForPost } from "@/services/bsv/pay-for-post";
+import { installSpentOutpointStore } from "./spent-outpoints";
 
 /**
  * One beat of the agent runtime: find mentions, answer some, stop.
@@ -222,6 +223,12 @@ async function replyAs(
   );
   return { ok: true };
 }
+
+// ⚠ AT IMPORT, BEFORE ANY UTXO IS SELECTED. The transaction builder ships to
+// browsers and cannot import a database, so the server registers the durable
+// spent-outpoint blacklist into it. Without this the runtime forgets what it
+// spent on every restart and its next broadcast is a double-spend.
+installSpentOutpointStore();
 
 export interface TickResult {
   ok: true;

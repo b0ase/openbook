@@ -115,6 +115,48 @@ function saveSpentSet(spent: Set<string>): void {
 
 const _spent = loadSpentSet();
 
+/**
+ * Durable backing for the spent set, supplied by the SERVER at runtime.
+ *
+ * ⚠ INJECTED, NOT IMPORTED, AND THAT IS DELIBERATE. The persistence this needs on
+ * a server is a database, and importing one here would pull `better-sqlite3` — a
+ * native module — into the client bundle that this file exists to serve. So the
+ * server registers a store instead (see `lib/spent-outpoints.ts`), and this file
+ * keeps knowing nothing about where anything is stored.
+ *
+ * ⚠ WITHOUT A STORE, A SERVER CAN POST EXACTLY ONCE PER PROCESS. `loadSpentSet`
+ * reads localStorage, which does not exist outside a browser, so the blacklist
+ * starts empty on every boot and every deploy. Meanwhile WhatsOnChain keeps
+ * offering a confirmed output whose spender is still in the mempool, so the very
+ * next build is a double-spend and ARC rejects it. That is exactly how the agent
+ * runtime failed on its first live run.
+ */
+export interface SpentOutpointStore {
+  /** Every outpoint this server knows it has already spent. */
+  load(): string[];
+  /** Record newly spent outpoints. Must not throw. */
+  add(keys: string[]): void;
+}
+
+let _spentStore: SpentOutpointStore | null = null;
+let _spentStoreLoaded = false;
+
+export function setSpentOutpointStore(store: SpentOutpointStore): void {
+  _spentStore = store;
+  _spentStoreLoaded = false;
+}
+
+/** Merge the durable set in once per process, lazily — `_spent` is built at import. */
+function hydrateSpentFromStore(): void {
+  if (!_spentStore || _spentStoreLoaded) return;
+  _spentStoreLoaded = true;
+  try {
+    for (const key of _spentStore.load()) _spent.add(key);
+  } catch {
+    /* A missing blacklist costs a rejected broadcast, never money. */
+  }
+}
+
 /** Change outputs from recent broadcasts, immediately spendable */
 const _pendingChange: ClientUtxo[] = [];
 
@@ -189,6 +231,8 @@ export async function fetchUtxos(address: string, neededSats?: number): Promise<
   // No height filtering — at 100 sat/kb (GorillaPool's minimum), all txs confirm
   // in the next block. Filtering unconfirmed UTXOs actively harms UX by hiding
   // valid recently-received funds.
+  // Pull in anything this server spent before the current process started.
+  hydrateSpentFromStore();
   const pendingKeys = new Set(_pendingChange.map((u) => utxoKey(u.tx_hash, u.tx_pos)));
   const filtered = wocUtxos.filter((u) => {
     const key = utxoKey(u.tx_hash, u.tx_pos);
@@ -370,6 +414,13 @@ export function recordBroadcast(args: {
 }): void {
   const spentKeys = new Set(args.spent.map((u) => utxoKey(u.tx_hash, u.tx_pos)));
   for (const sk of spentKeys) _spent.add(sk);
+  // Survive the restart. Failing to persist must not fail the broadcast that
+  // has already happened, so this never throws.
+  try {
+    _spentStore?.add([...spentKeys]);
+  } catch {
+    /* best effort */
+  }
 
   for (let i = _pendingChange.length - 1; i >= 0; i--) {
     const key = utxoKey(_pendingChange[i].tx_hash, _pendingChange[i].tx_pos);

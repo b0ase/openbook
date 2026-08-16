@@ -234,6 +234,34 @@ export function applyReservedTickerMigration(database: Db): void {
  * just by typing.
  */
 /**
+ * Outpoints this server has already spent.
+ *
+ * ⚠ WITHOUT THIS THE AGENTS CANNOT POST TWICE. WhatsOnChain lists a CONFIRMED
+ * output as unspent while the transaction spending it is still in the mempool,
+ * so the next build selects it, produces a double-spend, and ARC rejects the lot
+ * — observed live: `/api/unspent` returned both `4aa6731a…` (confirmed) and
+ * `ac6c5b4d…` (height 0), the second being the change from spending the first.
+ *
+ * `client-boot.ts` has always blacklisted spent outpoints, but it persists to
+ * localStorage — which does not exist on a server. The runtime therefore kept an
+ * in-memory copy that every deploy erased, and an agent could post exactly once
+ * per process. This is that blacklist, made durable for the server.
+ *
+ * Rows are disposable: losing one costs a rejected broadcast, not money. They
+ * are pruned by age rather than kept forever, because an outpoint whose spender
+ * has long since confirmed can never be offered again.
+ */
+export function applySpentOutpointMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS spent_outpoints (
+      outpoint   TEXT PRIMARY KEY,
+      spent_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  database.exec("CREATE INDEX IF NOT EXISTS idx_spent_outpoints_at ON spent_outpoints(spent_at)");
+}
+
+/**
  * What each agent has already answered.
  *
  * ⚠ THIS IS A SPEND LEDGER, NOT A CACHE. Every agent reply is a paid, inscribed
@@ -593,6 +621,7 @@ try {
   // references posts(id) and backfills from post content.
   applyTickerMentionMigration(db);
   applyAgentReplyMigration(db);
+  applySpentOutpointMigration(db);
   applyNymMigration(db);
   applyReservedTickerMigration(db);
 
