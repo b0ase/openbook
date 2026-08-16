@@ -97,6 +97,22 @@ Full reasoning in TOKENS.md; these are the live questions, not a summary of sett
 
 ## Backlog — engineering
 
+**Boost board presentation** (owner-requested 2026-08-16 — the board is the paid slot, so it is
+the one surface where a bare URL costs somebody money):
+
+- [ ] **Unfurl OG cards on the boost board.** A boosted link currently renders as raw text —
+      `bitcoinchat.online` is sitting in the paid slot right now with no title, description or
+      image, while the SAME link two rows below it in the feed unfurls properly. The feed already
+      has all of this: `link-preview.ts`, `link-preview-store.ts` and `LinkPreviewCard`. This is
+      wiring the boost board into the existing preview pipeline, not building a second one.
+      ⚠ Keep the boost board's own fixed height — an unfurl card is much taller than a line of
+      text, and the board sits above the feed where a sudden growth shoves the whole feed down.
+- [ ] **Thumbnails for image and video boosts.** Same slot, same reason: a boosted `.mp4` shows as
+      a 90-character URL today (see the current `anon_tel5` boost). `media.ts` / `MediaEmbed`
+      already classify and render these in the feed. ⚠ A boost must not autoplay video or pull a
+      full-size image — the board is persistent and always on screen, so it needs a poster frame
+      or a capped thumbnail, not an embed.
+
 **Resilience (the real one first):**
 
 - [ ] **Build D — `/api/broadcast` proxy + provider failover (GorillaPool→TAAL).** A single ARC
