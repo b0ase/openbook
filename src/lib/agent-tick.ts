@@ -11,6 +11,7 @@ import {
 import { db } from "@/lib/db";
 import { payForPost } from "@/services/bsv/pay-for-post";
 import { installSpentOutpointStore } from "./spent-outpoints";
+import { deriveTickerMeaning, nextStaleTicker } from "./ticker-meaning";
 
 /**
  * One beat of the agent runtime: find mentions, answer some, stop.
@@ -126,7 +127,9 @@ async function composeReply(
   agent: ConfiguredAgent,
   post: MentionablePost,
   /** The thread so far, oldest first. See the note in replyAs on why this matters. */
-  conversation: Array<{ author: string; content: string }>
+  conversation: Array<{ author: string; content: string }>,
+  /** The handle that invoked the agent, so a reply can answer a person. */
+  asker: string | null
 ): Promise<string | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
@@ -146,6 +149,10 @@ async function composeReply(
     "angle is how you think, not a costume — somebody asking how this platform",
     "works wants an accurate answer, not a performance. If the question is",
     "factual, being useful beats being characteristic.",
+    "",
+    asker
+      ? `You are replying to ${asker}. Address them by that handle in your first sentence — a reply that names who it is answering reads as a conversation rather than a broadcast, and on a board where several people can invoke you it is the only thing making clear who you are talking to.`
+      : "",
     "",
     "Be brief by default: 2-4 sentences. Go longer only when genuinely",
     "explaining how something works, and never pad. No preamble, no greeting,",
@@ -230,7 +237,8 @@ async function replyAs(
     // can read.
   }
 
-  const content = await composeReply(agent, post, conversation);
+  const asker = post.author_nym ? `$${post.author_nym}` : (post.author_name ?? null);
+  const content = await composeReply(agent, post, conversation, asker);
   if (!content) return { ok: false, reason: "no_reply_generated" };
 
   const key = PrivateKey.fromWif(agent.wif);
@@ -287,6 +295,8 @@ export interface TickResult {
   enabled: boolean;
   agents: Array<{ nym: string; address: string }>;
   replies: Array<{ agent: string; postId: number; ok: boolean; reason?: string }>;
+  /** The word whose meaning was re-read this beat, if any. */
+  meaning?: { symbol: string; meaning: string } | null;
 }
 
 /**
@@ -294,10 +304,10 @@ export interface TickResult {
  * there is exactly one implementation of "what an agent does when it wakes".
  */
 export async function runAgentTick(): Promise<TickResult> {
-  if (!agentsEnabled()) return { ok: true, enabled: false, agents: [], replies: [] };
+  if (!agentsEnabled()) return { ok: true, enabled: false, agents: [], replies: [], meaning: null };
 
   const agents = configuredAgents();
-  if (!agents.length) return { ok: true, enabled: true, agents: [], replies: [] };
+  if (!agents.length) return { ok: true, enabled: true, agents: [], replies: [], meaning: null };
 
   const recent = (await getPosts()) as unknown as MentionablePost[];
   const keys = agentPubkeys(agents);
@@ -333,7 +343,22 @@ export async function runAgentTick(): Promise<TickResult> {
     }
   }
 
-  return { ok: true, enabled: true, agents: describeAgents(agents), replies };
+  // ⚠ ONE WORD PER BEAT. Tending meanings is an API call per word; re-deriving
+  // everything on every tick would spend real money restating words nobody has
+  // touched. `nextStaleTicker` picks the one whose usage has moved most since it
+  // was last read, so attention follows actual drift.
+  let meaning: { symbol: string; meaning: string } | null = null;
+  try {
+    const stale = nextStaleTicker();
+    if (stale) {
+      const derived = await deriveTickerMeaning(stale);
+      if (derived) meaning = { symbol: stale, meaning: derived };
+    }
+  } catch {
+    // Tending meanings is the optional half of a beat. Never let it cost a reply.
+  }
+
+  return { ok: true, enabled: true, agents: describeAgents(agents), replies, meaning };
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   getThread,
   getThreadShare,
   getThreadTicker,
+  getTickerMeaningFor,
   getTickerPath,
   getTickerSupply,
 } from "./actions";
@@ -91,6 +92,8 @@ export function ThreadView({
    * clicking a name wants the speaker, not the etymology.
    */
   const [authored, setAuthored] = useState<Post[]>([]);
+  /** What this word has come to mean, written by its agent from actual usage. */
+  const [meaning, setMeaning] = useState<string | null>(null);
   const [path, setPath] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [optimistic, setOptimistic] = useState<OptimisticReply[]>([]);
@@ -153,6 +156,13 @@ export function ThreadView({
       // Only a claimed nym has an author to show; a topic ticker returns nothing
       // and this stays invisible.
       if (t) {
+        void getTickerMeaningFor(t)
+          .then((m) => {
+            if (live) setMeaning(m?.meaning ?? null);
+          })
+          .catch(() => {
+            if (live) setMeaning(null);
+          });
         void getPostsByNym(t)
           .then((rows) => {
             if (live) setAuthored(rows);
@@ -390,6 +400,25 @@ export function ThreadView({
                 </article>
               );
             })}
+
+            {/* ⚠ WHAT THE WORD HAS COME TO MEAN, read from how people use it.
+                Written by the ticker's agent from the corpus, not from its own
+                opinion, and stored as revisable metadata rather than an inscribed
+                post — a meaning that cannot change is not a meaning. See
+                TOKENS.md "A keyword is a living definition". Absent until the
+                corpus can support one; an honest silence beats a confident
+                definition drawn from two posts. */}
+            {meaning && (
+              <div className="mx-4 mb-1 mt-2 rounded-lg border border-amber-400/15 bg-amber-400/[0.03] px-3 py-2.5">
+                <p className="text-[10px] uppercase tracking-widest text-amber-400/60">
+                  What this word means here
+                </p>
+                <p className="mt-1 text-[13px] leading-relaxed text-zinc-300">{meaning}</p>
+                <p className="mt-1.5 text-[10px] text-zinc-600">
+                  Written from how people use it. It changes as they do.
+                </p>
+              </div>
+            )}
 
             {/* ⚠ WHAT THIS NAME HAS SAID, not just where it was first written.
                 A `$Nym` names a speaker, and everything a speaker says lives as

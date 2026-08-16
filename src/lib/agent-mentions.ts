@@ -26,6 +26,9 @@ export interface MentionablePost {
   pubkey: string | null;
   /** Thread root. Null for pre-threading rows; treated as its own root. */
   root_id: number | null;
+  /** Who asked. Optional so the pure scan never depends on it. */
+  author_nym?: string | null;
+  author_name?: string | null;
 }
 
 export interface MentionScanOptions {

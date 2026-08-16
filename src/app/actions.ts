@@ -32,6 +32,7 @@ import {
   isValidTicker,
   ROOT_TICKER,
 } from "@/lib/ticker";
+import { getTickerMeaning } from "@/lib/ticker-meaning";
 import { tickerTransferAnnouncement, validateTransfer } from "@/lib/ticker-transfer";
 import { generateAnonName } from "@/lib/utils";
 
@@ -832,6 +833,19 @@ export async function getOwnedTickers(pubkey: string): Promise<string[]> {
     .prepare("SELECT symbol FROM tickers WHERE pubkey = ? ORDER BY created_at ASC, symbol ASC")
     .all(pubkey) as Array<{ symbol: string }>;
   return rows.map((r) => r.symbol);
+}
+
+/**
+ * What a `$Ticker` currently means, as its agent has read it from usage.
+ *
+ * Null until the corpus is thick enough to say anything — an honest absence
+ * beats a confident definition drawn from two posts.
+ */
+export async function getTickerMeaningFor(
+  symbol: string
+): Promise<{ meaning: string; corpusSize: number; updatedAt: string } | null> {
+  const m = getTickerMeaning(symbol);
+  return m ? { meaning: m.meaning, corpusSize: m.corpusSize, updatedAt: m.updatedAt } : null;
 }
 
 /**

@@ -234,6 +234,30 @@ export function applyReservedTickerMigration(database: Db): void {
  * just by typing.
  */
 /**
+ * What a `$Ticker` currently MEANS, as observed from how people use it.
+ *
+ * ⚠ DERIVED AND REVISABLE, NEVER A POST. A post would mint a token — so an
+ * auto-written definition would quietly mint a unit of every word to whoever
+ * ran the job — and it would be inscribed, i.e. permanent, which is the one
+ * thing a meaning must not be. Words move. `cloud` was not settled in 2005.
+ * See TOKENS.md "A keyword is a living definition".
+ *
+ * `corpus_size` is how many mentions the meaning was derived FROM. It is the
+ * staleness check: re-derive when the corpus has grown enough to have plausibly
+ * changed the word, not on a timer.
+ */
+export function applyTickerMeaningMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ticker_meanings (
+      symbol      TEXT PRIMARY KEY,
+      meaning     TEXT NOT NULL,
+      corpus_size INTEGER NOT NULL,
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+}
+
+/**
  * Outpoints this server has already spent.
  *
  * ⚠ WITHOUT THIS THE AGENTS CANNOT POST TWICE. WhatsOnChain lists a CONFIRMED
@@ -622,6 +646,7 @@ try {
   applyTickerMentionMigration(db);
   applyAgentReplyMigration(db);
   applySpentOutpointMigration(db);
+  applyTickerMeaningMigration(db);
   applyNymMigration(db);
   applyReservedTickerMigration(db);
 
