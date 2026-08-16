@@ -1728,8 +1728,17 @@ export function IdentityChip({
                     </div>
                   ))}
                 </div>
+                {/* ⚠ SAY WHICH DIRECTION THIS IS FOR. This sits inches from the
+                    Transfer button, and the first two people through the flow
+                    read it as the value to paste there — it is the opposite: it
+                    is what someone needs in order to send a name TO you.
+                    Transferring to your own key is refused as same_owner, so
+                    nothing was lost, but a control that invites the wrong action
+                    is a broken control even when the guard holds. */}
                 <p className="text-[11px] text-zinc-600 leading-relaxed">
-                  Your public key — safe to share, and what someone needs to send you a name.
+                  <span className="text-zinc-400">To receive</span> a name, give someone the key
+                  below. To <span className="text-zinc-400">send</span> one, use Transfer and paste
+                  <em> their</em> key, not this one.
                 </p>
                 <button
                   type="button"
