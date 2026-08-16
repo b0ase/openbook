@@ -1709,11 +1709,17 @@ export function IdentityChip({
                 it on. Merely writing about an unclaimed name founds it, so
                 people end up owning names they never meant to claim; this is
                 where they can see that and put it right. */}
-            {ownedTickers.length > 0 && (
-              <div className="px-3 py-2.5 border-b border-amber-400/10 space-y-2">
-                <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">
-                  Names you own
-                </span>
+            {/* ⚠ RENDERS EVEN WHEN YOU OWN NOTHING, AND THAT IS THE POINT. This
+                block was gated on `ownedTickers.length > 0`, which hid the
+                receive key from exactly the account that needs it: the recipient
+                of a name owns nothing yet by definition, so a brand-new agent
+                account had no way to show anybody the key required to send it
+                one. The owned list is what is conditional here, not the key. */}
+            <div className="px-3 py-2.5 border-b border-amber-400/10 space-y-2">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">
+                {ownedTickers.length > 0 ? "Names you own" : "Names"}
+              </span>
+              {ownedTickers.length > 0 && (
                 <div className="space-y-1">
                   {ownedTickers.map((symbol) => (
                     <div key={symbol} className="flex items-center justify-between gap-2">
@@ -1728,31 +1734,37 @@ export function IdentityChip({
                     </div>
                   ))}
                 </div>
-                {/* ⚠ SAY WHICH DIRECTION THIS IS FOR. This sits inches from the
-                    Transfer button, and the first two people through the flow
-                    read it as the value to paste there — it is the opposite: it
-                    is what someone needs in order to send a name TO you.
-                    Transferring to your own key is refused as same_owner, so
-                    nothing was lost, but a control that invites the wrong action
-                    is a broken control even when the guard holds. */}
-                <p className="text-[11px] text-zinc-600 leading-relaxed">
-                  <span className="text-zinc-400">To receive</span> a name, give someone the key
-                  below. To <span className="text-zinc-400">send</span> one, use Transfer and paste
-                  <em> their</em> key, not this one.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (identity) void navigator.clipboard?.writeText(identity.pubkey);
-                    setPubkeyCopied(true);
-                    setTimeout(() => setPubkeyCopied(false), 1500);
-                  }}
-                  className="w-full truncate rounded border border-zinc-800 bg-black px-2 py-1.5 text-left font-mono text-[10px] text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                >
-                  {pubkeyCopied ? "Copied" : identity?.pubkey}
-                </button>
-              </div>
-            )}
+              )}
+              {/* ⚠ SAY WHICH DIRECTION THIS IS FOR. This sits inches from the
+                  Transfer button, and the first two people through the flow read
+                  it as the value to paste there — it is the opposite: it is what
+                  someone needs in order to send a name TO you. Transferring to
+                  your own key is refused as same_owner, so nothing was lost, but
+                  a control that invites the wrong action is a broken control
+                  even when the guard holds. */}
+              <p className="text-[11px] text-zinc-600 leading-relaxed">
+                <span className="text-zinc-400">To receive</span> a name, give someone your public
+                key below.
+                {ownedTickers.length > 0 && (
+                  <>
+                    {" "}
+                    To <span className="text-zinc-400">send</span> one, use Transfer and paste
+                    <em> their</em> key, not this one.
+                  </>
+                )}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (identity) void navigator.clipboard?.writeText(identity.pubkey);
+                  setPubkeyCopied(true);
+                  setTimeout(() => setPubkeyCopied(false), 1500);
+                }}
+                className="w-full rounded border border-zinc-800 bg-black px-2 py-1.5 text-left font-mono text-[10px] text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 overflow-hidden text-ellipsis whitespace-nowrap"
+              >
+                {pubkeyCopied ? "Copied — your public key" : identity?.pubkey}
+              </button>
+            </div>
 
             {/* ── Tokens ──
                 ⚠ THESE ARE TOKENS, NOT A PREVIEW OF TOKENS. Posting IS the mint
