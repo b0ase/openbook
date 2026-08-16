@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { rateLimit } from "@/lib/rate-limit";
 import { siteOrigin } from "@/lib/site-origin";
-import { checkUpload, formatBytes } from "@/lib/upload";
+import { checkUpload, downloadFilename, formatBytes } from "@/lib/upload";
+import { isBlockedHash, recordUpload } from "@/lib/upload-audit";
 import { storeUpload } from "@/lib/upload-store";
 
 /**
@@ -69,7 +71,7 @@ export async function POST(req: Request) {
       return Response.json({ error: "That file is empty." }, { status: 400 });
     }
     return Response.json(
-      { error: "That kind of file can't be posted — images, video and audio only." },
+      { error: "That kind of file can't be posted — images, video, audio and PDFs only." },
       { status: 415 }
     );
   }
@@ -82,6 +84,19 @@ export async function POST(req: Request) {
     return Response.json({ error: "That file is too big." }, { status: 413 });
   }
 
+  // ⚠ BLOCKED BEFORE IT IS WRITTEN, NOT AFTER. Storage is content-addressed, so
+  // a removed file re-uploads to exactly the name it had before — deleting bytes
+  // is not a takedown unless the hash is refused on the way in. Hashed here
+  // rather than taken from `storeUpload` so nothing blocked ever touches disk.
+  //
+  // Deliberately vague to the uploader: naming the reason tells someone probing
+  // the blocklist which of their files is known, which is information worth more
+  // to them than to us.
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  if (isBlockedHash(sha256)) {
+    return Response.json({ error: "That file can't be uploaded." }, { status: 403 });
+  }
+
   let stored: { name: string };
   try {
     stored = await storeUpload(bytes, check.ext);
@@ -91,8 +106,24 @@ export async function POST(req: Request) {
     return Response.json({ error: "Couldn't save that file — try again." }, { status: 503 });
   }
 
+  // Provenance for abuse response: when it arrived, roughly from where, and what
+  // it was called. Best-effort by design — the file is already stored, and
+  // failing the request now would be a worse outcome than a missing row.
+  recordUpload({
+    name: stored.name,
+    sha256,
+    ext: check.ext,
+    kind: check.kind,
+    bytes: bytes.byteLength,
+    originalName: typeof file.name === "string" ? file.name : null,
+    ip: clientIp(req),
+  });
+
   return Response.json({
     url: `${siteOrigin()}/m/${stored.name}`,
     kind: check.kind,
+    // The compose box shows a filename for a document, where a thumbnail is not
+    // available and a bare hash URL tells the poster nothing about what attached.
+    name: downloadFilename(typeof file.name === "string" ? file.name : null, sha256, check.ext),
   });
 }

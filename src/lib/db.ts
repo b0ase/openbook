@@ -320,6 +320,52 @@ function relaxMeaningNotNull(database: Db): void {
  *
  * See `lib/ticker-budget.ts` for why this is a ledger and not a wallet.
  */
+/**
+ * Who uploaded what, and what must never be stored again.
+ *
+ * ⚠ THIS EXISTS FOR ABUSE RESPONSE, NOT ANALYTICS. Uploads previously recorded
+ * nothing at all: a content-addressed file appeared on disk with no time, no
+ * origin, and no way to remove it. That is survivable for images of cats and not
+ * survivable for a public board that accepts arbitrary bytes from anonymous
+ * users. Without a row here you cannot answer a report, cannot find the same
+ * uploader's other files, and cannot make a takedown stick.
+ *
+ * `original_name` is DISPLAY ONLY — it is what the download dialog offers, and
+ * it never reaches a path. Stored names stay content hashes (see `upload.ts`).
+ *
+ * `ip_hash` rather than an IP: keyed with a server secret so it can group one
+ * uploader's files without the database becoming a list of who read what. An
+ * operator responding to a report needs "these twelve files came from one
+ * source", which a hash answers, rather than an address, which it does not.
+ *
+ * `blocked_uploads` is keyed on the HASH, not the name, so a block survives
+ * re-upload under any extension — the point of a takedown is that the file
+ * cannot simply come back.
+ */
+export function applyUploadAuditMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS uploads (
+      name          TEXT PRIMARY KEY,
+      sha256        TEXT NOT NULL,
+      ext           TEXT NOT NULL,
+      kind          TEXT NOT NULL,
+      bytes         INTEGER NOT NULL,
+      original_name TEXT,
+      ip_hash       TEXT,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  database.exec("CREATE INDEX IF NOT EXISTS idx_uploads_sha ON uploads(sha256)");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_uploads_ip ON uploads(ip_hash)");
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS blocked_uploads (
+      sha256     TEXT PRIMARY KEY,
+      reason     TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+}
+
 export function applyTickerBudgetMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS ticker_budgets (
@@ -723,6 +769,7 @@ try {
   applySpentOutpointMigration(db);
   applyTickerMeaningMigration(db);
   applyTickerBudgetMigration(db);
+  applyUploadAuditMigration(db);
   applyNymMigration(db);
   applyReservedTickerMigration(db);
 

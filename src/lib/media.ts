@@ -15,8 +15,15 @@
 const IMAGE_EXT = ["jpg", "jpeg", "png", "gif", "webp", "avif", "svg", "bmp"];
 const VIDEO_EXT = ["mp4", "webm", "ogv", "mov"];
 const AUDIO_EXT = ["mp3", "wav", "ogg", "oga", "m4a", "aac", "flac"];
+/**
+ * PDF is the one non-media format that renders inline, because every browser
+ * already has a viewer for it. It is NOT framed automatically the way an image
+ * loads — see `PdfEmbed` — because a PDF is a whole document to fetch and an
+ * active format to render.
+ */
+const DOC_EXT = ["pdf"];
 
-export type MediaKind = "image" | "video" | "audio";
+export type MediaKind = "image" | "video" | "audio" | "pdf";
 
 /**
  * What kind of media this URL points at, or null if it is an ordinary link.
@@ -43,7 +50,20 @@ export function classifyMedia(rawUrl: string): MediaKind | null {
   if (IMAGE_EXT.includes(ext)) return "image";
   if (VIDEO_EXT.includes(ext)) return "video";
   if (AUDIO_EXT.includes(ext)) return "audio";
+  if (DOC_EXT.includes(ext)) return "pdf";
   return null;
+}
+
+/**
+ * A "save this" URL for media we host.
+ *
+ * Returns null for a stranger's file: we cannot set headers on someone else's
+ * server, and a `download` attribute is ignored cross-origin anyway — offering a
+ * Save button that silently opens a tab instead is worse than not offering one.
+ */
+export function downloadUrl(rawUrl: string): string | null {
+  if (!isSelfHostedMedia(rawUrl)) return null;
+  return `${rawUrl}${rawUrl.includes("?") ? "&" : "?"}download=1`;
 }
 
 /** The first media URL in a list, with its kind. */

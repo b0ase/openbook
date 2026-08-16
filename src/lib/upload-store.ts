@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, statSync } from "node:fs";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 /**
@@ -92,5 +92,30 @@ export async function readUpload(name: string): Promise<Buffer | null> {
     return await readFile(/* turbopackIgnore: true */ pathFor(name));
   } catch {
     return null;
+  }
+}
+
+/**
+ * Remove stored bytes. Returns whether a file was actually there.
+ *
+ * ⚠ THE ONLY DELETE PATH, AND IT HAD TO EXIST. Content-addressed storage with no
+ * removal is fine right up until the moment removal is not optional — an illegal
+ * upload, a copyright demand, a mistake by someone who cannot un-post. There was
+ * no way to delete an upload at all before this.
+ *
+ * ⚠ DELETING BYTES IS NOT A TAKEDOWN ON ITS OWN. The same file re-uploads to the
+ * same name a second later, because the name is its hash. A removal that must
+ * hold has to block the hash first (`upload-audit.ts` `blockHash`) and delete
+ * second — which is why that function records before this one runs, not after.
+ *
+ * The post that referenced it is on-chain and cannot be edited; the embed
+ * degrades to a plain link, which `MediaEmbed` already handles by design.
+ */
+export async function deleteUpload(name: string): Promise<boolean> {
+  try {
+    await unlink(/* turbopackIgnore: true */ pathFor(name));
+    return true;
+  } catch {
+    return false;
   }
 }

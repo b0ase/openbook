@@ -13,7 +13,7 @@
  * structurally impossible rather than filtered.
  */
 
-export type UploadKind = "image" | "video" | "audio";
+export type UploadKind = "image" | "video" | "audio" | "doc";
 
 export type UploadReject = "empty" | "too_large" | "unsupported_type";
 
@@ -29,9 +29,30 @@ export type UploadReject = "empty" | "too_large" | "unsupported_type";
  * same-origin session, which is the single worst thing this feature could add.
  * Anyone wanting a vector on the page can link one.
  *
- * ⚠ NO PDF, NO ARCHIVES, NO DOCUMENTS. This exists to put media in a post, and
- * every non-media format is a file-hosting feature with a different threat model
- * and a different abuse profile. Widening this table is a decision, not a tweak.
+ * ⚠ PDF IS ALLOWED; ARCHIVES AND DOCUMENTS ARE STILL NOT (owner, 2026-08-16).
+ * This table previously read "NO PDF, NO ARCHIVES, NO DOCUMENTS", on the grounds
+ * that a non-media format is a file-hosting feature with a different threat
+ * model. That reasoning was right and the owner took the decision anyway, so the
+ * threat model is handled rather than waved past:
+ *
+ *  - A PDF can contain JavaScript, so `/m/[name]` serves it under
+ *    `Content-Security-Policy: sandbox` — a unique opaque origin, no script, no
+ *    reach into our cookies or storage. That is what makes same-origin hosting
+ *    of an active format survivable, and removing it re-opens stored XSS.
+ *  - It is never framed in the feed automatically. A stranger's PDF is a card
+ *    and a link; only our own uploads preview, and only when scrolled to.
+ *  - Every stored file is hash-checked against a blocklist before it is written
+ *    (`upload-audit.ts`), so a takedown can be made to STICK rather than being
+ *    undone by the next re-upload.
+ *
+ * ⚠ THE ABUSE PROFILE IS THE REAL COST, NOT THE FORMAT. A PDF is a container of
+ * images, so any image scanner hooked to `image/*` does not see inside one.
+ * Whatever CSAM scanning is enabled (Cloudflare's tool, an IWF hash list) has to
+ * cover this path too, or PDF becomes the documented way around it.
+ *
+ * Archives and office documents stay out: they carry macros and executables, and
+ * nothing about them is viewable inline, which is the only thing this feature is
+ * for. Widening this table further is a decision, not a tweak.
  */
 const TYPES: Record<string, { kind: UploadKind; ext: string }> = {
   "image/jpeg": { kind: "image", ext: "jpg" },
@@ -50,7 +71,20 @@ const TYPES: Record<string, { kind: UploadKind; ext: string }> = {
   "audio/ogg": { kind: "audio", ext: "ogg" },
   "audio/webm": { kind: "audio", ext: "weba" },
   "audio/flac": { kind: "audio", ext: "flac" },
+  "application/pdf": { kind: "doc", ext: "pdf" },
 };
+
+/**
+ * Formats that are ACTIVE — they can carry script and must never be served as a
+ * plain same-origin document.
+ *
+ * Kept as a predicate rather than an inline `ext === "pdf"` at the serving route,
+ * because the next active format added to the table above must not be able to
+ * reach the network without someone deciding what happens here.
+ */
+export function needsSandbox(ext: string): boolean {
+  return ext === "pdf";
+}
 
 /**
  * Per-kind size ceilings.
@@ -64,6 +98,7 @@ export const MAX_BYTES: Record<UploadKind, number> = {
   image: 12 * 1024 * 1024,
   video: 64 * 1024 * 1024,
   audio: 24 * 1024 * 1024,
+  doc: 24 * 1024 * 1024,
 };
 
 /** Every MIME type the picker should offer, for an `accept=` attribute. */
@@ -122,6 +157,52 @@ export function contentTypeForExt(ext: string): string {
     if (t.ext === ext) return mime;
   }
   return "application/octet-stream";
+}
+
+/**
+ * A filename safe to put in a `Content-Disposition` header.
+ *
+ * ⚠ THIS IS THE ONE PLACE A USER-SUPPLIED NAME IS USED FOR ANYTHING. Stored
+ * names are content hashes precisely so no uploader string reaches the
+ * filesystem, and that rule is unchanged — this value is display-only, for the
+ * "Save as" dialog, and never touches a path.
+ *
+ * The header is the threat, not the disk. A newline would split the response and
+ * let an uploader inject arbitrary headers; a quote would escape the quoted
+ * form. So this is an ALLOWLIST of characters rather than an escape pass, and
+ * the extension is forced from the stored one — an uploader cannot offer
+ * `invoice.pdf.exe`, or claim a different type from the bytes we hold.
+ *
+ * Falls back to the short hash when nothing usable survives, so the dialog
+ * always has a name and never an empty one.
+ */
+export function downloadFilename(originalName: string | null, sha256: string, ext: string): string {
+  const segments = (originalName ?? "").split(/[\\/]/);
+  const base = (segments[segments.length - 1] ?? "")
+    .replace(/\.[^.]*$/, "")
+    // Allowlist: letters, digits, space, dot, dash, underscore, brackets. Every
+    // control character, quote, semicolon and CR/LF is excluded by construction.
+    .replace(/[^\p{L}\p{N} .\-_()]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80)
+    .trim();
+  const safe = base.length > 0 ? base : `openbooks-${sha256.slice(0, 12)}`;
+  return `${safe}.${ext}`;
+}
+
+/**
+ * A full `Content-Disposition` value for a download.
+ *
+ * Both forms are emitted: the plain `filename=` for old clients and RFC 5987
+ * `filename*=` for anything non-ASCII, which is the only way a name with an
+ * accent in it survives. The plain form is stripped to ASCII rather than left as
+ * raw bytes, since a non-ASCII byte in an unencoded header value is what
+ * actually breaks parsers.
+ */
+export function contentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "");
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
 /** A human-readable byte count for error copy. */

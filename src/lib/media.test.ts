@@ -1,5 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { classifyMedia, firstMedia, isSelfHostedMedia } from "./media";
+import { classifyMedia, downloadUrl, firstMedia, isSelfHostedMedia } from "./media";
+
+describe("PDF", () => {
+  it("is recognised so a post can show a document rather than a bare link", () => {
+    expect(classifyMedia("https://x.com/paper.pdf")).toBe("pdf");
+    expect(classifyMedia("https://x.com/PAPER.PDF")).toBe("pdf");
+  });
+
+  it("is still refused over plain http, like every other embed", () => {
+    expect(classifyMedia("http://x.com/paper.pdf")).toBeNull();
+  });
+
+  it("cannot be faked by a query string", () => {
+    // The extension comes from the PATH, so `?x=.pdf` must not turn an
+    // arbitrary endpoint into a framed document.
+    expect(classifyMedia("https://x.com/endpoint?file=a.pdf")).toBeNull();
+  });
+});
+
+describe("downloadUrl", () => {
+  const hash = "a".repeat(64);
+
+  it("offers a save link for files we host", () => {
+    expect(downloadUrl(`https://openbooks.space/m/${hash}.pdf`)).toBe(
+      `https://openbooks.space/m/${hash}.pdf?download=1`
+    );
+  });
+
+  it("returns null for a stranger's file, because `download` is ignored cross-origin", () => {
+    // A Save button that silently opens a tab instead is worse than no button.
+    expect(downloadUrl("https://example.com/paper.pdf")).toBeNull();
+  });
+
+  it("returns null for junk instead of throwing", () => {
+    for (const bad of ["", "not a url", "/m/abc.pdf"]) {
+      expect(downloadUrl(bad)).toBeNull();
+    }
+  });
+});
 
 describe("classifyMedia", () => {
   it.each([

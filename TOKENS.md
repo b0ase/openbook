@@ -1903,6 +1903,37 @@ pointed first, and it should not be sold to anybody before one has looked.
 Nothing in this document is legal advice, and it is not a substitute for the review it keeps
 deferring.
 
+## ⚠ NEVER PUT USER-UPLOADED MEDIA ON-CHAIN (hard constraint, 2026-08-16)
+
+`upload-store.ts` notes that off-chain media is *"a deliberate staging decision"* and that
+content-addressed names would let a later migration to ORDFS keep the same identifiers. **For
+user-uploaded files that migration must never happen.** This is not a cost question to revisit when
+the token model funds it; it is a constraint on the design.
+
+**Post text is screened before it is broadcast** — `content-filter.ts` runs in `createPost` ahead of
+the DB insert, which is the only moment anything can be stopped before it reaches an immutable
+ledger. **Uploaded bytes are not screened, and cannot be** by anything this project will plausibly
+build: images, video and PDFs from anonymous users, at volume.
+
+Some of what arrives on any open upload endpoint will be illegal. CSAM is the case that decides
+this. Anchored on-chain it becomes:
+
+- **unremovable by anyone, including the operator** — the one property the product is otherwise sold
+  on becomes the failure;
+- **published by our transaction**, signed by our key, at our expense;
+- **impossible to comply with a takedown for**, so every legal route ends at "we cannot".
+
+Off-chain storage is what makes `scripts/takedown.mjs` possible at all. Keeping the bytes on a disk
+we control is not a weaker version of permanence — for this class of data it is the only survivable
+design, and the asymmetry with on-chain post text is deliberate.
+
+**What may go on-chain is a POINTER**: a hash and a URL, so the reference is permanent and
+verifiable while the bytes stay removable. That is already the pattern chosen for the definition
+anchor (*"inscribe a source URL and a hash rather than the text"*), and for the same reason.
+
+If media tokenisation is ever wanted (see *Media tickers and transclusion*), it tokenises the
+pointer, never the payload.
+
 ## Upstream relationship
 
 **Potentially upstreamable** — useful to OpenCook independent of tokens:
