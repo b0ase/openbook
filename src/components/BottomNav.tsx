@@ -1,7 +1,6 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { BookMark } from "./icons/BookMark";
 
 /**
  * The app's bottom tab bar, ported from bChat (`bit-sign/src/components/BottomNav.tsx`).
@@ -105,10 +104,11 @@ export function BottomNav() {
               <span
                 className={
                   center
-                    ? `flex h-14 w-14 -mt-7 items-center justify-center rounded-full border shadow-lg shadow-black/60 transition-colors ${
-                        active
-                          ? "border-amber-400 bg-amber-500 text-black"
-                          : "border-zinc-800 bg-black text-zinc-300"
+                    ? `-mt-7 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-2 shadow-lg shadow-black/60 transition-colors ${
+                        // The icon supplies the colour, so active is a RING rather
+                        // than a fill — filling it would hide the mark it exists
+                        // to show.
+                        active ? "border-amber-400" : "border-zinc-800"
                       }`
                     : `flex items-center justify-center transition-colors ${
                         active ? "text-amber-400" : "text-zinc-500"
@@ -116,13 +116,23 @@ export function BottomNav() {
                 }
               >
                 {center ? (
-                  // The BRAND MARK, not a stroke glyph — same reasoning as bChat's
-                  // `b`: the raised slot holds the product, not a category. It is
-                  // the open book from `public/icon.svg`, so the centre button and
-                  // the installed app icon are recognisably the same thing. It was
-                  // a bare `$`, which is the sigil every TICKER wears — the one
-                  // glyph guaranteed not to mean "this app" in particular.
-                  <BookMark size={24} />
+                  // ⚠ THE ACTUAL PWA ICON, not a redrawing of part of it. The
+                  // raised slot holds the product, and the strongest way to say
+                  // "this app" is the same image the user tapped on their home
+                  // screen. `icon.svg` is designed full-bleed precisely so any
+                  // circular mask crops to solid amber, which is what this button
+                  // is — so it needs no padding or background of its own.
+                  /* biome-ignore lint/performance/noImgElement: a static local
+                     icon at a fixed 56px; next/image would add a wrapper and a
+                     request for an asset that is already exactly the right size
+                     and is in the PWA manifest anyway. */
+                  <img
+                    src="/icon-192.png"
+                    alt=""
+                    width={56}
+                    height={56}
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   <svg
                     width={20}

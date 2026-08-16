@@ -238,7 +238,7 @@ export function AgentChat({
       {!fullPage && (
         <button
           type="button"
-          className="fixed inset-0 z-50 w-full bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out] cursor-default"
+          className="fixed inset-0 z-[70] w-full bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out] cursor-default"
           aria-label="Close dialog"
           onClick={() => setOpen(false)}
         />
@@ -260,7 +260,7 @@ export function AgentChat({
         className={
           fullPage
             ? "flex h-full w-full"
-            : "fixed inset-0 z-50 flex items-end sm:items-center justify-center px-2 pb-[calc(0.5rem+3.5rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(1rem+3.5rem)] pointer-events-none"
+            : "fixed inset-0 z-[70] flex items-end sm:items-center justify-center px-2 pb-[calc(0.5rem+3.5rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(1rem+3.5rem)] pointer-events-none"
         }
       >
         <div
@@ -288,9 +288,48 @@ export function AgentChat({
               card's max-h reduction, making the modal extend too high
               on Safari after body overflow:hidden was restored. */}
           <div className="shrink-0 flex items-center justify-between px-4 pt-3 pb-3 border-b border-zinc-800">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
               <span className="text-sm font-medium text-zinc-300">OpenBooks Agent</span>
+              {/* ⚠ MOVED UP FROM THE FOOTER (owner, 2026-08-16). Below the input
+                  it was a third row of chrome under the thing people came to use,
+                  and on the Agent TAB it pushed the composer off the bottom of the
+                  screen. Beside the title it is still discoverable by anyone
+                  looking at who they are talking to — which is exactly when "is
+                  this open source?" gets asked — and costs no vertical space. */}
+              <a
+                href="https://github.com/b0ase/openbook"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="The code is open — view the repository"
+                title="The code is open"
+                className="ml-1 shrink-0 text-zinc-600 transition-colors hover:text-zinc-300"
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  width="14"
+                  height="14"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+                </svg>
+              </a>
+              <span aria-hidden className="text-zinc-800">
+                ·
+              </span>
+              <a
+                href="/terms"
+                className="shrink-0 text-[11px] text-zinc-600 transition-colors hover:text-zinc-300"
+              >
+                Terms
+              </a>
+              <a
+                href="/privacy"
+                className="shrink-0 text-[11px] text-zinc-600 transition-colors hover:text-zinc-300"
+              >
+                Privacy
+              </a>
             </div>
             <button
               type="button"
@@ -367,7 +406,10 @@ export function AgentChat({
               Button is amber-tinted and disabled when there's no text or a
               stream is in flight. enterKeyHint=send also relabels the iOS
               Return key as "Send" for users who don't notice the button. */}
-          <div className="shrink-0 border-t border-zinc-800 px-4 py-3">
+          {/* Safe-area padding inherited from the footer that used to sit below
+              this row: it is now the last thing on screen, so it owns the gap
+              above the iOS home indicator. */}
+          <div className="shrink-0 border-t border-zinc-800 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">
             <div className="flex items-center gap-2">
               <input
                 ref={inputRef}
@@ -414,41 +456,13 @@ export function AgentChat({
             </div>
           </div>
 
-          {/* Open-source footer — quiet trust signal for users investigating
-              the project. The pill's GitHub tease (decorative) brings them
-              here; this is the actual repo link. Center-aligned with a
-              half-opacity divider so it reads as a footer tier subordinate
-              to the input row above. Safe-area padding so the link doesn't
-              sit on the iOS home indicator on bottom-sheet display. */}
-          <div className="shrink-0 border-t border-zinc-800/50 px-4 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] sm:pb-3.5 flex flex-col items-center gap-1.5">
-            <a
-              href="https://github.com/b0ase/openbook"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-xs text-zinc-300 hover:text-zinc-100 transition-colors"
-            >
-              <svg
-                viewBox="0 0 16 16"
-                width="16"
-                height="16"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-              </svg>
-              The code is open.
-              <span className="text-zinc-600">↗</span>
-            </a>
-            <div className="flex items-center gap-2 text-[11px] text-zinc-500">
-              <a href="/terms" className="transition-colors hover:text-zinc-300">
-                Terms
-              </a>
-              <span className="text-zinc-700">·</span>
-              <a href="/privacy" className="transition-colors hover:text-zinc-300">
-                Privacy
-              </a>
-            </div>
-          </div>
+          {/* ⚠ THE OPEN-SOURCE FOOTER MOVED INTO THE HEADER (owner, 2026-08-16).
+              It was a third tier of chrome below the input — the row people
+              actually use — and on the Agent tab it pushed the composer off the
+              bottom. The repo link and the legal links now sit beside the agent's
+              name, which is where someone asking "what is this, and is it open?"
+              is already looking. Nothing was deleted, only relocated: the safe-area
+              padding it carried now lives on the input row itself. */}
         </div>
       </div>
     </>

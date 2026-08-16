@@ -257,7 +257,14 @@ export function ThreadView({
   const replyCount = Math.max(0, posts.length - 1);
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col h-[100dvh] bg-black">
+    // ⚠ ABOVE THE TAB BAR (`z-50`), NOT BELOW IT. This was `z-40`, so once the
+    // bar existed it painted OVER this overlay and swallowed the reply composer
+    // at the bottom — worse in the installed PWA, where the safe-area inset makes
+    // the bar taller and hid the composer completely. A thread is a full-screen
+    // surface with its own header and close; the tab bar showing through the
+    // bottom of it was never right, and covering its composer made replying
+    // impossible with nothing on screen to explain why.
+    <div className="fixed inset-0 z-[60] flex h-[100dvh] flex-col bg-black">
       <header className="shrink-0 border-b border-zinc-800 bg-black">
         {/* `justify-between` with the crumb group and the chip as the two ends:
             the overlay covers the whole viewport including the app header, so
@@ -500,8 +507,11 @@ export function ThreadView({
         </div>
       </div>
 
-      {/* Same keyboard-collapse `group` treatment as the feed's compose area. */}
-      <div className="shrink-0">
+      {/* Same keyboard-collapse `group` treatment as the feed's compose area.
+          The safe-area padding is this overlay's own: it now sits above the tab
+          bar rather than behind it, so nothing else is left to keep the composer
+          clear of the iOS home indicator. */}
+      <div className="shrink-0 pb-[env(safe-area-inset-bottom)]">
         <div className="group mx-auto max-w-2xl px-4 pb-4 pt-2 transition-all duration-200 pointer-coarse:has-[textarea:focus,.compose-send:focus]:pb-2">
           <PostForm
             parentId={rootId}

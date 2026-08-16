@@ -78,7 +78,7 @@ export function IosStorageToast(): React.JSX.Element | null {
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-24 left-1/2 z-50 -translate-x-1/2 w-[calc(100vw-2rem)] max-w-sm transition-all duration-300 ${
+      className={`fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 w-[calc(100vw-2rem)] max-w-sm transition-all duration-300 ${
         animateIn ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
       }`}
     >

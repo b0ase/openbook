@@ -35,7 +35,7 @@ export function Notice({ message }: { message: string | null }) {
     <div
       role="status"
       aria-live="polite"
-      className={`pointer-events-none fixed bottom-24 left-1/2 z-50 -translate-x-1/2 px-4 transition-all duration-300 ${
+      className={`pointer-events-none fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 px-4 transition-all duration-300 ${
         visible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
       }`}
     >
