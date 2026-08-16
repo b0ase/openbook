@@ -167,7 +167,11 @@ verify payment (`paid-post.ts`) → insert DB storing the **origin outpoint** (`
 UI update → Feed polls for confirmation.
 
 ⚠ **Posting SPENDS THE AUTHOR'S OWN SATS — do not tell users posting is free.** ~113 sats/post
-(~$0.0017): 1 sat inscribed to the author's own address, 12 sats to the platform, ~100 sats fee. A
+(**~$0.000013** at $11.62/BSV, the rate verified live 2026-06-19 and recorded in DECISIONS.md;
+this line previously read `~$0.0017`, which was wrong by ~130× and was being quoted to users by
+the agent — and, worse, used as the basis for pricing arithmetic. **Sats are the durable figure;
+any dollar number here is a snapshot and should be re-derived from the BSV price, not trusted.**):
+1 sat inscribed to the author's own address, 12 sats to the platform, ~100 sats fee. A
 wallet with **confirmed** funds is a precondition; `/api/balance` reports confirmed-only as
 spendable, so freshly-deposited 0-conf money will not post until a block lands. Every money failure
 is refused BEFORE broadcast (`insufficient_funds`, `no_utxos`, `payment_required` → see

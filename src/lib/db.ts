@@ -250,7 +250,7 @@ export function applyTickerMeaningMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS ticker_meanings (
       symbol      TEXT PRIMARY KEY,
-      meaning     TEXT NOT NULL,
+      meaning     TEXT,
       corpus_size INTEGER NOT NULL,
       updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -261,6 +261,75 @@ export function applyTickerMeaningMigration(database: Db): void {
   // is fetched once while the meaning is re-read as usage moves.
   addColumnIfMissing(database, "ticker_meanings", "anchor", "anchor TEXT");
   addColumnIfMissing(database, "ticker_meanings", "anchor_url", "anchor_url TEXT");
+  relaxMeaningNotNull(database);
+}
+
+/**
+ * ⚠ `meaning` MUST BE NULLABLE, AND ORIGINALLY WAS NOT. This silently broke anchors.
+ *
+ * A word gets its ANCHOR long before it has a derived MEANING — that is the
+ * normal order, because the anchor is fetched the first time the word is seen
+ * while the meaning needs a corpus to read. So `ensureAnchor` inserts a row with
+ * `meaning = NULL`, which `meaning TEXT NOT NULL` rejected.
+ *
+ * The failure was invisible: that insert is wrapped in a best-effort catch (*"an
+ * absent anchor is a missing nicety, never a failure"*), so the constraint error
+ * was swallowed and **no anchor was ever stored for a word that had no meaning
+ * yet** — i.e. for every word the anchor was built to serve. The feature looked
+ * shipped and did nothing.
+ *
+ * SQLite cannot drop a NOT NULL constraint in place, so the table is rebuilt.
+ * Idempotent: it inspects the column first and returns immediately once relaxed.
+ * Runs AFTER the addColumnIfMissing calls above so the copy can name every column.
+ */
+function relaxMeaningNotNull(database: Db): void {
+  const columns = database.prepare("PRAGMA table_info(ticker_meanings)").all() as Array<{
+    name: string;
+    notnull: number;
+  }>;
+  const meaning = columns.find((c) => c.name === "meaning");
+  if (!meaning || meaning.notnull === 0) return;
+
+  database.transaction(() => {
+    database.exec(`
+      CREATE TABLE ticker_meanings_rebuilt (
+        symbol      TEXT PRIMARY KEY,
+        meaning     TEXT,
+        corpus_size INTEGER NOT NULL,
+        updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        anchor      TEXT,
+        anchor_url  TEXT
+      )
+    `);
+    database.exec(`
+      INSERT INTO ticker_meanings_rebuilt (symbol, meaning, corpus_size, updated_at, anchor, anchor_url)
+        SELECT symbol, meaning, corpus_size, updated_at, anchor, anchor_url FROM ticker_meanings
+    `);
+    database.exec("DROP TABLE ticker_meanings");
+    database.exec("ALTER TABLE ticker_meanings_rebuilt RENAME TO ticker_meanings");
+  })();
+}
+
+/**
+ * What each word can afford to spend on thinking about itself.
+ *
+ * Three columns rather than one balance so the ledger stays auditable: what the
+ * platform GAVE a word, what the word EARNED, and what it has SPENT. A single
+ * mutable balance would make "how much has this cost us" unanswerable after the
+ * fact, which is the question the whole mechanism exists to bound.
+ *
+ * See `lib/ticker-budget.ts` for why this is a ledger and not a wallet.
+ */
+export function applyTickerBudgetMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ticker_budgets (
+      symbol       TEXT PRIMARY KEY,
+      granted_sats INTEGER NOT NULL DEFAULT 0,
+      earned_sats  INTEGER NOT NULL DEFAULT 0,
+      spent_sats   INTEGER NOT NULL DEFAULT 0,
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
 }
 
 /**
@@ -653,6 +722,7 @@ try {
   applyAgentReplyMigration(db);
   applySpentOutpointMigration(db);
   applyTickerMeaningMigration(db);
+  applyTickerBudgetMigration(db);
   applyNymMigration(db);
   applyReservedTickerMigration(db);
 

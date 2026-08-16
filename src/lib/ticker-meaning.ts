@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { canonicalTicker, isValidTicker } from "./ticker";
+import { canAfford, DERIVE_COST_SATS, tryDebitTicker } from "./ticker-budget";
 
 /**
  * An agent tending the meaning of its own word.
@@ -28,6 +29,14 @@ const MIN_CORPUS = 3;
 const REDERIVE_GROWTH = 3;
 /** How much of the corpus the model reads. Newest, since drift is recent. */
 const CORPUS_SAMPLE = 40;
+/**
+ * How many stale words to consider before giving up for this tick.
+ *
+ * Bounded so an unaffordable backlog cannot turn one tick into a long scan. If
+ * the top N stalest words are all broke, deriving nothing this beat is right —
+ * they will still be stale next beat, and by then they may have earned.
+ */
+const STALE_CANDIDATES = 20;
 const MAX_MEANING_CHARS = 400;
 
 export interface TickerMeaning {
@@ -165,9 +174,19 @@ function corpusSize(symbol: string): number {
  * One per tick, deliberately: this is an API call per word, and a job that
  * re-derives everything on every beat would spend real money restating things
  * nobody has touched.
+ *
+ * ⚠ CANDIDATES ARE FILTERED BY WHAT THEY CAN AFFORD. Staleness alone used to
+ * decide this, which made the derivation bill a function of the tick rate rather
+ * than of demand — the one unfunded line in the agent design. A word that cannot
+ * pay is skipped and the NEXT stale word is considered, so a single broke-but-busy
+ * word cannot block every other word behind it.
+ *
+ * The affordability check is a read; the money is taken in `deriveTickerMeaning`
+ * immediately before the call. Two ticks racing here both see "affordable" and
+ * one of them loses the atomic debit, which is the correct outcome.
  */
 export function nextStaleTicker(): string | null {
-  const row = db
+  const rows = db
     .prepare(
       `SELECT m.symbol AS symbol, COUNT(*) AS n,
               COALESCE(tm.corpus_size, 0) AS was
@@ -176,10 +195,14 @@ export function nextStaleTicker(): string | null {
         GROUP BY m.symbol
        HAVING n >= ? AND n - was >= ?
         ORDER BY (n - was) DESC
-        LIMIT 1`
+        LIMIT ?`
     )
-    .get(MIN_CORPUS, REDERIVE_GROWTH) as { symbol: string } | undefined;
-  return row?.symbol ?? null;
+    .all(MIN_CORPUS, REDERIVE_GROWTH, STALE_CANDIDATES) as Array<{ symbol: string }>;
+
+  for (const row of rows) {
+    if (canAfford(row.symbol, DERIVE_COST_SATS)) return row.symbol;
+  }
+  return null;
 }
 
 /**
@@ -196,6 +219,17 @@ export async function deriveTickerMeaning(symbol: string): Promise<string | null
 
   const corpus = corpusFor(canonical);
   if (corpus.length < MIN_CORPUS) return null;
+
+  // ⚠ THE WORD PAYS BEFORE THE CALL IS MADE, and is not refunded if it fails.
+  // Same ordering as free-boot grants (DECISIONS.md "consume the grant BEFORE
+  // paying"): a crash between debit and spend must lose the budget, never
+  // double-spend it. A model call that errors after being issued may still have
+  // been billed, so refunding on failure would let a flapping upstream drain
+  // real money while the ledger showed none spent.
+  //
+  // Checked last, after the cheap rejections above, so a word is never charged
+  // for a derivation that was never going to happen.
+  if (!tryDebitTicker(canonical, DERIVE_COST_SATS)) return null;
 
   const anchorRow = db
     .prepare("SELECT anchor FROM ticker_meanings WHERE symbol = ?")

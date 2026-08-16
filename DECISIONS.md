@@ -978,3 +978,64 @@ with `ticker.ts`, which is the argument already made for `$Nym`.
 
 **Deferred, not rejected:** `$TickerAgents`. Revisit when a thread exists that genuinely has
 parties rather than readers.
+
+## A word pays for its own thinking, and the anchor bug that hid behind a catch (2026-08-16)
+
+**Two things, found together because they live in the same file.**
+
+### The unfunded line: derivation is now paid from a per-ticker budget
+
+Answering an invocation is paid for by the invoker. **Re-deriving a definition was paid for by
+nobody** — it was the one agent operation whose cost scaled with the platform's own tick rate
+rather than with demand, so raising `AGENT_TICK_INTERVAL_MS` or deriving more than one word per
+beat raised the bill with no revenue attached. It was the only line item in the agent design that
+could run away.
+
+**Decision: a word re-derives out of its own balance.** `lib/ticker-budget.ts` + `ticker_budgets`
+(granted / earned / spent, three columns so "what has this cost us" stays answerable after the
+fact). `nextStaleTicker()` now filters candidates by what they can afford and falls through to the
+next stalest, so one broke-but-busy word cannot block the queue. `deriveTickerMeaning` takes the
+money atomically **before** the API call and does not refund on failure — the same ordering as
+free-boot grants ("consume the grant BEFORE paying"), for the same reason: a call that errors after
+being issued may still have been billed, so refunding would let a flapping upstream drain real
+money while the ledger showed none spent.
+
+**Founding grant = exactly ONE derivation.** Every word gets a definition once, so a newly-claimed
+word is never dead on arrival, and platform exposure is a number that can be stated: `words ×
+DERIVE_COST_SATS`, about $60 for 10,000 words, once, ever. A word being genuinely used will be
+earning by its second derivation.
+
+⚠ **It is a LEDGER, not a wallet.** Per-ticker addresses do not exist yet (HD derivation is
+designed, not built). What protects the platform is the policy, and the policy is enforceable in
+SQLite today. `creditTicker` has no caller until invocation-as-payment is built. Do not surface a
+budget to a user as a wallet balance.
+
+### The anchor feature shipped broken and said nothing about it
+
+`ticker_meanings.meaning` was `TEXT NOT NULL`, but a word gets its ANCHOR long before it has a
+derived MEANING — that is the normal order — so `ensureAnchor` inserts `meaning = NULL`. SQLite
+rejected it, and the insert sits inside a best-effort catch (*"an absent anchor is a missing
+nicety, never a failure"*), so the constraint error was swallowed. **No anchor was ever stored for
+any word without a meaning — i.e. for every word the anchor was built to serve.** The feature
+looked shipped and did nothing; the symptom was an empty `/$pink`.
+
+Fixed by rebuilding the table (SQLite cannot drop NOT NULL in place), idempotently, preserving
+rows. Regression tests in `ticker-budget.integration.test.ts`.
+
+⚠ **The general lesson, and it is the third time this pattern has cost us: a `catch` that swallows
+"best-effort" failures will also swallow a schema error that makes the feature impossible.** A
+best-effort path needs a way to tell "the network was down" from "this could never have worked".
+
+### CLAUDE.md carried a dollar figure that was wrong by ~130×
+
+`~113 sats/post (~$0.0017)`. At $11.62/BSV — verified live 2026-06-19, recorded in the fee-model
+entry above, and arithmetically cross-checked against its own "217k posts/day" figure — 113 sats is
+**~$0.000013**. The bad number was being quoted to users by the agent (CLAUDE.md is loaded into the
+prompt) and was used as the basis for pricing arithmetic.
+
+**Sats are the durable unit; any dollar figure in the repo is a snapshot.** Re-derive from the BSV
+price rather than trusting a committed dollar number.
+
+**What the correct figure exposes is the more useful fact:** an agent reply costs ~26,000 sats of
+compute against ~113 sats of chain. **Inference is ~230× the on-chain cost** — the blockchain is
+rounding error in this system's economics, and the model bill is the whole business.
