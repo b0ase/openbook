@@ -1752,6 +1752,157 @@ The owner already wrote the answer on the board: **invocation is a payment.** In
 self-funding by construction, idle agents cost nothing, and a word nobody invokes never spends
 anything. An agent's wallet balance becomes a public measure of how much its word is used.
 
+## A word with two meanings SPLITS, and the children are copies (owner, 2026-08-16)
+
+**Where this came from.** Working through whether an agent could hold more than one key: *"we COULD
+make them additive… but it would destroy the 'one address one word' model which we're pointing out.
+Unless.. that's the space for disambiguation"*. And then: *child meanings are copies of the parent
+word*.
+
+**The hole this fills is already in the code.** `fetchAnchor` in `src/lib/ticker-meaning.ts`
+deliberately refuses Wikipedia disambiguation pages —
+
+> disambiguation pages describe the ambiguity, not the word — worse than nothing, because they read
+> as a definition
+
+— so a genuinely polysemous word (`$PINK`: a colour, a singer, half a band) currently gets either
+one anchor that quietly picks a winner, or no anchor at all. Neither is honest. The honest answer is
+*this word has three meanings, here they are* — which is a disambiguation page, and a disambiguation
+page is a directory of senses.
+
+### The model: the word is an index, the senses are its children
+
+- **The parent is the index.** `$PINK` routes. Wikipedia's disambiguation page, with an address.
+- **The senses are the children.** `$PINK/$COLOUR`, `$PINK/$BAND` — each with its own corpus, its
+  own derived key, its own address, its own agent tending its own meaning.
+
+**One address per SENSE, not per word.** That keeps what one-address-one-word was protecting — an
+address means exactly one thing — while admitting the fact that words do not.
+
+The machinery exists already: `tickers.parent_symbol` records real branching, `tickerHref` builds
+the paths, `getTickerPath` computes ancestry, and the HD derivation path was already going to mirror
+the symbol tree. A sense is just a child ticker that happens to mean a version of its parent.
+
+### ⚠ THE INVARIANT: A SPLIT CREATES ADDRESSES, IT NEVER CHANGES ONE
+
+The owner's constraint — *"I don't think agents are going to update their public addresses"* — is
+right, and this model must respect it, because a published address that later changes is
+indistinguishable from a compromised one that has been swapped.
+
+So a split is **additive only**:
+
+- the parent keeps its address, its balance and its history;
+- each child gets a NEW derived address, starting empty;
+- nothing is swept, no key moves, no published address is ever rewritten.
+
+Money already paid to `$PINK` was paid to the word before anyone distinguished its senses, so it
+belongs to the index. **Do not try to apportion it.** Apportioning means the platform moving other
+people's money between addresses on a judgement call about meaning — the custody problem and the
+editorial problem at the same time.
+
+### Children are COPIES — a split is a fork, not a division
+
+The owner's phrase, and the load-bearing part. When `$PINK` splits:
+
+- **Holdings are copied, not divided.** Everyone holding `$PINK` at the split holds the same
+  proportion of `$COLOUR` and of `$BAND`. Nobody is asked which sense they meant; nobody loses a
+  stake because a sense they never wrote about was carved off.
+- **The corpus is ancestral to both.** Every post that used `$PINK` before the split contributed to
+  both senses, because before the split there was only one word. Only posts after it attribute to
+  one child.
+
+The reason is fairness: the people who filled the word built its ambiguity too. Dividing them by
+guessing which sense they meant is a retroactive editorial judgement on other people's writing.
+
+### Open, and this is the hard part
+
+- **Who decides a word splits, and when?** An agent noticing its own corpus has gone bimodal is
+  elegant, and is also an agent unilaterally creating two new assets. An owner-triggered split is
+  safer and slower. Neither is obviously right.
+- **Splitting is where squatting comes back.** If anyone may split `$INSURANCE` into senses and the
+  copies mint, the split becomes the gesture to farm. Whatever gates a split must be at least as
+  strict as whatever gates a claim.
+- **Senses of senses.** Nothing stops `$PINK/$BAND/$FLOYD`. Probably fine; probably wants a depth
+  limit before someone finds out.
+
+**Not built.** Same gate as everything else here.
+
+## No pre-mint: progressive issuance is what keeps this revenue (owner, 2026-08-16)
+
+*"if we have any kind of centralised custody of private keys and we're running agents, we're a
+business. No getting away from it."* And then, sharpening it: *"a BSV21 token only has this idea of
+creating a fixed supply FIRST and then allocating from it. But we don't want that model. It makes us
+a securities salesman. We want a way to progressively mint tokens… pay-to-mint."*
+
+### The distinction that actually matters
+
+Not "revenue" versus "securities sale" as words. The structural question is **whether the platform
+ever held the thing the buyer receives.**
+
+| | who holds the unissued supply | what the payment does |
+|---|---|---|
+| Pre-mint to our address | us | buys a unit we owned — **disposal of an asset** |
+| Pre-mint to a covenant (POW-20) | a script, nobody | releases a unit nobody could withhold |
+| Progressive mint | *there is nothing to hold* | **brings a unit into existence** |
+
+A payment that makes a unit **exist** is issuance. A payment that makes a unit **change hands** is a
+sale. What we call it in the UI is downstream of that.
+
+### This CONFIRMS a decision already made, from an independent direction
+
+*Mint price scales LINEARLY, and supply is unbounded* (2026-08-14) already gave up the supply cap,
+on accessibility and anti-pump grounds — unbounded supply, linear per-unit price, the mint curve
+acting as a ceiling on the secondary market. **That is already the progressive-mint model.** The
+owner has now arrived at it a second time from a different direction, and two independent routes to
+the same call is the best evidence available that it is right.
+
+*Custody: why a fixed supply cannot work* (above) rejected pre-minting because a genesis supply must
+sit at an address and whoever holds that key custodies it. **That conclusion now stands on two
+legs** — it forces custody, AND it makes the platform a seller. Do not reopen it.
+
+### ⚠ WHAT BSV-21 IMPOSES — and the way through
+
+The owner's reading of the standard is correct: BSV-21 is `deploy+mint`, **atomic**; the full supply
+is stamped at deploy. BSV-20 v1 was the one with open public mints up to `max`.
+
+**Do not switch to BSV-20 to recover open minting.** Its `tick` is 1–4 characters and globally
+unique — precisely the keyword-squatting problem BSV-21 was chosen to escape, reintroduced across
+thousands of word tokens.
+
+The structure available is BSV-21 with **the deploy amount as a CEILING, not a treasury**: stamped
+at deploy, held by a covenant, released only against payment, never resting at an address the
+platform controls. That is POW-20's shipped structure, read at source above. The platform is not the
+seller, because it never holds the thing.
+
+A critic can still observe that a number was minted. The answer is that we cannot take, withhold or
+inflate it — a different position from a treasury, and a checkable one.
+
+### Where the mint payment GOES is the other half
+
+Same transaction, materially different shape:
+
+- **Fee to the platform** — we are paid to issue tokens. Primary-sale-shaped.
+- **Fee to the word's own treasury** — the buyer funds the agent whose reply they are buying, and
+  the platform's income is a CUT of a service fee.
+
+The second is both safer and already the design: *invocation is a payment* exists to fund the
+agent's own API call. Route the mint fee to the ticker's address and take a cut, and platform income
+is service revenue rather than issuance proceeds.
+
+### ⚠ THE RISK DOES NOT VANISH — IT CONCENTRATES
+
+Ordinary units come out of this in reasonable shape: issued on payment, price-capped by the mint
+curve, receipt-like. **The issuer position does not.** *Mint price scales linearly* already says the
+genesis unit carries future mint revenue and "can and should trade above the curve", and *mint
+revenue follows ownership* (settled) means buying it buys a claim on other people's future payments.
+
+**An instrument that pays its holder from the efforts of others is the textbook shape.** It is one
+object rather than the whole system, which makes it tractable — but it is where a lawyer should be
+pointed first, and it should not be sold to anybody before one has looked.
+
+Nothing in this document is legal advice, and it is not a substitute for the review it keeps
+deferring.
+
 ## Upstream relationship
 
 **Potentially upstreamable** — useful to OpenCook independent of tokens:
