@@ -3,6 +3,8 @@ import { AppProviders } from "@/components/AppProviders";
 import { BOTTOM_NAV_HEIGHT_CLASS, BottomNav } from "@/components/BottomNav";
 import { SiteNav } from "@/components/SiteNav";
 import { getServerAddress } from "@/services/bsv/wallet";
+import { listTickers } from "../actions";
+import { TickerDirectory } from "../tickers/TickerDirectory";
 import { ThreadList } from "./ThreadList";
 
 /**
@@ -23,7 +25,8 @@ export const metadata: Metadata = {
   description: "Public threads you have started or replied to, newest activity first.",
 };
 
-export default function ChatPage() {
+export default async function ChatPage() {
+  const tickers = await listTickers();
   return (
     <AppProviders>
       <div className={`min-h-[100dvh] bg-black text-white ${BOTTOM_NAV_HEIGHT_CLASS}`}>
@@ -39,10 +42,18 @@ export default function ChatPage() {
             <h1 className="text-sm font-medium text-white">Threads</h1>
             {/* Says the quiet part out loud: nothing here is private. */}
             <p className="mt-0.5 text-[11px] text-zinc-600">
-              Conversations you are part of. All public — private rooms don't exist yet.
+              Every named thread, and the ones you are in. All public — private rooms don't exist
+              yet.
             </p>
           </header>
-          <ThreadList />
+
+          {/* ⚠ THE NAMED-THREAD DIRECTORY LIVES HERE, NOT UNDER "MARKET" (owner,
+              2026-08-16). It was on `/market`, where clicking an entry opened a
+              thread — so the Market tab was a thread list wearing a different
+              name, and the tab you would actually look for threads in listed only
+              your own. A directory of `$Ticker`s IS a directory of conversations;
+              it belongs with them. */}
+          <ThreadList directory={<TickerDirectory initial={tickers} />} />
         </div>
         <BottomNav />
       </div>

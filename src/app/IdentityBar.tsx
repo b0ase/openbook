@@ -58,6 +58,7 @@ function suppressPassphraseNudge(): void {
 
 export function IdentityChip({
   onOpenThread,
+  inline = false,
   openOnMount = false,
 }: {
   /**
@@ -66,6 +67,20 @@ export function IdentityChip({
    * render a control that does nothing.
    */
   onOpenThread?: (rootId: number) => void;
+  /**
+   * Render the wallet as a PAGE PANEL rather than a dropdown card.
+   *
+   * ⚠ FOR THE WALLET TAB, where the wallet IS the page. As a dropdown it is a
+   * ~320px card pinned under a chip in a corner, with its own scrollbar — on a
+   * phone that put a long holdings list inside a small box inside the page, so
+   * most of it was behind a second scroll nobody expects. Inline, the panel is
+   * the page's own column and scrolls with it.
+   *
+   * The BODY is identical either way, deliberately: one wallet, rendered in two
+   * places, so the balance a tab shows can never disagree with the one a chip
+   * shows. Only the container changes.
+   */
+  inline?: boolean;
   /**
    * Start with the wallet already open.
    *
@@ -1172,52 +1187,57 @@ export function IdentityChip({
         </>
       )}
 
-      <div ref={dropdownRef} className="relative">
-        {/* Chip — when locked, click opens SignInModal instead of dropdown */}
-        <button
-          type="button"
-          onClick={() => {
-            // Read-only (in-app browser) → route to the open-in-browser prompt.
-            if (isReadOnly) {
-              openInAppPrompt();
-              return;
-            }
-            if (needsUnlock && !identity) {
-              openSignIn();
-              return;
-            }
-            setOpen((v) => !v);
-          }}
-          className="relative flex items-center gap-1.5 sm:gap-2 rounded-full bg-zinc-900 border border-zinc-800 px-2 py-2 sm:px-3 sm:py-1.5 text-xs sm:text-sm hover:border-zinc-700 transition-colors"
-        >
-          {/* Static protection-status dot. Hidden while the pulsing backup
+      <div ref={dropdownRef} className={inline ? "" : "relative"}>
+        {/* Chip — when locked, click opens SignInModal instead of dropdown.
+            Hidden in `inline` mode: the panel below is already open and is the
+            whole page, so a chip that toggles it would be a control that closes
+            the screen you navigated to. */}
+        {!inline && (
+          <button
+            type="button"
+            onClick={() => {
+              // Read-only (in-app browser) → route to the open-in-browser prompt.
+              if (isReadOnly) {
+                openInAppPrompt();
+                return;
+              }
+              if (needsUnlock && !identity) {
+                openSignIn();
+                return;
+              }
+              setOpen((v) => !v);
+            }}
+            className="relative flex items-center gap-1.5 sm:gap-2 rounded-full bg-zinc-900 border border-zinc-800 px-2 py-2 sm:px-3 sm:py-1.5 text-xs sm:text-sm hover:border-zinc-700 transition-colors"
+          >
+            {/* Static protection-status dot. Hidden while the pulsing backup
               warning is visible to avoid two overlapping amber dots competing
               for attention — the backup warning is urgent and time-sensitive;
               protection status can be seen in the modal. */}
-          {!(showWarningDot && backedUp === false) && (
-            <span
-              className={`w-2 h-2 rounded-full ${isProtected ? "bg-amber-400" : "bg-red-500"}`}
-            />
-          )}
-          <span className="text-zinc-300">{displayName}</span>
-          {balanceSats !== null && balanceSats > 0 && (
-            // Confirmed/spendable balance — the honest headline. Once there's a
-            // spendable balance we show ONLY that (no pending alongside). (QA 2026-06-24)
-            <AnimatedBalance
-              sats={balanceSats}
-              bsvPrice={bsvPrice}
-              isGoat={isGoat}
-              className="text-[10px]"
-              flashTrigger={earnedSats ?? 0}
-            />
-          )}
-          {showWarningDot && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-            </span>
-          )}
-        </button>
+            {!(showWarningDot && backedUp === false) && (
+              <span
+                className={`w-2 h-2 rounded-full ${isProtected ? "bg-amber-400" : "bg-red-500"}`}
+              />
+            )}
+            <span className="text-zinc-300">{displayName}</span>
+            {balanceSats !== null && balanceSats > 0 && (
+              // Confirmed/spendable balance — the honest headline. Once there's a
+              // spendable balance we show ONLY that (no pending alongside). (QA 2026-06-24)
+              <AnimatedBalance
+                sats={balanceSats}
+                bsvPrice={bsvPrice}
+                isGoat={isGoat}
+                className="text-[10px]"
+                flashTrigger={earnedSats ?? 0}
+              />
+            )}
+            {showWarningDot && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+              </span>
+            )}
+          </button>
+        )}
 
         {/* Pending (0-conf) as a muted line BENEATH the chip — kept OUT of the
             button so the incoming amount can't widen the chip into the centered
@@ -1235,7 +1255,14 @@ export function IdentityChip({
 
         {open && identity && (
           <div
-            className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-80 border border-amber-400/20 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] z-50 overflow-hidden max-h-[85vh] overflow-y-auto"
+            className={
+              inline
+                ? // The page's own column: full width, no absolute positioning, and
+                  // NO inner scrollbar — the page scrolls, so a long holdings list
+                  // is not trapped in a box inside the box.
+                  "relative w-full border border-amber-400/20 rounded-xl overflow-hidden"
+                : "absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-80 border border-amber-400/20 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] z-50 overflow-hidden max-h-[85vh] overflow-y-auto"
+            }
             style={{ backgroundColor: "#0f0f0f" }}
           >
             {/* Gold top stripe */}
@@ -1292,26 +1319,31 @@ export function IdentityChip({
                       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                     </svg>
                   </button>
-                  <button
-                    type="button"
-                    onClick={closeDropdown}
-                    className="relative -m-3 p-3 text-zinc-500 hover:text-zinc-200 transition-colors"
-                    aria-label="Close"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      aria-hidden="true"
+                  {/* No close button on the Wallet TAB: closing would leave an
+                      empty page with no way back to what you navigated to. In the
+                      dropdown it is the only way out, so it stays there. */}
+                  {!inline && (
+                    <button
+                      type="button"
+                      onClick={closeDropdown}
+                      className="relative -m-3 p-3 text-zinc-500 hover:text-zinc-200 transition-colors"
+                      aria-label="Close"
                     >
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        aria-hidden="true"
+                      >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
               <button

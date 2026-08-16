@@ -10,14 +10,12 @@ import { useVoiceToText } from "@/hooks/useVoiceToText";
 import { type AgentTurn, appendTurn, formatTranscript, hashTurn } from "@/lib/agent-record";
 import { parseSlashCommand } from "@/lib/slash";
 import { ACCEPTED_MIME } from "@/lib/upload";
-import { AgentChat } from "./AgentChat";
 import { createPost, getPostingMode } from "./actions";
 import { TickerHint } from "./TickerHint";
 
 interface PostFormProps {
   onPostCreated?: (content: string, author: string, tempId: number) => void;
   onPostRejected?: (tempId: number, reason?: string) => void;
-  agentHighlight?: boolean;
   /**
    * Post as a REPLY to this post rather than starting a new thread
    * (THREADS.md). Undefined = a root post, which is the feed's compose box.
@@ -39,7 +37,6 @@ interface PostFormProps {
 export function PostForm({
   onPostCreated,
   onPostRejected,
-  agentHighlight,
   parentId,
   compact,
   placeholder,
@@ -767,8 +764,13 @@ export function PostForm({
           uses a sm:hidden spacer to hold the left cell's shape. */}
       {!compact && (
         <div className="grid grid-cols-3 items-center mt-1 ml-1 mr-1 max-h-12 overflow-visible opacity-100 transition-all duration-200 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:mt-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:max-h-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:opacity-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:overflow-hidden">
+          {/* ⚠ THE "Enter to post, Shift+Enter for new line" HINT WAS REMOVED HERE
+              (owner, 2026-08-16). Only the posted-confirmation stays — it is an
+              `aria-live` region, so it is feedback rather than chrome. The cost of
+              dropping the hint is that Enter-to-post is now undiscoverable on
+              desktop until someone tries it; the Send button still works, so
+              nothing is unreachable, and the row is quieter. */}
           <div className="hidden sm:flex items-center gap-2">
-            <p className="text-[11px] text-zinc-600">Enter to post, Shift+Enter for new line</p>
             <span
               className={`text-[11px] text-green-500 transition-opacity duration-300 ${justPosted ? "opacity-100" : "opacity-0"}`}
               aria-live="polite"
@@ -780,9 +782,12 @@ export function PostForm({
           <div className="flex justify-center relative z-10">
             <InstallBookmark />
           </div>
-          <div className="flex justify-end">
-            <AgentChat highlight={agentHighlight} />
-          </div>
+          {/* ⚠ AN EMPTY CELL, NOT A LEFTOVER. The "Ask AI" pill lived here until
+              the agent got its own tab (owner, 2026-08-16). The grid is three
+              columns and the install bookmark sits in the middle one, so
+              deleting this cell rather than emptying it would slide the bookmark
+              off centre. */}
+          <div />
         </div>
       )}
       {showPermanenceGate && (

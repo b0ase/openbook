@@ -135,7 +135,6 @@ function FeedContent({
   });
 
   const [optimisticPosts, setOptimisticPosts] = useState<OptimisticPost[]>([]);
-  const [agentHighlight, setAgentHighlight] = useState(false);
   // Default to floor price and 0 free boots — corrected from server once identity loads.
   const [bootPrice, setBootPrice] = useState(1000);
   const [freeBootsRemaining, setFreeBootsRemaining] = useState(0);
@@ -815,12 +814,6 @@ function FeedContent({
     });
   }, []);
 
-  const handleAskAgent = useCallback(() => {
-    scrollToBottom();
-    setAgentHighlight(true);
-    setTimeout(() => setAgentHighlight(false), 2000);
-  }, [scrollToBottom]);
-
   // The ↓ pill returns to LIVE in origin mode, else jumps to the newest.
   const handleDownButton = mode === "origin" ? handleGoLive : scrollToBottom;
 
@@ -885,7 +878,6 @@ function FeedContent({
             isLoadingOlder={isLoadingOlder}
             oldestServerId={oldestServerId}
             onBooted={refresh}
-            onAskAgent={handleAskAgent}
             onFundNeeded={(address, balance, fee) => {
               setUserAddress(address);
               setUserBalance(balance);
@@ -979,24 +971,13 @@ function FeedContent({
             Pure CSS (:focus-within), no JS/visualViewport — so no lag. Desktop
             (fine pointer) is unaffected. (#6-adjacent compose UX, 2026-06-25) */}
         <div className="group mx-auto max-w-2xl px-4 pb-4 pt-2 transition-all duration-200 pointer-coarse:has-[textarea:focus,.compose-send:focus]:pb-2">
-          <PostForm
-            onPostCreated={handlePostCreated}
-            onPostRejected={handlePostRejected}
-            agentHighlight={agentHighlight}
-          />
-          {/* Attribution — centered. Install bookmark moved to PostForm row
-              next to the Ask AI button (2026-06-03), so this row is just the
-              bopen.ai link now. Collapses with the keyboard (see group above). */}
-          <div className="flex justify-center mt-1 max-h-6 overflow-hidden opacity-100 transition-all duration-200 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:mt-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:max-h-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:opacity-0">
-            <a
-              href="https://bopen.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[10px] text-zinc-700 hover:text-zinc-500 transition-colors"
-            >
-              created with bopen.ai
-            </a>
-          </div>
+          {/* The "created with bopen.ai" attribution line was removed here
+              (owner, 2026-08-16), along with the "Ask AI" pill that used to sit
+              beside the install bookmark — the agent has its own tab now. The
+              `group` and its keyboard-collapse classes above are KEPT: they still
+              drive the compose box dropping onto the on-screen keyboard, which
+              has nothing to do with either removed element. */}
+          <PostForm onPostCreated={handlePostCreated} onPostRejected={handlePostRejected} />
         </div>
       </div>
 

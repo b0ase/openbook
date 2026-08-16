@@ -363,7 +363,6 @@ interface PostListProps {
   /** Oldest id of the newest (polled) window — only these are observed for unread. */
   oldestServerId: number;
   onBooted?: () => void;
-  onAskAgent?: () => void;
   onFundNeeded?: (address: string, balance?: number, fee?: number) => void;
   onFreeBootUsed?: () => void;
   bootPrice: number;
@@ -397,7 +396,6 @@ export function PostList({
   isLoadingOlder,
   oldestServerId,
   onBooted,
-  onAskAgent,
   onFundNeeded,
   onFreeBootUsed,
   bootPrice,
@@ -426,7 +424,7 @@ export function PostList({
       {(mode === "origin" || (mode === "live" && !liveHasMore)) && (
         <>
           <div ref={genesisRef} />
-          <Manifesto onAskAgent={onAskAgent} />
+          <Manifesto />
         </>
       )}
 

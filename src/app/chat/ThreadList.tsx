@@ -27,7 +27,7 @@ import type { Post } from "@/types";
  * and the AI chat — see the sign-in section in CLAUDE.md). The gate is on the
  * reply composer inside `ThreadView`, where it already is.
  */
-export function ThreadList() {
+export function ThreadList({ directory }: { directory?: React.ReactNode }) {
   const { identity, isLoading } = useIdentityContext();
   const [threads, setThreads] = useState<Post[] | null>(null);
   const [openRootId, setOpenRootId] = useState<number | null>(null);
@@ -86,29 +86,56 @@ export function ThreadList() {
     load();
   }, [load]);
 
-  if (threads === null) {
-    return <p className="px-4 py-10 text-center text-sm text-zinc-600">Loading…</p>;
-  }
-
-  if (threads.length === 0) {
-    return (
-      <div className="px-6 py-16 text-center">
-        <p className="text-sm text-zinc-400">No threads yet.</p>
-        <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-zinc-600">
-          Threads you start or reply to appear here, newest activity first.
-        </p>
-        <a
-          href="/"
-          className="mt-5 inline-block rounded-full border border-zinc-800 px-4 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
-        >
-          Go to the feed
-        </a>
-      </div>
-    );
-  }
-
+  /**
+   * Everything on the board, then everything of yours.
+   *
+   * The directory is rendered by the server and passed straight through — it
+   * needs no identity, so it must not wait on one. A signed-out reader still
+   * gets the full list of named threads instead of an empty page.
+   */
+  const yours = renderYours();
   return (
     <>
+      {directory}
+      <div className="border-t border-zinc-900 px-4 pb-1 pt-4">
+        <h2 className="text-[11px] uppercase tracking-[0.14em] text-zinc-600">Yours</h2>
+      </div>
+      {yours}
+      {openRootId !== null && (
+        <ThreadView
+          rootId={openRootId}
+          bootPrice={bootPrice}
+          freeBootsRemaining={freeBootsRemaining}
+          onClose={closeThread}
+          onOpenThread={setOpenRootId}
+        />
+      )}
+    </>
+  );
+
+  function renderYours() {
+    if (threads === null) {
+      return <p className="px-4 py-10 text-center text-sm text-zinc-600">Loading…</p>;
+    }
+
+    if (threads.length === 0) {
+      return (
+        <div className="px-6 py-16 text-center">
+          <p className="text-sm text-zinc-400">No threads yet.</p>
+          <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-zinc-600">
+            Threads you start or reply to appear here, newest activity first.
+          </p>
+          <a
+            href="/"
+            className="mt-5 inline-block rounded-full border border-zinc-800 px-4 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
+          >
+            Go to the feed
+          </a>
+        </div>
+      );
+    }
+
+    return (
       <ul className="divide-y divide-zinc-900">
         {threads.map((post) => (
           <li key={post.id}>
@@ -130,16 +157,6 @@ export function ThreadList() {
           </li>
         ))}
       </ul>
-
-      {openRootId !== null && (
-        <ThreadView
-          rootId={openRootId}
-          bootPrice={bootPrice}
-          freeBootsRemaining={freeBootsRemaining}
-          onClose={closeThread}
-          onOpenThread={setOpenRootId}
-        />
-      )}
-    </>
-  );
+    );
+  }
 }

@@ -227,9 +227,18 @@ export function AgentChat({
           iOS keyboard opens, keeping the input row visible above the keyboard.
           Without this, h-[60vh] on messages stayed fixed, squeezing the input
           off-screen when the layout viewport shrank. */}
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-2 pb-2 sm:p-4 pointer-events-none">
+      {/* ⚠ THE BOTTOM INSET CLEARS THE TAB BAR. On mobile this is a bottom SHEET
+          (`items-end`), and `BottomNav` is fixed to the bottom of every page that
+          hosts this — so with only `pb-2` the card sat behind the bar and its
+          input row was half off-screen. The 3.5rem matches
+          `BOTTOM_NAV_HEIGHT_CLASS` in `components/BottomNav.tsx`; the two are
+          literals rather than a shared constant because Tailwind scans source
+          text and cannot see an interpolated value. Change one, change both. */}
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-2 pb-[calc(0.5rem+3.5rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(1rem+3.5rem)] pointer-events-none">
         <div
-          className="w-full sm:max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden pointer-events-auto animate-[slideUp_0.3s_ease-out_backwards] shadow-2xl flex flex-col max-h-[calc(100svh-env(safe-area-inset-top)-0.5rem)] sm:max-h-[calc(100dvh-2rem)]"
+          // The max-heights subtract the tab bar too, for the same reason as the
+          // padding above: without it a tall card grows back down behind the bar.
+          className="w-full sm:max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden pointer-events-auto animate-[slideUp_0.3s_ease-out_backwards] shadow-2xl flex flex-col max-h-[calc(100svh-env(safe-area-inset-top)-0.5rem-3.5rem)] sm:max-h-[calc(100dvh-2rem-3.5rem)]"
           role="dialog"
           aria-modal="true"
           aria-label="OpenBooks Agent"

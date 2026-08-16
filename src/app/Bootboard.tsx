@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BootIcon } from "@/components/icons/BootIcon";
+import { LinkPreviewCard } from "@/components/LinkPreviewCard";
 import { useBootContext } from "@/contexts/BootContext";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useBoot } from "@/hooks/useBoot";
@@ -195,6 +196,18 @@ export function Bootboard({
           <p className="text-sm leading-snug text-zinc-100 whitespace-pre-wrap break-words">
             {current.content}
           </p>
+          {/* ⚠ THE SPOTLIGHT SHOWS A LINK'S UNFURL; THE HISTORY ROWS DO NOT. This
+              surface rendered content as plain text, so a boosted link appeared
+              as a bare URL however good its OpenGraph tags were — the preview was
+              in the database with no route here. The history rows below stay text:
+              they are one truncated line each, and a card in them would turn a
+              compact strip into a stack of tiles.
+
+              Same component as the feed, so a preview cannot look like one thing
+              in a post and another when boosted. It returns null unless the
+              unfurl actually succeeded, and degrades to text if the og:image
+              404s — which the site most often boosted here does. */}
+          <LinkPreviewCard post={current} />
 
           {/* Expanded: scrollable history with reboot */}
           {expanded && (

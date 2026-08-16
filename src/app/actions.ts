@@ -1906,9 +1906,19 @@ export async function getBootboard(): Promise<BootboardData> {
   const current = db
     .prepare(`
     SELECT b.*, p.content, p.author_name, p.signature,
-      pn.symbol AS author_nym, bn.symbol AS boosted_by_nym
+      pn.symbol AS author_nym, bn.symbol AS boosted_by_nym,
+      -- The spotlight shows one post in full, so it gets the same unfurl card the
+      -- feed does. Joined here rather than fetched by the component: the board is
+      -- polled every 5s, and a second round trip per poll for one row is waste.
+      lp.url         AS preview_url,
+      lp.title       AS preview_title,
+      lp.description AS preview_description,
+      lp.image_url   AS preview_image,
+      lp.site_name   AS preview_site_name,
+      lp.status      AS preview_status
     FROM bootboard b
     JOIN posts p ON p.id = b.post_id
+    LEFT JOIN link_previews lp ON lp.url_hash = p.preview_hash
     -- The post author joins by pubkey, the SPENDER by address: the two are
     -- recorded differently (a post carries a pubkey, a boost carries an
     -- address). Without the second join one identity reads as its nym when it

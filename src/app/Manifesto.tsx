@@ -32,11 +32,7 @@
  * status box — in the same commit.
  */
 
-interface ManifestoProps {
-  onAskAgent?: () => void;
-}
-
-export function Manifesto({ onAskAgent }: ManifestoProps) {
+export function Manifesto() {
   return (
     <div className="border-l-2 border-amber-500 bg-zinc-900/50 px-5 py-6 mb-0">
       {/* Eyebrow */}
@@ -185,17 +181,17 @@ export function Manifesto({ onAskAgent }: ManifestoProps) {
 
         <p className="text-zinc-300">
           Be part of it.{" "}
-          {onAskAgent ? (
-            <button
-              type="button"
-              onClick={onAskAgent}
-              className="text-amber-400 hover:text-amber-300 transition-colors underline underline-offset-2"
-            >
-              Chat with the agent to learn more.
-            </button>
-          ) : (
-            <span className="text-amber-400">Chat with the agent to learn more.</span>
-          )}
+          {/* ⚠ A LINK TO THE AGENT TAB, NOT A CALLBACK. This used to scroll the
+              feed to the bottom and flash the "Ask AI" pill in the compose row.
+              That pill is gone — the agent has its own tab now — so a CTA that
+              highlighted it would point at nothing. A plain link also survives
+              being rendered outside the feed, which the callback never did. */}
+          <a
+            href="/agent"
+            className="text-amber-400 underline underline-offset-2 transition-colors hover:text-amber-300"
+          >
+            Chat with the agent to learn more.
+          </a>
         </p>
       </div>
     </div>

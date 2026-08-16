@@ -15,7 +15,25 @@ import type { Post } from "@/types";
  * A bare card showing only a hostname is worse than no card, so the bar for
  * rendering is a title.
  */
-export function LinkPreviewCard({ post }: { post: Post }) {
+/**
+ * Takes any row carrying the preview fields, not a whole `Post`.
+ *
+ * Widened so the Boost Board's spotlight can render the same card as the feed:
+ * it has a `BootboardRow`, which is a different shape with the identical preview
+ * columns. A structural type is what stops that becoming a second card component
+ * that drifts from this one.
+ */
+type Previewable = Pick<
+  Post,
+  | "preview_url"
+  | "preview_title"
+  | "preview_description"
+  | "preview_image"
+  | "preview_site_name"
+  | "preview_status"
+>;
+
+export function LinkPreviewCard({ post }: { post: Previewable }) {
   // ⚠ A THIRD-PARTY og:image THAT 404s MUST NOT RENDER A BROKEN IMAGE. Sites
   // advertise images that do not exist (bitcoinchat.online does exactly this), and
   // images rot long after a post is written — but the post is permanent, so the

@@ -108,6 +108,20 @@ export interface BootboardRow {
   content: string;
   author_name: string;
   signature: string | null;
+  /**
+   * Unfurl of the first link in the boosted post, for the spotlight card.
+   *
+   * ⚠ THE BOOST BOARD RENDERED CONTENT AS PLAIN TEXT, so a boosted link showed
+   * as a bare URL however good its OpenGraph tags were — the preview existed in
+   * the database and simply had no route to this surface. Same field names as
+   * `Post` so `LinkPreviewCard` takes either without a translation step.
+   */
+  preview_url?: string | null;
+  preview_title?: string | null;
+  preview_description?: string | null;
+  preview_image?: string | null;
+  preview_site_name?: string | null;
+  preview_status?: string | null;
 }
 
 export interface BootboardHistoryRow {

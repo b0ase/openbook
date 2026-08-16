@@ -35,8 +35,13 @@ export function WalletPanel() {
           <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
             What you hold, what you have earned, and the recovery file that keeps it yours.
           </p>
-          <div className="mt-6 flex justify-center">
-            <IdentityChip openOnMount />
+          {/* ⚠ `inline`, NOT THE DROPDOWN CARD. As a card the wallet was a ~320px
+              box with its own scrollbar sitting inside the page — on a phone the
+              holdings list ended up behind a second scroll nobody expects. Inline
+              it IS the page. Same component and same body either way, so the tab
+              and the chip can never disagree about what you hold. */}
+          <div className="mt-6">
+            <IdentityChip inline openOnMount />
           </div>
         </div>
         <BottomNav />
