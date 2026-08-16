@@ -42,6 +42,8 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { MINT_SLACK_UNITS } from "@/lib/mint-charge";
+import { MINT_BASE_SATS } from "@/lib/mint-price";
 import { MIN_ECONOMIC_OUTPUT_SATS, postPrice } from "@/lib/post-economics";
 import { buildInscriptionScript, INSCRIPTION_SATS } from "@/services/bsv/inscription";
 import { logPostOnChain } from "@/services/bsv/onchain";
@@ -190,6 +192,125 @@ describe("paid posting", () => {
     expect(db.prepare("SELECT COUNT(*) n FROM posts").get()).toEqual({ n: 1 });
   });
 
+  /**
+   * The mint curve, charged.
+   *
+   * A post naming a `$Ticker` mints a unit of it, and the price of that unit
+   * rises with the word's supply. These are the two ways that can go wrong with
+   * somebody's money: accepting a post that minted a word it did not pay for,
+   * and refusing one whose author paid the price they were quoted a moment
+   * before somebody else pushed it up.
+   */
+  describe("the mint charge", () => {
+    it("REFUSES a post that names a ticker but paid only the markup", async () => {
+      const me = identity();
+      const content = "starting $Mintfloor right here";
+      const res = await createPost(
+        form(me, content, fundedTx(me, { content, platformSats: MIN_ECONOMIC_OUTPUT_SATS }))
+      );
+      expect(res).toEqual({ ok: false, reason: "invalid_payment" });
+      // Refused BEFORE the insert — so nothing was stored and nothing was minted.
+      expect(db.prepare("SELECT COUNT(*) n FROM posts").get()).toEqual({ n: 0 });
+      expect(db.prepare("SELECT COUNT(*) n FROM ticker_mentions").get()).toEqual({ n: 0 });
+    });
+
+    it("accepts a post that paid the markup PLUS the mint price", async () => {
+      const me = identity();
+      const content = "starting $Mintok right here";
+      const paid = MIN_ECONOMIC_OUTPUT_SATS + MINT_BASE_SATS;
+      expect(
+        (await createPost(form(me, content, fundedTx(me, { content, platformSats: paid })))).ok
+      ).toBe(true);
+      // The unit it paid for exists.
+      const row = db
+        .prepare("SELECT COUNT(*) n FROM ticker_mentions WHERE symbol = 'MINTOK'")
+        .get();
+      expect(row).toEqual({ n: 1 });
+    });
+
+    it("charges nothing extra for a post that names no ticker", async () => {
+      // The overwhelming majority of posts. The curve must not creep into them.
+      const me = identity();
+      const content = "no tickers in this one at all";
+      expect((await createPost(form(me, content, fundedTx(me, { content })))).ok).toBe(true);
+    });
+
+    it("SUMS the words, so an expensive name cannot ride along on a cheap post", async () => {
+      // Two distinct words mint two units, so one unit's price is not enough.
+      const me = identity();
+      const content = "$Alpha meets $Beta";
+      const oneUnit = MIN_ECONOMIC_OUTPUT_SATS + MINT_BASE_SATS;
+      expect(
+        await createPost(form(me, content, fundedTx(me, { content, platformSats: oneUnit })))
+      ).toEqual({ ok: false, reason: "invalid_payment" });
+
+      const both = MIN_ECONOMIC_OUTPUT_SATS + 2 * MINT_BASE_SATS;
+      expect(
+        (await createPost(form(me, content, fundedTx(me, { content, platformSats: both })))).ok
+      ).toBe(true);
+    });
+
+    it("does NOT count the post's own mention — the author is quoted the price they pay", async () => {
+      // The mention is recorded AFTER verification. If it were counted first,
+      // every author would be billed one unit more than they were quoted.
+      const me = identity();
+      const content = "$Selfcount";
+      const exact = MIN_ECONOMIC_OUTPUT_SATS + MINT_BASE_SATS;
+      expect(
+        (await createPost(form(me, content, fundedTx(me, { content, platformSats: exact })))).ok
+      ).toBe(true);
+    });
+
+    it("accepts a quote that went stale while other people minted the same word", async () => {
+      // The race: supply rises between the quote and the broadcast, through no
+      // fault of the author. Rejecting here would take their money and store
+      // nothing, so the floor forgives MINT_SLACK_UNITS of drift.
+      const first = identity();
+      const stale = "$Drifting";
+      // Somebody else mints the word several times over.
+      for (let i = 0; i < MINT_SLACK_UNITS; i++) {
+        const who = identity();
+        const text = `${stale} again ${i}`;
+        const cost = MIN_ECONOMIC_OUTPUT_SATS + (i + 1) * MINT_BASE_SATS;
+        expect(
+          (await createPost(form(who, text, fundedTx(who, { content: text, platformSats: cost }))))
+            .ok
+        ).toBe(true);
+      }
+      // Our author quoted at the ORIGINAL supply and pays that older price.
+      const content = `${stale} at yesterday's price`;
+      const quotedThen = MIN_ECONOMIC_OUTPUT_SATS + MINT_BASE_SATS;
+      expect(
+        (
+          await createPost(
+            form(first, content, fundedTx(first, { content, platformSats: quotedThen }))
+          )
+        ).ok
+      ).toBe(true);
+    });
+
+    it("does NOT forgive drift beyond the slack", async () => {
+      // The band is a tolerance, not an exemption — otherwise the price never
+      // actually rises for anyone patient enough to hold a stale quote.
+      const stale = "$Waybehind";
+      for (let i = 0; i < MINT_SLACK_UNITS + 3; i++) {
+        const who = identity();
+        const text = `${stale} again ${i}`;
+        const cost = MIN_ECONOMIC_OUTPUT_SATS + (i + 1) * MINT_BASE_SATS;
+        expect(
+          (await createPost(form(who, text, fundedTx(who, { content: text, platformSats: cost }))))
+            .ok
+        ).toBe(true);
+      }
+      const me = identity();
+      const content = `${stale} much later`;
+      const longStale = MIN_ECONOMIC_OUTPUT_SATS + MINT_BASE_SATS;
+      expect(
+        await createPost(form(me, content, fundedTx(me, { content, platformSats: longStale })))
+      ).toEqual({ ok: false, reason: "invalid_payment" });
+    });
+  });
+
   it("still rejects a bad signature — paying buys a post, not an exemption", async () => {
     const me = identity();
     const content = "forged";
@@ -201,7 +322,13 @@ describe("paid posting", () => {
   it("still claims tickers and records mentions on a paid post", async () => {
     const me = identity();
     const content = "naming $Paid here";
-    expect((await createPost(form(me, content, fundedTx(me, { content })))).ok).toBe(true);
+    // ⚠ Funds the MINT as well as the markup. Naming a word mints a unit of it
+    // and the unit has a price — this test paid only the markup until the curve
+    // was charged, and would now be refused for underpayment.
+    const platformSats = MIN_ECONOMIC_OUTPUT_SATS + MINT_BASE_SATS;
+    expect((await createPost(form(me, content, fundedTx(me, { content, platformSats })))).ok).toBe(
+      true
+    );
 
     expect(db.prepare("SELECT symbol FROM tickers WHERE symbol = 'PAID'").get()).toBeDefined();
     expect(

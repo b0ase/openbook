@@ -67,12 +67,13 @@ export default async function MarketPage() {
               The price of the next unit, how many exist, and how many people hold one. A unit is
               minted for each post that names it, and the price rises with supply — so an early unit
               is worth what it now costs to mint a fresh one.{" "}
-              {/* ⚠ SAID PLAINLY: the curve is the design, the charge is still
-                  flat. Advertising a price nobody is billed would be the platform
-                  lying about its own economics, on the page that exists to price
-                  things. */}
+              {/* ⚠ WHAT IS AND IS NOT TRUE YET, ON THE PAGE THAT PRICES THINGS.
+                  The curve is now what an author is actually billed
+                  (`mint-charge.ts`), so these prices are real. Resale is not
+                  built, and saying so is the difference between a market page
+                  and a promise. */}
               <span className="text-zinc-600">
-                Resale isn't built yet, and posting is still charged at a flat rate.
+                Prices are what a post is charged today. Reselling a unit isn't built yet.
               </span>
             </p>
 

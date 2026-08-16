@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { formatShare } from "@/lib/share";
 import { distinctTickers, titleCaseTicker } from "@/lib/ticker";
-import { getMintQuote, getTickerUsage, isReservedTicker, resolveTickers } from "./actions";
+import {
+  getMintCharge,
+  getMintQuote,
+  getTickerUsage,
+  isReservedTicker,
+  resolveTickers,
+} from "./actions";
 
 /**
  * Live indicator under the compose box for any `$Ticker` being typed.
@@ -24,7 +30,7 @@ import { getMintQuote, getTickerUsage, isReservedTicker, resolveTickers } from "
  */
 
 interface TickerState {
-  /** Cost to mint this word's next unit, in satoshis. Display only — see `getMintQuote`. */
+  /** Cost to mint this word's next unit, in satoshis. See `getMintQuote`. */
   priceSats?: number;
   symbol: string;
   claimed: boolean;
@@ -62,18 +68,32 @@ export function hintShareTotal(claimed: boolean, threads: number): number {
 
 export function TickerHint({ content }: { content: string }) {
   const [states, setStates] = useState<TickerState[]>([]);
+  /**
+   * ⚠ THE WHOLE BILL, not the sum of what is listed above it.
+   *
+   * The per-word rows stop at three, and the price is charged for EVERY ticker
+   * in the post. Without this an author naming eight words would see three
+   * prices and be billed for eight — the disclosure would be actively
+   * misleading rather than merely partial. This is the exact figure
+   * `payForPost` will fund, from the same server function.
+   */
+  const [totalSats, setTotalSats] = useState<number | null>(null);
+  const [totalWords, setTotalWords] = useState(0);
 
   useEffect(() => {
-    const symbols = distinctTickers(content).slice(0, 3);
+    const all = distinctTickers(content);
+    const symbols = all.slice(0, 3);
     if (!symbols.length) {
       setStates([]);
+      setTotalSats(null);
+      setTotalWords(0);
       return;
     }
     let live = true;
     // Debounced: this fires on every keystroke, and a lookup per character would
     // be a query storm for a hint.
     const t = setTimeout(async () => {
-      const [resolved, usage, reservedFlags, quote] = await Promise.all([
+      const [resolved, usage, reservedFlags, quote, charge] = await Promise.all([
         resolveTickers(symbols),
         getTickerUsage(symbols),
         // At most three, and only after the 350ms debounce — see above.
@@ -82,8 +102,10 @@ export function TickerHint({ content }: { content: string }) {
         // spends the author's own sats, and the price rises with a word's supply
         // — so naming a heavily-used word costs more than naming a fresh one, and
         // an author has every right to know that before they press post rather
-        // than after. Display only: the charge is still flat (see getMintQuote).
+        // than after.
         getMintQuote(symbols),
+        // The whole bill, over every word — the same call `payForPost` makes.
+        getMintCharge(content),
       ]);
       const priceOf = new Map(quote.map((q) => [q.symbol, q.priceSats]));
       if (!live) return;
@@ -96,6 +118,8 @@ export function TickerHint({ content }: { content: string }) {
           priceSats: priceOf.get(symbol),
         }))
       );
+      setTotalSats(charge);
+      setTotalWords(all.length);
     }, 350);
     return () => {
       live = false;
@@ -130,9 +154,13 @@ export function TickerHint({ content }: { content: string }) {
                 the author's own sats and the mint price rises with a word's
                 supply, so naming something heavily used costs more than naming
                 something fresh — which an author should learn before they press
-                post, not after. Reserved names mint nothing, so they show none.
-                Display only: the charge is still flat (see `getMintQuote`). */}
-            {!s.reserved && s.priceSats !== undefined && (
+                post, not after.
+                ⚠ SHOWN FOR RESERVED NAMES TOO. Naming one CLAIMS nothing but
+                still MINTS a unit — `recordTickerMentions` records every
+                distinct ticker, reserved or not — so it is still charged for.
+                Hiding the price here would have been the one case where the
+                disclosure disagreed with the bill. */}
+            {s.priceSats !== undefined && (
               <span className="font-mono tabular-nums text-amber-500/70">
                 {s.priceSats.toLocaleString()} sats
               </span>
@@ -152,6 +180,22 @@ export function TickerHint({ content }: { content: string }) {
           </div>
         );
       })}
+      {/* ⚠ THE TOTAL, whenever the rows above are not the whole story — more
+          than one word named, or more than the three this list shows. This is
+          what the author will actually be charged on top of the posting cost,
+          and it is read from the same server function that funds the
+          transaction, so the two cannot disagree. */}
+      {totalSats !== null && totalWords > 1 && (
+        <div className="flex items-center gap-2 pt-0.5 text-[11px] leading-tight text-zinc-500">
+          <span>
+            Mints {totalWords} {totalWords === 1 ? "unit" : "units"}
+            {totalWords > states.length && ` (${states.length} shown)`}
+          </span>
+          <span className="font-mono tabular-nums text-amber-400">
+            {totalSats.toLocaleString()} sats
+          </span>
+        </div>
+      )}
     </div>
   );
 }

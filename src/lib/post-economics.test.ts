@@ -103,6 +103,38 @@ describe("postPrice", () => {
   });
 });
 
+describe("postPrice with a mint charge", () => {
+  // The curve is charged (DECISIONS.md, 2026-08-16). What matters here is that
+  // it reaches the OUTPUT the builder funds — a mint charge that lands in the
+  // total but not in `platformOutputSats` would broadcast underpaid.
+  it("adds the mint to the platform OUTPUT, not just the total", () => {
+    const flat = postPrice(500, { markupPercent: 10 });
+    const withMint = postPrice(500, { markupPercent: 10, mintSats: 339 });
+    expect(withMint.mintSats).toBe(339);
+    expect(withMint.platformFeeSats).toBe(flat.platformFeeSats);
+    expect(withMint.platformOutputSats).toBe(flat.platformFeeSats + 339);
+    expect(withMint.totalSats).toBe(flat.totalSats + 339);
+  });
+
+  it("is zero for a post that names no ticker — most posts", () => {
+    const p = postPrice(500, { markupPercent: 10 });
+    expect(p.mintSats).toBe(0);
+    expect(p.platformOutputSats).toBe(p.platformFeeSats);
+  });
+
+  it("still pays the mint at a 0% markup — at-cost is not free minting", () => {
+    const p = postPrice(500, { markupPercent: 0, mintSats: 113 });
+    expect(p.platformFeeSats).toBe(0);
+    expect(p.platformOutputSats).toBe(113);
+  });
+
+  it("clamps junk rather than carrying it into an output amount", () => {
+    expect(postPrice(500, { mintSats: Number.NaN }).mintSats).toBe(0);
+    expect(postPrice(500, { mintSats: -50 }).mintSats).toBe(0);
+    expect(postPrice(500, { mintSats: 12.4 }).mintSats).toBe(13);
+  });
+});
+
 describe("isPaidPostingEnabled", () => {
   it("is OFF unless explicitly switched on", () => {
     // ⚠ Default-off is the safety property: the inscription envelope has never

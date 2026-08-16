@@ -77,6 +77,9 @@ const POST_FAILURE_TEXT: Record<string, string> = {
   broadcast_failed: "Couldn't reach the network — nothing was spent",
   payment_required: "This post needs funding",
   invalid_payment: "Payment didn't check out — nothing was stored",
+  // The mint price could not be read, so nothing was built and nothing was
+  // spent. Usually a tab left open across a deploy — see `payForPost`.
+  quote_failed: "Couldn't price this post — reload and try again",
 };
 
 // A post that was added optimistically before the server confirms it.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BottomNav } from "@/components/BottomNav";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { readCachedNym } from "@/lib/nym-cache";
 import { formatShare } from "@/lib/share";
@@ -508,11 +509,10 @@ export function ThreadView({
       </div>
 
       {/* Same keyboard-collapse `group` treatment as the feed's compose area.
-          The safe-area padding is this overlay's own: it now sits above the tab
-          bar rather than behind it, so nothing else is left to keep the composer
-          clear of the iOS home indicator. */}
-      <div className="shrink-0 pb-[env(safe-area-inset-bottom)]">
-        <div className="group mx-auto max-w-2xl px-4 pb-4 pt-2 transition-all duration-200 pointer-coarse:has-[textarea:focus,.compose-send:focus]:pb-2">
+          NO safe-area padding of its own any more — the tab bar below carries it
+          now, and doubling it left a band of empty black under the composer. */}
+      <div className="shrink-0">
+        <div className="group mx-auto max-w-2xl px-4 pb-3 pt-2 transition-all duration-200 pointer-coarse:has-[textarea:focus,.compose-send:focus]:pb-2">
           <PostForm
             parentId={rootId}
             compact
@@ -522,6 +522,20 @@ export function ThreadView({
           />
         </div>
       </div>
+
+      {/* ⚠ THE TAB BAR BELONGS HERE TOO. This overlay covers the whole viewport
+          — including the bar the rest of the app keeps — so opening a thread
+          used to strand the reader with one exit, the back arrow, and no way to
+          reach the wallet, the market or the agent without leaving first. The
+          owner asked for it back on these URLs.
+
+          INSIDE the overlay's own flex column, not showing through from behind:
+          the overlay sits at z-[60] precisely so the fixed bar could not paint
+          over the reply composer (that bug hid it completely in the installed
+          PWA). As the last row of this column the bar cannot overlap anything,
+          and the composer above it stays clear of the home indicator because the
+          bar carries the safe-area padding. */}
+      <BottomNav />
     </div>
   );
 }

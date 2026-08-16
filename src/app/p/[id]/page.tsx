@@ -4,6 +4,7 @@ import { AppProviders } from "@/components/AppProviders";
 import { BottomNav } from "@/components/BottomNav";
 import { SiteNav } from "@/components/SiteNav";
 import { siteOrigin } from "@/lib/site-origin";
+import { titleCaseTicker } from "@/lib/ticker";
 import { getServerAddress } from "@/services/bsv/wallet";
 import { getPostById } from "../../actions";
 import { PermalinkThread } from "./PermalinkThread";
@@ -42,11 +43,16 @@ export async function generateMetadata({
   const post = await getPostById(Number(id));
   if (!post) return { title: "Post not found — $OpenBooks" };
 
-  const who = post.author_nym ? `$${post.author_nym}` : post.author_name;
+  const who = post.author_nym ? `$${titleCaseTicker(post.author_nym)}` : post.author_name;
   const body = excerpt(post.content);
   // The TITLE is the author, the DESCRIPTION is what they said. A card titled
   // with the post text and described with boilerplate reads as a site link; this
   // way round reads as a quote from a person, which is what it is.
+  //
+  // ⚠ NO `images` HERE. `opengraph-image.tsx` beside this file renders a card
+  // carrying THIS POST'S WORDS, and an explicit `images` entry in the metadata
+  // would take precedence over it — which is how every permalink came to unfurl
+  // into the same site logo.
   return {
     title: `${who} on $OpenBooks`,
     description: body,
@@ -54,7 +60,6 @@ export async function generateMetadata({
       title: `${who} on $OpenBooks`,
       description: body,
       url: `${siteOrigin()}/p/${post.id}`,
-      images: [`${siteOrigin()}/og-openbooks.jpg`],
       type: "article",
     },
     twitter: {

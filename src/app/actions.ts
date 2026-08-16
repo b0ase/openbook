@@ -12,6 +12,7 @@ import {
   savePreview,
   urlHash,
 } from "@/lib/link-preview-store";
+import { mintChargeSats, mintFloorSats } from "@/lib/mint-charge";
 import { mintPriceSats } from "@/lib/mint-price";
 import { verifyPaidPost } from "@/lib/paid-post";
 import {
@@ -281,7 +282,15 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
       // paid by the time we see this — rejecting for a few satoshis of drift, or
       // for a markup the client was never told to include, takes their money and
       // gives them no post.
-      minPlatformSats: minimumPlatformSats(),
+      //
+      // ⚠ THE MINT CHARGE IS PART OF THE SAME FLOOR because it rides in the same
+      // output (see `PostPrice.platformOutputSats`). It is priced BEFORE the
+      // insert below, so this post's own mentions are not yet counted — which is
+      // exactly the supply the client was quoted from — and it is allowed a
+      // tolerance band for the units other people minted in between. A stricter
+      // check here would refuse a post whose author did nothing wrong except
+      // type slowly. See `mint-charge.ts`.
+      minPlatformSats: minimumPlatformSats() + mintFloorSats(content.trim()),
     });
     if (!verdict.ok) return { ok: false, reason: "invalid_payment" };
 
@@ -1827,18 +1836,35 @@ export async function getNewPosts(sinceId: number): Promise<Post[]> {
  * them in one list would make a correction look like a conversation.
  */
 /**
+ * What this post owes for the tokens it mints — the number the author is
+ * actually charged.
+ *
+ * ⚠ TAKES THE CONTENT, NOT A SYMBOL LIST. The server derives the words itself,
+ * with the same `distinctTickers` that decides which units get minted, so a
+ * client cannot be quoted for one set of words and mint another. See
+ * `mint-charge.ts`.
+ *
+ * Called once, at post time, right before the transaction is built — the
+ * shortest window the race allows. What remains of that race is absorbed by the
+ * server's tolerance band (`MINT_SLACK_UNITS`) rather than by refusing a post
+ * somebody has already paid for.
+ */
+export async function getMintCharge(content: string): Promise<number> {
+  if (typeof content !== "string" || content.trim() === "") return 0;
+  return mintChargeSats(content.trim());
+}
+
+/**
  * What the words in a draft would cost to mint, right now.
  *
- * ⚠ A QUOTE, NOT A COMMITMENT, AND THE DIFFERENCE IS A RACE. Supply moves every
- * time anyone posts, so the price shown while someone is typing can be stale by
- * the time they broadcast. That is survivable for DISPLAY — this is what the
- * composer shows the author before they commit — and it is exactly why the charge
- * is not yet enforced against it: a client that pays a stale quote would be
- * rejected AFTER broadcasting, which spends the author's fee and stores nothing.
+ * ⚠ A QUOTE FOR DISPLAY, capped to a handful of words because it feeds the hint
+ * under the compose box. The CHARGE is `getMintCharge`, which prices every word
+ * — capping what is billed would mint tokens nobody paid for.
  *
- * Closing that race is the remaining work (quote at broadcast time, or a
- * tolerance band on the server's check), and it is deliberately not attempted
- * here — a half-wired money path is worse than a flat one.
+ * Supply moves whenever anyone else names the same word, so a price shown while
+ * someone is typing can be stale by the time they broadcast. The server absorbs
+ * that with a tolerance band (see `MINT_SLACK_UNITS`); it is never resolved by
+ * rejecting a post that has already been paid for.
  */
 export async function getMintQuote(
   symbols: string[]

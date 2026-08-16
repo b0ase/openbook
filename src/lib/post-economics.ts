@@ -1,16 +1,22 @@
 /**
  * What a post costs to mint, and what the platform takes for minting it.
  *
- * Pricing is **FLAT COST-PLUS**, settled by the owner (DECISIONS.md — *a token
- * is a RECEIPT*): sell at cost plus a markup nobody notices, and make the
- * business out of volume rather than scarcity. This supersedes the linear mint
- * curve, which existed to make a holder's share defensible — a receipt does not
- * need defending.
+ * A post's price has two parts, and they answer to different things:
  *
- * ⚠ THE PRICE DOES NOT RISE WITH SUPPLY, AND THAT IS DELIBERATE. It removes the
- * usual pump dynamic by construction: nobody rationally pays more second-hand
- * than a fresh mint costs, and a price that never rises is a ceiling that never
- * rises either.
+ *  - **Cost-plus, flat** — the miner fee, the inscribed satoshi, and a markup
+ *    on top. This is what it costs to put a post on chain and stays flat
+ *    however popular the board gets. That part is priced here.
+ *  - **The mint curve** — what the `$Ticker`s named in the post cost to mint,
+ *    which RISES with each word's supply. Priced in `mint-charge.ts` and passed
+ *    in as `mintSats`, because it depends on the database and this module is
+ *    pure arithmetic.
+ *
+ * ⚠ THE CURVE IS NOW CHARGED (owner, 2026-08-16: *"do the curve"*). This file
+ * previously said flat cost-plus SUPERSEDED the curve, on the "a token is a
+ * RECEIPT" decision — that has been reversed, and DECISIONS.md records both the
+ * reversal and why. The curve is what makes a seat appreciate and what puts a
+ * ceiling on resale; a receipt has neither, and the token had to be worth
+ * holding. See `mint-price.ts` for the mechanism.
  */
 
 /**
@@ -102,6 +108,21 @@ export interface PostPrice {
   inscriptionSats: number;
   /** The markup — this is the platform's revenue, and the only part that is ours. */
   platformFeeSats: number;
+  /**
+   * What the `$Ticker`s in this post cost to mint, from the curve. Zero for a
+   * post that names none — most posts. Priced by `mint-charge.ts`.
+   */
+  mintSats: number;
+  /**
+   * ⚠ WHAT THE ONE PLATFORM OUTPUT MUST CARRY — markup plus mint, together.
+   *
+   * They travel in a single output on purpose. Two outputs would double the
+   * cost of collecting them (every UTXO costs ~148 bytes to spend later) and
+   * would tell an observer nothing the amounts do not already say. The builder
+   * reads THIS, never `platformFeeSats`: building from the markup alone is how
+   * a post gets broadcast underpaid and refused after the author has paid.
+   */
+  platformOutputSats: number;
   /** What the author pays in total. */
   totalSats: number;
   /**
@@ -146,7 +167,7 @@ export function configuredMarkupPercent(): number {
  */
 export function postPrice(
   sizeBytes: number,
-  opts?: { markupPercent?: number; feeRateSatsPerKb?: number }
+  opts?: { markupPercent?: number; feeRateSatsPerKb?: number; mintSats?: number }
 ): PostPrice {
   // Non-finite in means non-finite out: Math.ceil(NaN) is NaN and Math.max
   // propagates it, so a junk size would quote a NaN price and carry it into a
@@ -174,11 +195,20 @@ export function postPrice(
   const floored = pct > 0 && rawMarkup < MIN_ECONOMIC_OUTPUT_SATS;
   const platformFeeSats = pct === 0 ? 0 : Math.max(rawMarkup, MIN_ECONOMIC_OUTPUT_SATS);
 
+  // ⚠ CLAMPED LIKE THE SIZE, FOR THE SAME REASON. A NaN or negative mint charge
+  // would propagate straight into an output amount, and a transaction builder is
+  // the last place that should be discovering junk arithmetic.
+  const rawMint = opts?.mintSats;
+  const mintSats =
+    rawMint !== undefined && Number.isFinite(rawMint) ? Math.max(0, Math.ceil(rawMint)) : 0;
+
   return {
     networkFeeSats,
     inscriptionSats: INSCRIPTION_SATS,
     platformFeeSats,
-    totalSats: networkFeeSats + INSCRIPTION_SATS + platformFeeSats,
+    mintSats,
+    platformOutputSats: platformFeeSats + mintSats,
+    totalSats: networkFeeSats + INSCRIPTION_SATS + platformFeeSats + mintSats,
     floored,
   };
 }

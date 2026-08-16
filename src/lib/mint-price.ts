@@ -21,10 +21,11 @@
  * mint price and from the floor by utility. Selling below the curve and above
  * what you paid is the ordinary profit of having been early.
  *
- * ⚠ NOT YET CHARGED. Posting costs a flat price today (`post-economics.ts`), so
- * this is the curve as designed, shown so the market can price a token — it is
- * not what a poster is billed. Wiring it to the actual charge is a money-path
- * change and a separate decision.
+ * ⚠ THIS IS CHARGED (owner, 2026-08-16: *"do the curve"*). `mint-charge.ts`
+ * turns it into satoshis against live supply, `payForPost` funds it, and
+ * `createPost` verifies it against a tolerance band. This file stays PURE — no
+ * database, no config — so the client, the server and the market page all
+ * price a token by the same arithmetic.
  */
 
 /**

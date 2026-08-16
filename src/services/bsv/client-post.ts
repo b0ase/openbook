@@ -108,10 +108,14 @@ export async function clientSidePost(
     const { PrivateKey, P2PKH, Transaction, Utils, ARC } = await getBsvSdk();
     const key = PrivateKey.fromWif(wif);
 
-    const wantsPlatformFee = price.platformFeeSats > 0 && !!platformAddress;
-    // inscription + optional platform fee + change
+    // ⚠ `platformOutputSats`, NOT `platformFeeSats` — markup PLUS the mint
+    // charge for the `$Ticker`s this post names. Funding only the markup builds
+    // a transaction the server refuses for underpayment, and it refuses it after
+    // the author has already broadcast and paid. See `post-economics.ts`.
+    const wantsPlatformFee = price.platformOutputSats > 0 && !!platformAddress;
+    // inscription + optional platform output + change
     const outputCount = 2 + (wantsPlatformFee ? 1 : 0);
-    const target = INSCRIPTION_SATS + (wantsPlatformFee ? price.platformFeeSats : 0);
+    const target = INSCRIPTION_SATS + (wantsPlatformFee ? price.platformOutputSats : 0);
 
     // ⚠ THE LIVE RATE, NOT A CONSTANT. A hardcoded fee is safe only while the
     // miner's published floor stays under it; the day it rises, every paid post
@@ -161,7 +165,7 @@ export async function clientSidePost(
     if (wantsPlatformFee && platformAddress) {
       tx.addOutput({
         lockingScript: new P2PKH().lock(platformAddress),
-        satoshis: price.platformFeeSats,
+        satoshis: price.platformOutputSats,
       });
     }
 

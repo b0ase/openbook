@@ -1,3 +1,4 @@
+import { getMintCharge } from "@/app/actions";
 import { onchainRecord } from "@/lib/onchain-record";
 import { currentFeeRateSatsPerKb, postPrice } from "@/lib/post-economics";
 import { clientSidePost } from "./client-post";
@@ -64,11 +65,28 @@ export async function payForPost(args: {
   // transaction, and the envelope plus inputs and change dwarf the text on a
   // short post. Claiming a name is the shortest post there is — "I'm $Occam" —
   // which is exactly the case where pricing the payload alone underpays.
+  // ⚠ WHAT THE `$Ticker`s IN THIS POST COST TO MINT, priced by the server from
+  // the SAME text it will charge against. Fetched here rather than in each
+  // caller for the reason this module exists at all: `NymModal` once didn't know
+  // payment existed, and every UI that posts must inherit the money path rather
+  // than reimplement it. A post naming no ticker mints nothing and this is 0.
+  let mintSats: number;
+  try {
+    mintSats = await getMintCharge(args.content);
+  } catch {
+    // ⚠ NEVER BUILD AT AN ASSUMED PRICE. Falling back to 0 would broadcast an
+    // underpaid transaction that the server then refuses — taking the author's
+    // network fee and storing nothing. Refusing BEFORE the broadcast costs them
+    // a retry and no money. The usual cause is a tab held open across a deploy.
+    return { ok: false, status: "quote_failed" };
+  }
+
   const price = postPrice(payload.length + 600, {
     markupPercent: args.mode.markupPercent,
     // Same rate the transaction builder will use, so the quote and the
     // transaction cannot disagree.
     feeRateSatsPerKb: await currentFeeRateSatsPerKb(),
+    mintSats,
   });
 
   const paid = await clientSidePost(

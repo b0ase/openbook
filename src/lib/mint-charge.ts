@@ -1,0 +1,100 @@
+import type Database from "better-sqlite3";
+import { db as defaultDb } from "./db";
+import { mintPriceSats, quoteMintSats } from "./mint-price";
+import { distinctTickers } from "./ticker";
+
+type Db = ReturnType<typeof Database>;
+
+/**
+ * What a post actually owes for the tokens it mints.
+ *
+ * ⚠ THIS IS THE CHARGE, NOT A DISPLAY. `mint-price.ts` is the pure curve;
+ * `getMintQuote` is what the composer shows while someone types. This is the
+ * module both the CLIENT (which funds the transaction) and the SERVER (which
+ * decides whether the transaction paid enough) read, and they must reach the
+ * same number from the same inputs — a disagreement here rejects a post the
+ * author has already broadcast and already paid the network fee for.
+ *
+ * ⚠ THE SYMBOLS ARE DERIVED FROM THE CONTENT, NEVER SUPPLIED. The client sends
+ * the post's text; both sides run `distinctTickers` over it. If the client sent
+ * a symbol list it could quote for `$Cheap` and post about `$Expensive`, and the
+ * cheapest place to catch that is to never accept the list in the first place.
+ * `recordTickerMentions` derives its mint set the same way, so what is charged
+ * for and what is minted cannot diverge.
+ */
+
+/**
+ * How many units of drift the server forgives when checking payment.
+ *
+ * ⚠ THE RACE THIS CLOSES, AND WHY IT LEANS THE WAY IT DOES. Supply rises every
+ * time ANYONE names the same word, so the price a client is quoted can be stale
+ * by the time its transaction reaches us — through no fault of the author, who
+ * may simply have typed slowly. The two failure directions are not remotely
+ * symmetric:
+ *
+ *  - Too STRICT: the post is refused AFTER broadcast. The author has spent the
+ *    network fee and the platform payment, and gets nothing. That is taking
+ *    someone's money for a service not rendered.
+ *  - Too LOOSE: we under-collect by at most `SLACK × base` per word — about 565
+ *    satoshis, well under a hundredth of a US cent.
+ *
+ * So this is deliberately generous. It is not an exploit surface worth closing
+ * further: gaming it requires several other people to name your word in the
+ * seconds between your quote and your broadcast, and wins a fraction of a penny.
+ */
+export const MINT_SLACK_UNITS = 5;
+
+/**
+ * Current supply of each symbol — one indexed GROUP BY, not a query per word.
+ *
+ * Counts `ticker_mentions` rows, which is the same table `getTickerSupply` and
+ * the market page count. Supply IS the number of units ever minted, so the
+ * counter that prices a mint has to be the counter that records one.
+ */
+export function mintSupplies(symbols: readonly string[], database: Db = defaultDb) {
+  const supply = new Map<string, number>();
+  const wanted = [...new Set(symbols)];
+  if (!wanted.length) return supply;
+  const placeholders = wanted.map(() => "?").join(",");
+  const rows = database
+    .prepare(
+      `SELECT symbol, COUNT(*) AS n FROM ticker_mentions
+        WHERE symbol IN (${placeholders}) GROUP BY symbol`
+    )
+    .all(...wanted) as Array<{ symbol: string; n: number }>;
+  for (const r of rows) supply.set(r.symbol, r.n);
+  return supply;
+}
+
+/**
+ * What this text costs to mint right now — the number the author is charged.
+ *
+ * ⚠ EVERY DISTINCT TICKER, NOT THE FIRST FEW. `getMintQuote` caps its list
+ * because it feeds a hint under the compose box that shows three of them; a cap
+ * HERE would mint tokens nobody paid for. The sum is over the same set
+ * `recordTickerMentions` inserts.
+ */
+export function mintChargeSats(content: string, database: Db = defaultDb): number {
+  const symbols = distinctTickers(content);
+  if (!symbols.length) return 0;
+  const supply = mintSupplies(symbols, database);
+  return quoteMintSats(symbols, (s) => supply.get(s) ?? 0);
+}
+
+/**
+ * The least the mint may be paid for a post to be accepted.
+ *
+ * The same sum as `mintChargeSats` but priced at the supply as it stood up to
+ * `MINT_SLACK_UNITS` units ago, so a client that quoted a moment earlier still
+ * clears the bar. Never negative: a word with fewer units than the slack is
+ * priced from zero, i.e. at base.
+ */
+export function mintFloorSats(content: string, database: Db = defaultDb): number {
+  const symbols = distinctTickers(content);
+  if (!symbols.length) return 0;
+  const supply = mintSupplies(symbols, database);
+  return symbols.reduce(
+    (total, s) => total + mintPriceSats(Math.max(0, (supply.get(s) ?? 0) - MINT_SLACK_UNITS)),
+    0
+  );
+}

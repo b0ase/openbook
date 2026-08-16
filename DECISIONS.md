@@ -849,6 +849,53 @@ copy and the pricing model have to agree.
 **Do not implement either pricing until this is settled.** Neither can ship before paid posting
 exists at all.
 
+## The mint curve IS the charge — REVERSES flat cost-plus (2026-08-16, owner: *"do the curve"*)
+
+**Posting is now billed the rising mint price of every `$Ticker` it names**, on top of the flat
+cost-plus price of putting a post on chain. This **reverses** the pricing half of *"A token is a
+RECEIPT"* below (2026-08-14), which settled on flat cost-plus and said in terms that it *superseded
+the linear mint curve*. That entry stays on the page unedited — it was a real decision and its
+reasoning about fan-out arithmetic still holds. Only the pricing conclusion is overturned.
+
+**Why it turned back.** The receipt framing answered "is a token an investment?" with "no", and
+flat pricing followed. But the design that came out of the following two days needs the token to be
+worth HOLDING: a unit buys a seat in the room its word names, and under a flat price a seat can
+never be worth more than a fresh mint, so there is nothing in it for anyone who arrives early and
+nothing for a secondary market to price. The owner's own summary of what the curve buys — *"users
+can buy early, and resell below the curve price but above the price they bought"* — is the thing
+flat pricing removes by construction. The curve also does the two jobs `mint-price.ts` documents:
+it makes appreciation track REAL demand (how many people actually joined), and it caps resale by
+arithmetic rather than by policing, since nobody rationally pays more second-hand than a fresh
+mint costs.
+
+**A post's price is the SUM over the distinct words it names**, not one price per post. Forced by
+the schema: `ticker_mentions` has a partial unique index on `(post_id, symbol)`, so a post naming
+three words mints three units. One price per post would let somebody acquire expensive words by
+burying them in a post about a cheap one.
+
+**The stale-quote race is absorbed by a TOLERANCE BAND, not by rejection.** Supply rises whenever
+anyone else names the same word, so a quote can be stale by broadcast time through no fault of the
+author. The server therefore requires the price at supply *minus* `MINT_SLACK_UNITS` (5). The two
+failure directions are not symmetric and the band leans deliberately: refusing costs the author
+their network fee for nothing, while forgiving costs us at most ~565 sats — well under a hundredth
+of a cent. Gaming it requires several strangers to mint your word in the seconds between your quote
+and your broadcast, and wins a fraction of a penny.
+
+**One output, one floor.** The mint charge rides in the SAME platform output as the markup
+(`PostPrice.platformOutputSats`) — two outputs would double the cost of collecting them — and is
+verified by the same conservation floor `verifyPaidPost` already used, for the reason recorded in
+"Paid-boot confirm records from on-chain outputs": recomputing an exact price rejects legitimate
+drift, and a client retry then double-pays.
+
+**The symbols are derived from the content on BOTH sides, never sent.** `getMintCharge(content)`
+and the server's floor both run `distinctTickers` over the same text that `recordTickerMentions`
+mints from. A client-supplied symbol list could be quoted for `$Cheap` and posted about
+`$Expensive`.
+
+**Where the money goes, honestly:** the platform address, because per-ticker addresses do not exist
+yet (HD derivation is designed in TOKENS.md, not built). When they land, this is the payment that
+should route to the word's own wallet.
+
 ## A token is a RECEIPT; fan-out is limited by ARITHMETIC, not by framing (2026-08-14)
 
 **SETTLED: a token is a receipt, not an investment** — *"it can't be an investment else it'll fuck

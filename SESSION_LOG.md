@@ -2,6 +2,42 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-17 (the curve became the charge; permalink cards)
+
+- **Category: feature (money path), feature, docs.** Flipped posting onto the mint curve — the
+  task deliberately left for a fresh context because it is the money path.
+- **THE CURVE IS NOW CHARGED.** A post pays the flat cost-plus price of going on chain PLUS the
+  rising mint price of every `$Ticker` it names. New `src/lib/mint-charge.ts` is the one place both
+  sides read: `mintChargeSats` (what the client funds) and `mintFloorSats` (what the server will
+  accept). `PostPrice` gained `mintSats` + `platformOutputSats`; the builder funds the OUTPUT, never
+  the markup alone. **Reverses the pricing half of "A token is a RECEIPT" (2026-08-14)** — recorded
+  in DECISIONS.md with why, leaving the original entry unedited.
+- **THE STALE-QUOTE RACE, closed the way it had to be.** Supply rises whenever anyone else names
+  the same word, so a quote goes stale through no fault of the author. The server requires the price
+  at supply minus `MINT_SLACK_UNITS` (5). Asymmetric on purpose: refusing costs the author their
+  network fee for nothing; forgiving costs us ~565 sats. Two integration tests pin both edges of
+  the band.
+- **Symbols are derived from CONTENT on both sides**, never sent by the client — `getMintCharge`
+  and the floor both run `distinctTickers` over the same text `recordTickerMentions` mints from.
+  A symbol list on the wire could be quoted for `$Cheap` and posted about `$Expensive`.
+- **The composer now shows the real bill.** `TickerHint` lists three words but the charge covers
+  all of them, so it gained a TOTAL row from the same server function `payForPost` calls. It also
+  now prices RESERVED names, which claim nothing but still mint a unit — the one case where the
+  disclosure disagreed with the charge.
+- **`payForPost` refuses BEFORE broadcasting if the quote cannot be read** (`quote_failed`) rather
+  than assuming zero, which would broadcast underpaid and lose the author their fee.
+- **Permalink OG cards carry the POST, not the logo** — new `p/[id]/opengraph-image.tsx` renders
+  the author and their words at 1200×630; the static `og-openbooks.jpg` entry was removed from
+  `generateMetadata` because an explicit `images` overrides the generated one. Verified by
+  rendering short and long posts locally.
+- **The tab bar is back inside `ThreadView`.** The overlay covers the viewport at z-[60] (it has
+  to — a fixed bar painted over the reply composer and hid it in the PWA), so a thread stranded the
+  reader with only a back arrow. Added as the last row of the overlay's own flex column, and the
+  composer's safe-area padding moved to it so the two cannot double up.
+- **Ruled out:** per-ticker addresses for the mint payment — HD derivation is designed, not built,
+  so it goes to the platform address and DECISIONS.md says so plainly.
+- **Still next:** resale, token-gated rooms (what a room IS remains undecided), `/buy N $ticker`.
+
 ## 2026-08-17 (a post's address, in the address bar)
 
 - **Category: bug fix, feature.** Owner reported — for the second time — that a post "still doesn't
