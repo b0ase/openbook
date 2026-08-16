@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { claimNym, getPostingMode, resolveTickers } from "@/app/actions";
+import {
+  checkNymAvailability,
+  claimNym,
+  getPostingMode,
+  type NymAvailability,
+} from "@/app/actions";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { canonicalTicker, isValidTicker, titleCaseTicker } from "@/lib/ticker";
 
@@ -34,7 +39,13 @@ export function NymModal({
   const { identity, sign } = useIdentityContext();
   const [value, setValue] = useState("");
   const [state, setState] = useState<"idle" | "checking" | "claiming">("idle");
-  const [available, setAvailable] = useState<boolean | null>(null);
+  /**
+   * free = nobody holds it · yours = you already own it and may adopt it ·
+   * taken = somebody else holds it. ⚠ Not a boolean: "exists" and "unavailable"
+   * are different, and treating them as one told the holder of a name that their
+   * own name was taken.
+   */
+  const [available, setAvailable] = useState<NymAvailability | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const canonical = canonicalTicker(value.trim().replace(/^\$+/, ""));
@@ -59,9 +70,9 @@ export function NymModal({
     let live = true;
     setState("checking");
     const t = setTimeout(() => {
-      void resolveTickers([canonical])
-        .then((r) => {
-          if (live) setAvailable(!r[canonical]);
+      void checkNymAvailability(canonical, identity?.pubkey ?? "")
+        .then((a) => {
+          if (live) setAvailable(a);
         })
         .finally(() => {
           if (live) setState("idle");
@@ -71,7 +82,7 @@ export function NymModal({
       live = false;
       clearTimeout(t);
     };
-  }, [canonical, valid]);
+  }, [canonical, valid, identity?.pubkey]);
 
   // Escape closes. Listens on `document`, not on the wrapper — a keydown handler
   // on the container only fires when focus is already inside it, so opening the
@@ -218,15 +229,22 @@ export function NymModal({
                 Names start with a letter, then letters or numbers, up to 16 characters.
               </p>
             )}
-            {valid && available === false && (
+            {valid && available === "taken" && (
               <p className="text-[12px] text-zinc-500">
                 <span className="text-amber-400">${titleCaseTicker(canonical)}</span> is already
                 taken.
               </p>
             )}
-            {valid && available === true && (
+            {valid && available === "free" && (
               <p className="text-[12px] text-emerald-500/90">
                 ${titleCaseTicker(canonical)} is free.
+              </p>
+            )}
+            {valid && available === "yours" && (
+              <p className="text-[12px] text-emerald-500/90">
+                You already own{" "}
+                <span className="text-amber-400">${titleCaseTicker(canonical)}</span>— adopt it as
+                your name.
               </p>
             )}
 
@@ -251,7 +269,7 @@ export function NymModal({
               <button
                 type="button"
                 onClick={handleClaim}
-                disabled={!valid || available === false || state === "claiming" || !identity}
+                disabled={!valid || available === "taken" || state === "claiming" || !identity}
                 className="flex-1 rounded-lg bg-amber-500 px-3 py-2 text-[13px] font-medium text-black transition-colors hover:bg-amber-400 disabled:opacity-40"
               >
                 {state === "claiming" ? "Claiming…" : "Claim it"}

@@ -695,6 +695,34 @@ export async function claimNym(formData: FormData): Promise<NymResult> {
   return { ok: true, symbol };
 }
 
+/**
+ * Whether an identity may adopt a symbol as its `$Nym`.
+ *
+ * ⚠ "EXISTS" IS NOT "UNAVAILABLE", AND CONFLATING THEM BLOCKS THE RIGHTFUL
+ * OWNER. Every post registers the tickers it mentions to its author, so people
+ * routinely own names they have not adopted — and a recipient of a transfer owns
+ * one by definition. The claim modal used to derive availability from
+ * `resolveTickers`, which only answers "is there a row", so it told the holder of
+ * a name that their own name was taken and disabled the button. The server had
+ * already been fixed to compare the owner; this is the same fix on the other
+ * side of the wire, and the two must agree or the UI refuses claims the server
+ * would accept.
+ */
+export type NymAvailability = "free" | "yours" | "taken";
+
+export async function checkNymAvailability(
+  symbol: string,
+  pubkey: string
+): Promise<NymAvailability> {
+  const canonical = canonicalTicker(String(symbol).trim().replace(/^\$+/, ""));
+  if (!isValidTicker(canonical)) return "taken";
+  const row = db.prepare("SELECT pubkey FROM tickers WHERE symbol = ?").get(canonical) as
+    | { pubkey: string | null }
+    | undefined;
+  if (!row) return "free";
+  return row.pubkey && pubkey && row.pubkey === pubkey ? "yours" : "taken";
+}
+
 export type TransferResult =
   | { ok: true; symbol: string }
   | {
