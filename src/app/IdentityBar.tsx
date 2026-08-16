@@ -1729,7 +1729,7 @@ export function IdentityChip({
                   ))}
                 </div>
                 <p className="text-[11px] text-zinc-600 leading-relaxed">
-                  Your account key — give this to someone sending you a name.
+                  Your public key — safe to share, and what someone needs to send you a name.
                 </p>
                 <button
                   type="button"

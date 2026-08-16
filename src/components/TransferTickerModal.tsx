@@ -186,23 +186,32 @@ export function TransferTickerModal({
                 </p>
 
                 <label className="block text-xs text-zinc-500" htmlFor="transfer-to">
-                  Their account key
+                  Their <span className="text-zinc-300">public</span> key
                 </label>
                 <input
                   id="transfer-to"
                   value={to}
                   onChange={(e) => setTo(e.target.value)}
-                  placeholder="02… or 03…"
+                  placeholder="02… or 03… (66 characters)"
                   spellCheck={false}
                   autoComplete="off"
                   className="w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 font-mono text-xs text-white placeholder:text-zinc-700 focus:border-amber-400/50 focus:outline-none"
                 />
                 {to.trim() !== "" && !recipientOk && (
                   <p className="text-xs text-red-400">
-                    That isn't an account key. An address (starting 1…) won't work — ask them for
-                    their account key.
+                    That isn't a public key. It starts 02 or 03 and is 66 characters. An address
+                    (starting 1…) won't work.
                   </p>
                 )}
+                {/* ⚠ NAMED EXPLICITLY BECAUSE "key" IS AMBIGUOUS AND ONE OF THE
+                    TWO MEANINGS LOSES THE WALLET. The first person to use this
+                    asked whether the field wanted a WIF. The format check would
+                    have refused it, but a user who believes a secret key belongs
+                    in a web form will eventually find a form that accepts one. */}
+                <p className="text-[11px] leading-relaxed text-zinc-600">
+                  A public key is safe to share. Never paste a secret key (starting K, L or 5) into
+                  this or any other website.
+                </p>
                 {sameOwner && <p className="text-xs text-red-400">That's your own account.</p>}
 
                 <label className="block text-xs text-zinc-500" htmlFor="transfer-confirm">
