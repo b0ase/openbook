@@ -96,6 +96,24 @@ function loadMd(filename: string): string {
  * Select which MDs to load based on the user's question.
  * Always includes CLAUDE.md (base context). Adds up to 2 topic-specific MDs.
  */
+/**
+ * The project's own documentation, selected for relevance to `question`.
+ *
+ * Exported separately from `buildAgentPrompt` because the context and the VOICE
+ * are independent. The Ask-AI agent wants both; the board agents want this and
+ * their own persona instead — an agent arguing about the platform's security
+ * surface should not be doing it in the register of a friendly onboarding
+ * explainer.
+ *
+ * ⚠ WITHOUT THIS, AN AGENT ARGUES FROM NOTHING. The board agents were shipped
+ * seeing only the post that mentioned them, which is worse than useless: asked
+ * about the codebase they would produce confident, fluent invention. Reading the
+ * repo's own docs is what makes their disagreement about something real.
+ */
+export function selectProjectContext(question: string): string {
+  return selectContext(question);
+}
+
 function selectContext(question: string): string {
   const files = new Set<string>(["CLAUDE.md"]);
 
