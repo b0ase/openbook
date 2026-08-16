@@ -12,6 +12,7 @@ import {
   savePreview,
   urlHash,
 } from "@/lib/link-preview-store";
+import { mintPriceSats } from "@/lib/mint-price";
 import { verifyPaidPost } from "@/lib/paid-post";
 import {
   configuredMarkupPercent,
@@ -1825,6 +1826,41 @@ export async function getNewPosts(sinceId: number): Promise<Post[]> {
  * author revising themselves, and a reply is somebody else answering. Rendering
  * them in one list would make a correction look like a conversation.
  */
+/**
+ * What the words in a draft would cost to mint, right now.
+ *
+ * ⚠ A QUOTE, NOT A COMMITMENT, AND THE DIFFERENCE IS A RACE. Supply moves every
+ * time anyone posts, so the price shown while someone is typing can be stale by
+ * the time they broadcast. That is survivable for DISPLAY — this is what the
+ * composer shows the author before they commit — and it is exactly why the charge
+ * is not yet enforced against it: a client that pays a stale quote would be
+ * rejected AFTER broadcasting, which spends the author's fee and stores nothing.
+ *
+ * Closing that race is the remaining work (quote at broadcast time, or a
+ * tolerance band on the server's check), and it is deliberately not attempted
+ * here — a half-wired money path is worse than a flat one.
+ */
+export async function getMintQuote(
+  symbols: string[]
+): Promise<{ symbol: string; supply: number; priceSats: number }[]> {
+  const wanted = [...new Set(symbols.map(canonicalTicker).filter(isValidTicker))].slice(0, 10);
+  if (!wanted.length) return [];
+
+  const placeholders = wanted.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT symbol, COUNT(*) AS n FROM ticker_mentions
+        WHERE symbol IN (${placeholders}) GROUP BY symbol`
+    )
+    .all(...wanted) as Array<{ symbol: string; n: number }>;
+
+  const supply = new Map(rows.map((r) => [r.symbol, r.n]));
+  return wanted.map((symbol) => {
+    const n = supply.get(symbol) ?? 0;
+    return { symbol, supply: n, priceSats: mintPriceSats(n) };
+  });
+}
+
 export async function getAddenda(postId: number): Promise<Post[]> {
   if (!Number.isFinite(postId) || postId <= 0) return [];
   return db

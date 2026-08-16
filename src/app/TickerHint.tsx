@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatShare } from "@/lib/share";
 import { distinctTickers, titleCaseTicker } from "@/lib/ticker";
-import { getTickerUsage, isReservedTicker, resolveTickers } from "./actions";
+import { getMintQuote, getTickerUsage, isReservedTicker, resolveTickers } from "./actions";
 
 /**
  * Live indicator under the compose box for any `$Ticker` being typed.
@@ -24,6 +24,8 @@ import { getTickerUsage, isReservedTicker, resolveTickers } from "./actions";
  */
 
 interface TickerState {
+  /** Cost to mint this word's next unit, in satoshis. Display only — see `getMintQuote`. */
+  priceSats?: number;
   symbol: string;
   claimed: boolean;
   /**
@@ -71,12 +73,19 @@ export function TickerHint({ content }: { content: string }) {
     // Debounced: this fires on every keystroke, and a lookup per character would
     // be a query storm for a hint.
     const t = setTimeout(async () => {
-      const [resolved, usage, reservedFlags] = await Promise.all([
+      const [resolved, usage, reservedFlags, quote] = await Promise.all([
         resolveTickers(symbols),
         getTickerUsage(symbols),
         // At most three, and only after the 350ms debounce — see above.
         Promise.all(symbols.map((s) => isReservedTicker(s))),
+        // ⚠ WHAT THIS POST WOULD COST TO MINT, shown BEFORE committing. Posting
+        // spends the author's own sats, and the price rises with a word's supply
+        // — so naming a heavily-used word costs more than naming a fresh one, and
+        // an author has every right to know that before they press post rather
+        // than after. Display only: the charge is still flat (see getMintQuote).
+        getMintQuote(symbols),
       ]);
+      const priceOf = new Map(quote.map((q) => [q.symbol, q.priceSats]));
       if (!live) return;
       setStates(
         symbols.map((symbol, i) => ({
@@ -84,6 +93,7 @@ export function TickerHint({ content }: { content: string }) {
           claimed: Boolean(resolved[symbol]),
           reserved: reservedFlags[i],
           threads: usage[symbol] ?? 0,
+          priceSats: priceOf.get(symbol),
         }))
       );
     }, 350);
@@ -114,6 +124,17 @@ export function TickerHint({ content }: { content: string }) {
                 className={`font-mono tabular-nums ${s.claimed ? "text-zinc-500" : "text-emerald-400"}`}
               >
                 {pct}
+              </span>
+            )}
+            {/* ⚠ THE PRICE OF NAMING THIS WORD, BEFORE COMMITTING. Posting spends
+                the author's own sats and the mint price rises with a word's
+                supply, so naming something heavily used costs more than naming
+                something fresh — which an author should learn before they press
+                post, not after. Reserved names mint nothing, so they show none.
+                Display only: the charge is still flat (see `getMintQuote`). */}
+            {!s.reserved && s.priceSats !== undefined && (
+              <span className="font-mono tabular-nums text-amber-500/70">
+                {s.priceSats.toLocaleString()} sats
               </span>
             )}
             <span className="text-zinc-500">

@@ -67,3 +67,34 @@ export function mintCostForRange(
   for (let i = 0; i < n; i++) total += mintPriceSats(start + i, base);
   return total;
 }
+
+/**
+ * What a post owes for the units it mints.
+ *
+ * ⚠ ONE UNIT PER TICKER PER POST, so the price is the SUM of each named word's
+ * next-unit price — not the highest, and not one price for the post. That
+ * follows from the schema rather than being a choice: `ticker_mentions` carries a
+ * partial unique index on `(post_id, symbol)`, so naming `$A` twice in one post
+ * mints one unit of `$A`, and naming `$A` and `$B` mints one of each. Charging a
+ * single price for a post that mints three units would let someone acquire the
+ * expensive words by burying them in a post about a cheap one.
+ *
+ * A post naming NO ticker mints nothing and owes nothing here — its cost is the
+ * ordinary inscription cost from `post-economics.ts`, which this does not
+ * replace but adds to.
+ *
+ * Pure, so the client that builds the transaction and the server that verifies it
+ * can reach the same number from the same inputs. They must: if they disagree the
+ * post is either rejected after the author has already broadcast, or accepted
+ * underpaid.
+ */
+export function quoteMintSats(
+  symbols: readonly string[],
+  supplyOf: (symbol: string) => number,
+  base = MINT_BASE_SATS
+): number {
+  // De-duplicated for the reason above: the schema mints one unit per symbol per
+  // post however many times it appears in the text.
+  const unique = [...new Set(symbols)];
+  return unique.reduce((total, sym) => total + mintPriceSats(supplyOf(sym), base), 0);
+}
