@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AppProviders } from "@/components/AppProviders";
 import { SiteNav } from "@/components/SiteNav";
 import { leaderboardHref, titleCaseTicker } from "@/lib/ticker";
 import { getServerAddress } from "@/services/bsv/wallet";
@@ -43,57 +44,59 @@ export default async function LeaderboardIndex() {
   const boards = await listTickerBoards();
 
   return (
-    <div className="min-h-[100dvh] bg-black text-white">
-      <SiteNav supportAddress={getServerAddress()} />
-      <div className="mx-auto w-full max-w-2xl px-4 py-6">
-        <h1 className="text-lg font-semibold tracking-tight">
-          <span className="text-amber-400">Leaderboards</span>
-        </h1>
-        <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
-          Every token and who holds it. One unit for every post that named it.
-        </p>
+    <AppProviders>
+      <div className="min-h-[100dvh] bg-black text-white">
+        <SiteNav supportAddress={getServerAddress()} />
+        <div className="mx-auto w-full max-w-2xl px-4 py-6">
+          <h1 className="text-lg font-semibold tracking-tight">
+            <span className="text-amber-400">Leaderboards</span>
+          </h1>
+          <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
+            Every token and who holds it. One unit for every post that named it.
+          </p>
 
-        <ol className="mt-5 divide-y divide-zinc-800/60">
-          {boards.map((b) => (
-            <li key={b.symbol}>
-              <a
-                href={leaderboardHref(b.path)}
-                className="flex items-baseline justify-between gap-3 py-3 hover:text-amber-300 transition-colors"
-              >
-                <span className="min-w-0 truncate">
-                  {/* Ancestry dimmed: it is context, the leaf is the subject —
+          <ol className="mt-5 divide-y divide-zinc-800/60">
+            {boards.map((b) => (
+              <li key={b.symbol}>
+                <a
+                  href={leaderboardHref(b.path)}
+                  className="flex items-baseline justify-between gap-3 py-3 hover:text-amber-300 transition-colors"
+                >
+                  <span className="min-w-0 truncate">
+                    {/* Ancestry dimmed: it is context, the leaf is the subject —
                       the same treatment the thread header and the board itself
                       give a path, so one name looks like itself everywhere. */}
-                  {b.path.slice(0, -1).map((seg) => (
-                    <span key={seg} className="text-zinc-600">
-                      ${titleCaseTicker(seg)}
-                      <span className="text-zinc-700">/</span>
-                    </span>
-                  ))}
-                  <span className="font-medium text-amber-400">${titleCaseTicker(b.symbol)}</span>
-                </span>
-                <span className="shrink-0 text-right font-mono text-[11px] tabular-nums text-zinc-500">
-                  {b.total} {b.total === 1 ? "unit" : "units"}
-                  <span className="text-zinc-700"> · </span>
-                  {/* Said plainly rather than shown as a percentage: a share of
+                    {b.path.slice(0, -1).map((seg) => (
+                      <span key={seg} className="text-zinc-600">
+                        ${titleCaseTicker(seg)}
+                        <span className="text-zinc-700">/</span>
+                      </span>
+                    ))}
+                    <span className="font-medium text-amber-400">${titleCaseTicker(b.symbol)}</span>
+                  </span>
+                  <span className="shrink-0 text-right font-mono text-[11px] tabular-nums text-zinc-500">
+                    {b.total} {b.total === 1 ? "unit" : "units"}
+                    <span className="text-zinc-700"> · </span>
+                    {/* Said plainly rather than shown as a percentage: a share of
                       what is only meaningful on the board itself, where the
                       unowned remainder is also on the page. */}
-                  {b.holders} {b.holders === 1 ? "holder" : "holders"}
-                </span>
-              </a>
-            </li>
-          ))}
-        </ol>
+                    {b.holders} {b.holders === 1 ? "holder" : "holders"}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ol>
 
-        <p className="mt-8 flex justify-center gap-4 text-[12px] text-zinc-600">
-          <a href="/tickers" className="hover:text-amber-400 transition-colors">
-            All names
-          </a>
-          <a href="/" className="hover:text-amber-400 transition-colors">
-            The board
-          </a>
-        </p>
+          <p className="mt-8 flex justify-center gap-4 text-[12px] text-zinc-600">
+            <a href="/tickers" className="hover:text-amber-400 transition-colors">
+              All names
+            </a>
+            <a href="/" className="hover:text-amber-400 transition-colors">
+              The board
+            </a>
+          </p>
+        </div>
       </div>
-    </div>
+    </AppProviders>
   );
 }

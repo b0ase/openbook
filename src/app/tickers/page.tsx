@@ -1,47 +1,19 @@
-import type { Metadata } from "next";
-import { SiteNav } from "@/components/SiteNav";
-import { siteOrigin } from "@/lib/site-origin";
-import { getServerAddress } from "@/services/bsv/wallet";
-import { listTickers } from "../actions";
-import { TickerDirectory } from "./TickerDirectory";
+import { permanentRedirect } from "next/navigation";
 
 /**
- * The index: every claimed name, ranked by economic weight.
+ * `/tickers` is now `/market`.
  *
- * ⚠ A STATIC ROUTE, WHICH IS WHY IT WORKS. `[...ticker]` is a catch-all that
- * would otherwise swallow `/tickers`; a literal segment takes precedence over a
- * catch-all in the App Router, so this resolves here rather than being read as a
- * (malformed) ticker path.
+ * ⚠ A REDIRECT, NOT A DELETED PAGE. This URL is in the wild — it is linked from
+ * `SiteNav`, from posts, and from anywhere anyone has shared the index. The board
+ * is built on the idea that what you post is permanent, so quietly 404ing a URL
+ * it printed is the wrong shape of change even for our own pages.
  *
- * ⚠ SERVER-RENDERED WITH ITS RESULTS ALREADY IN THE HTML. The whole argument for
- * this page (DIRECTION.md — a ranking signal that costs money) depends on the
- * outside world being able to READ the index. A directory that only appears after
- * hydration is invisible to exactly the crawlers and agents it exists to reach.
+ * `permanentRedirect` (308) rather than a temporary one: the index has genuinely
+ * moved, and telling crawlers so is what stops the old URL competing with the new
+ * one in an index the whole page exists to reach.
  *
- * ⚠ STILL BEHIND `ALLOW_INDEXING`. The root layout emits `noindex` until that env
- * var is set, so this page is crawlable in structure but not yet in policy. That
- * is correct for a quiet launch and must be flipped at go-public — an index
- * nobody may index is a contradiction, and it is recorded as one in DIRECTION.md.
+ * The page itself lives in `app/market/page.tsx`; there is no second copy here.
  */
-export const revalidate = 30;
-
-export const metadata: Metadata = {
-  title: "Index — $OpenBooks",
-  description:
-    "Every name claimed on $OpenBooks, ranked by how many posts named it. Attention someone paid for, not a number inferred.",
-  openGraph: {
-    title: "Index — $OpenBooks",
-    description: "Every name claimed on $OpenBooks, ranked by weight.",
-    images: [`${siteOrigin()}/og-openbooks.jpg`],
-  },
-};
-
-export default async function TickersPage() {
-  const tickers = await listTickers();
-  return (
-    <div className="min-h-[100dvh] bg-black text-white">
-      <SiteNav supportAddress={getServerAddress()} />
-      <TickerDirectory initial={tickers} />
-    </div>
-  );
+export default function TickersPage(): never {
+  permanentRedirect("/market");
 }

@@ -22,6 +22,7 @@ import { readCachedNym } from "@/lib/nym-cache";
 // `useEffect` here would land too late and the user would see their read
 // position, permanence acknowledgement and backup flag all reset for one paint.
 import "@/lib/storage-keys";
+import { BottomNav } from "@/components/BottomNav";
 import { extractUrls } from "@/lib/link-preview";
 import { storedNameFromUrl } from "@/lib/media";
 import {
@@ -998,6 +999,18 @@ function FeedContent({
           </div>
         </div>
       </div>
+
+      {/* ⚠ THE TAB BAR SITS BELOW THE COMPOSER, NOT OVER IT. This is the one
+          screen where bChat's layout does not transplant cleanly: bChat composes
+          inside a tab, whereas this board pins a composer to the bottom of the
+          feed permanently. Stacking them is the trade — a little more fixed
+          chrome on a phone, in exchange for posting staying one tap from the
+          feed, which is the product.
+
+          It is inside the feed's own flex column rather than fixed, so the
+          scroll area ends above it and content structurally cannot slip behind.
+          The toasts pinned at `bottom-24` clear both. */}
+      <BottomNav inFlow />
 
       {/* Fund address modal */}
       {showFundModal && userAddress && (

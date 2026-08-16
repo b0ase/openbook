@@ -14,8 +14,19 @@ const SUGGESTED = [
   "How do I post?",
 ];
 
-export function AgentChat({ highlight }: { highlight?: boolean }) {
-  const [open, setOpen] = useState(false);
+export function AgentChat({
+  highlight,
+  openOnMount = false,
+}: {
+  highlight?: boolean;
+  /**
+   * Start with the chat already open — for the Agent TAB, where the agent is the
+   * destination rather than a pill in the compose row. Closing returns to the
+   * pill, which is the same control it is everywhere else.
+   */
+  openOnMount?: boolean;
+}) {
+  const [open, setOpen] = useState(openOnMount);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);

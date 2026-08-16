@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { AppProviders } from "@/components/AppProviders";
 import { SiteNav } from "@/components/SiteNav";
 import { formatShare } from "@/lib/share";
 import { siteOrigin } from "@/lib/site-origin";
@@ -60,81 +61,85 @@ export default async function LeaderboardPage({ params }: Params) {
   const threadHref = tickerHref(board.path);
 
   return (
-    <div className="min-h-[100dvh] bg-black text-white">
-      <SiteNav supportAddress={getServerAddress()} />
-      <div className="mx-auto w-full max-w-2xl px-4 py-6">
-        <h1 className="text-lg font-semibold tracking-tight">
-          {board.path.slice(0, -1).map((seg) => (
-            <span key={seg} className="text-zinc-600">
-              ${titleCaseTicker(seg)}
-              <span className="text-zinc-700">/</span>
-            </span>
-          ))}
-          <span className="text-amber-400">${titleCaseTicker(board.symbol)}</span>
-          <span className="text-zinc-500"> holders</span>
-        </h1>
+    <AppProviders>
+      <div className="min-h-[100dvh] bg-black text-white">
+        <SiteNav supportAddress={getServerAddress()} />
+        <div className="mx-auto w-full max-w-2xl px-4 py-6">
+          <h1 className="text-lg font-semibold tracking-tight">
+            {board.path.slice(0, -1).map((seg) => (
+              <span key={seg} className="text-zinc-600">
+                ${titleCaseTicker(seg)}
+                <span className="text-zinc-700">/</span>
+              </span>
+            ))}
+            <span className="text-amber-400">${titleCaseTicker(board.symbol)}</span>
+            <span className="text-zinc-500"> holders</span>
+          </h1>
 
-        <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
-          {board.total} {board.total === 1 ? "unit" : "units"} issued &mdash; one for every post
-          that named it. Largest holder first.
-        </p>
-
-        {board.holders.length === 0 ? (
-          <p className="py-12 text-center text-sm text-zinc-600">
-            No unit of this name has an owner yet.
+          <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
+            {board.total} {board.total === 1 ? "unit" : "units"} issued &mdash; one for every post
+            that named it. Largest holder first.
           </p>
-        ) : (
-          <ol className="mt-5 divide-y divide-zinc-800/60">
-            {board.holders.map((h, i) => (
-              <li key={h.pubkey} className="flex items-baseline justify-between gap-3 py-3">
-                <span className="flex min-w-0 items-baseline gap-3">
-                  <span className="w-6 shrink-0 font-mono text-[11px] tabular-nums text-zinc-600">
-                    {i + 1}
-                  </span>
-                  {/* A claimed name identifies its holder; without one the
+
+          {board.holders.length === 0 ? (
+            <p className="py-12 text-center text-sm text-zinc-600">
+              No unit of this name has an owner yet.
+            </p>
+          ) : (
+            <ol className="mt-5 divide-y divide-zinc-800/60">
+              {board.holders.map((h, i) => (
+                <li key={h.pubkey} className="flex items-baseline justify-between gap-3 py-3">
+                  <span className="flex min-w-0 items-baseline gap-3">
+                    <span className="w-6 shrink-0 font-mono text-[11px] tabular-nums text-zinc-600">
+                      {i + 1}
+                    </span>
+                    {/* A claimed name identifies its holder; without one the
                       pubkey is the only honest identifier there is, truncated
                       because it is unreadable by nature. */}
-                  {h.nym ? (
-                    <span className="truncate font-medium text-amber-400">
-                      ${titleCaseTicker(h.nym)}
-                    </span>
-                  ) : (
-                    <span className="truncate font-mono text-[12px] text-zinc-500">
-                      {h.pubkey.slice(0, 10)}&hellip;{h.pubkey.slice(-4)}
-                    </span>
-                  )}
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="block font-mono text-sm tabular-nums text-white">{h.units}</span>
-                  <span className="block font-mono text-[10px] tabular-nums text-zinc-600">
-                    {formatShare(h.units, board.total)}
+                    {h.nym ? (
+                      <span className="truncate font-medium text-amber-400">
+                        ${titleCaseTicker(h.nym)}
+                      </span>
+                    ) : (
+                      <span className="truncate font-mono text-[12px] text-zinc-500">
+                        {h.pubkey.slice(0, 10)}&hellip;{h.pubkey.slice(-4)}
+                      </span>
+                    )}
                   </span>
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
+                  <span className="shrink-0 text-right">
+                    <span className="block font-mono text-sm tabular-nums text-white">
+                      {h.units}
+                    </span>
+                    <span className="block font-mono text-[10px] tabular-nums text-zinc-600">
+                      {formatShare(h.units, board.total)}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
 
-        {/* ⚠ Stated, not hidden. Genesis posts carry no pubkey, so their units
+          {/* ⚠ Stated, not hidden. Genesis posts carry no pubkey, so their units
             have no owner — and without this line the listed shares would fail
             to add up to 100% with no explanation on the page. */}
-        {unowned > 0 && (
-          <p className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-[11px] leading-relaxed text-zinc-500">
-            {unowned} {unowned === 1 ? "unit has" : "units have"} no owner &mdash;{" "}
-            {formatShare(unowned, board.total)} of the supply. These came from posts written before
-            signing, so there is nobody to credit them to.
-          </p>
-        )}
+          {unowned > 0 && (
+            <p className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-[11px] leading-relaxed text-zinc-500">
+              {unowned} {unowned === 1 ? "unit has" : "units have"} no owner &mdash;{" "}
+              {formatShare(unowned, board.total)} of the supply. These came from posts written
+              before signing, so there is nobody to credit them to.
+            </p>
+          )}
 
-        <p className="mt-8 flex justify-center gap-4 text-[12px] text-zinc-600">
-          <a href={threadHref} className="hover:text-amber-400 transition-colors">
-            Open the thread
-          </a>
-          <a href="/tickers" className="hover:text-amber-400 transition-colors">
-            All names
-          </a>
-        </p>
+          <p className="mt-8 flex justify-center gap-4 text-[12px] text-zinc-600">
+            <a href={threadHref} className="hover:text-amber-400 transition-colors">
+              Open the thread
+            </a>
+            <a href="/tickers" className="hover:text-amber-400 transition-colors">
+              All names
+            </a>
+          </p>
+        </div>
       </div>
-    </div>
+    </AppProviders>
   );
 }

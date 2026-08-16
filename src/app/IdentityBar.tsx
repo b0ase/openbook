@@ -58,6 +58,7 @@ function suppressPassphraseNudge(): void {
 
 export function IdentityChip({
   onOpenThread,
+  openOnMount = false,
 }: {
   /**
    * Open a token's thread. Optional so a surface that has nowhere to put a
@@ -65,6 +66,17 @@ export function IdentityChip({
    * render a control that does nothing.
    */
   onOpenThread?: (rootId: number) => void;
+  /**
+   * Start with the wallet already open.
+   *
+   * For the Wallet TAB, where the wallet is the destination rather than
+   * something reached from a chip in a corner. Everything inside — balance,
+   * earnings, deposit, backup, passphrase — already lives in this one component,
+   * so the tab opens it rather than growing a second implementation that would
+   * drift from this one. It stays closable: closing returns the page to the chip,
+   * which is the same control it would have been anywhere else.
+   */
+  openOnMount?: boolean;
 } = {}): React.JSX.Element | null {
   const {
     identity,
@@ -80,7 +92,7 @@ export function IdentityChip({
     unblockSessionClear,
   } = useIdentityContext();
   const installCtx = useInstallContext();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(openOnMount);
 
   // Security state
   const [isProtected, setIsProtected] = useState(false);

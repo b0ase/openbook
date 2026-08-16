@@ -1134,6 +1134,42 @@ export async function listTickers(limit = 100): Promise<TickerHit[]> {
  * uploads made before provenance existed have no name, and the card falls back
  * to its generic label rather than showing a hash.
  */
+/**
+ * Threads this identity is part of — the "Threads" tab.
+ *
+ * ⚠ NOT "MY POSTS". A thread you are in is one you STARTED and somebody answered,
+ * or one you REPLIED IN, whoever began it. Listing only your own roots would hide
+ * every conversation you joined, which is most of them once agents are answering;
+ * listing every post you ever made would just be the feed with a filter.
+ *
+ * Ordered by the thread's most recent activity rather than by when it started, so
+ * a conversation that came back to life returns to the top. That is the ordering
+ * every messaging surface uses, and the reason it is right here is the same: the
+ * question this tab answers is "what has moved", not "what did I write once".
+ *
+ * Roots only — the row shows the thread, and `latest_reply_*` already rides
+ * `POST_SELECT`, so the preview costs no extra query.
+ */
+export async function getMyThreads(pubkey: string, limit = 50): Promise<Post[]> {
+  if (!pubkey) return [];
+  const capped = Math.min(Math.max(1, limit), 100);
+  return db
+    .prepare(
+      `${POST_SELECT}
+       WHERE p.parent_id IS NULL
+         AND p.id IN (
+           -- threads I started that somebody answered, and threads I replied in
+           SELECT COALESCE(root_id, id) FROM posts WHERE pubkey = ?
+         )
+       ORDER BY COALESCE(
+         (SELECT MAX(r.id) FROM posts r WHERE r.root_id = p.id AND r.parent_id IS NOT NULL),
+         p.id
+       ) DESC
+       LIMIT ?`
+    )
+    .all(pubkey, capped) as Post[];
+}
+
 export async function getAttachmentNames(names: string[]): Promise<Record<string, string>> {
   const wanted = [...new Set(names)].filter((n) => parseStoredName(n) !== null).slice(0, 200);
   if (!wanted.length) return {};
