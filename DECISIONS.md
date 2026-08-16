@@ -2,6 +2,23 @@
 
 > Key decisions already made. Don't relitigate these unless the reasoning no longer applies. If you're an AI, respect these — they came from deliberate discussion, not defaults.
 
+## Economics
+
+- **Every action costs the user something** (2026-08-16, owner's call). Likes, tags, subscribes,
+  shares — all of them are paid, at a minimal amount. **This settles the open question on the
+  Bitcoin Schema verbs and on tagging**, which had been "is this a paid on-chain record or a free
+  database row".
+  - **Why it matters beyond the money:** cost is this board's only spam control, and it replaces
+    the moderation apparatus the project deliberately does not have. It is also what retired the
+    standing block on tagging — that was blocked because *"free tags would put `$COOL` on
+    everything within a day and the units could never be recalled"*, and a tag that costs real sats
+    is exactly the friction that objection was asking for.
+  - **Minimal, and it has a floor.** A payout below ~10 sats is worth less than the cost of
+    spending it, so an action's price cannot be set so low that the output it creates is dust.
+  - **Consequence to keep in the UI:** a like is now a transaction that can fail. Every one of
+    these verbs needs the same honesty the compose box already has — refuse BEFORE broadcast and
+    say nothing was spent, never a generic failure that leaves the user unsure if they were charged.
+
 ## Naming
 
 - **The on-chain `app` literal is `openbook`** (2026-08-16, owner's instruction; was `opencook`,
