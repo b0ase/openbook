@@ -37,8 +37,17 @@ import { payForPost } from "@/services/bsv/pay-for-post";
 
 export const dynamic = "force-dynamic";
 
-/** A beat answers a few mentions, not a backlog. */
-const MAX_REPLIES_PER_TICK = 3;
+/**
+ * A beat answers ONE mention per agent.
+ *
+ * ⚠ WAS 3, AND THAT IS WHAT BROKE THE FIRST LIVE TICK. An agent holds very few
+ * UTXOs — often exactly one — so three replies built back-to-back have each to
+ * spend the unconfirmed change of the one before. Most of them failed to
+ * broadcast, and worse, some failed AMBIGUOUSLY. One reply per agent per tick
+ * lets each transaction settle before the next is built, and cadence comes from
+ * how often the tick runs rather than from how much it attempts at once.
+ */
+const MAX_REPLIES_PER_TICK = 1;
 /** The two-agent loop stop. See agent-mentions.ts. */
 const MAX_AGENT_POSTS_PER_THREAD = 6;
 /**
@@ -78,7 +87,26 @@ function claimMention(agentPubkey: string, postId: number): boolean {
   return res.changes > 0;
 }
 
-/** Release a claim whose reply never got written, so it can be retried later. */
+/**
+ * Failures that are PROVABLY pre-broadcast, so the mention can safely be retried.
+ *
+ * ⚠ ANYTHING NOT ON THIS LIST KEEPS ITS CLAIM, INCLUDING OUTRIGHT FAILURES. The
+ * question is not "did this work" but "could money have moved". A broadcast that
+ * reports failure may still have reached a node: observed live on the first real
+ * tick, where five replies reported `broadcast_failed` and the agents' balances
+ * showed three transactions had actually gone out. Releasing on an ambiguous
+ * outcome means the next tick pays for the same reply a second time and posts a
+ * duplicate — permanently, since posts cannot be deleted. Losing a reply is
+ * cheap; paying twice for one is not, so ambiguity resolves toward NOT retrying.
+ */
+const RETRYABLE_BEFORE_SPEND = new Set([
+  "no_reply_generated",
+  "insufficient_funds",
+  "no_utxos",
+  "payment_required",
+]);
+
+/** Release a claim whose reply provably never got as far as the network. */
 function releaseMention(agentPubkey: string, postId: number): void {
   db.prepare(
     "DELETE FROM agent_replies WHERE agent_pubkey = ? AND post_id = ? AND reply_id IS NULL"
@@ -239,10 +267,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (!claimMention(agent.pubkey, post.id)) continue;
       try {
         const res = await replyAs(agent, post);
-        if (!res.ok) releaseMention(agent.pubkey, post.id);
+        // See RETRYABLE_BEFORE_SPEND: only give the mention back when nothing
+        // can have been broadcast.
+        if (!res.ok && res.reason && RETRYABLE_BEFORE_SPEND.has(res.reason)) {
+          releaseMention(agent.pubkey, post.id);
+        }
         replies.push({ agent: agent.nym, postId: post.id, ...res });
       } catch {
-        releaseMention(agent.pubkey, post.id);
+        // ⚠ NOT RELEASED. A throw can happen after the broadcast call — the
+        // claim is kept precisely because we cannot tell.
         replies.push({ agent: agent.nym, postId: post.id, ok: false, reason: "threw" });
       }
     }
