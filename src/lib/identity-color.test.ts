@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { identityColor, identityHue, identityLightness, identityTextColor } from "./identity-color";
+import {
+  identityColor,
+  identityHue,
+  identitySaturation,
+  identityTextColor,
+} from "./identity-color";
 
 /** The bands that carry meaning elsewhere in the UI, and their tolerance. */
 const RESERVED: Array<[string, number, number]> = [
@@ -7,6 +12,35 @@ const RESERVED: Array<[string, number, number]> = [
   ["amber / claimed name", 38, 14],
   ["emerald / signed + on chain", 152, 14],
 ];
+
+/** The page these colours are read against — bg-black / near-black zinc. */
+const PAGE_BG = 0x0a / 255;
+
+/** hsl(h s% l%) → [r,g,b] in 0..1. */
+function hslToRgb(css: string): [number, number, number] {
+  const [h, s, l] = (css.match(/hsl\((\d+) (\d+)% (\d+)%\)/) as RegExpMatchArray)
+    .slice(1)
+    .map(Number);
+  const S = s / 100;
+  const L = l / 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = S * Math.min(L, 1 - L);
+  const f = (n: number) => L - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return [f(0), f(8), f(4)];
+}
+
+/** WCAG relative luminance. */
+function luminance(rgb: number[]): number {
+  const [r, g, b] = rgb.map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio of a colour against the page background. */
+function contrastOnPage(css: string): number {
+  const fg = luminance(hslToRgb(css));
+  const bg = luminance([PAGE_BG, PAGE_BG, PAGE_BG]);
+  return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+}
 
 /** Circular distance between two hues in degrees. */
 function hueGap(a: number, b: number): number {
@@ -67,13 +101,26 @@ describe("identityColor", () => {
     const a = "026ba10b1c3a01eb12338f767f80ccb7a1e67bf301d9285f6569c67ea52d1b125b";
     const b = "03d0d892582c01d31eac7500fc1d32f3d26becfa8a3dd50fd6b33f9f0e2908ad12";
     const differs =
-      hueGap(identityHue(a), identityHue(b)) >= 28 || identityLightness(a) !== identityLightness(b);
+      hueGap(identityHue(a), identityHue(b)) >= 28 ||
+      identitySaturation(a) !== identitySaturation(b);
     expect(differs).toBe(true);
   });
 
-  it("uses lightness as a second axis, so hue count is not the bucket count", () => {
+  // WCAG contrast against the page. This is the test that would have caught
+  // $B0ase shipping at rgb(73,47,238) — 2.75:1 — when lightness varied per hue.
+  it.each(
+    Array.from({ length: 200 }, (_, i) => `contrast-seed-${i}`)
+  )("keeps %s readable on the near-black page", (seed) => {
+    expect(contrastOnPage(identityColor(seed))).toBeGreaterThanOrEqual(4.5);
+    expect(contrastOnPage(identityTextColor(seed))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("uses saturation as a second axis, so hue count is not the bucket count", () => {
     const buckets = new Set(
-      Array.from({ length: 600 }, (_, i) => `${identityHue(`k${i}`)}/${identityLightness(`k${i}`)}`)
+      Array.from(
+        { length: 600 },
+        (_, i) => `${identityHue(`k${i}`)}/${identitySaturation(`k${i}`)}`
+      )
     );
     const hues = new Set(Array.from({ length: 600 }, (_, i) => identityHue(`k${i}`)));
     expect(buckets.size).toBeGreaterThan(hues.size);
