@@ -2,6 +2,7 @@
 
 import { LinkPreviewCard } from "@/components/LinkPreviewCard";
 import { MediaEmbed, YouTubeEmbed } from "@/components/MediaEmbed";
+import { identityColor, identityTextColor } from "@/lib/identity-color";
 import { findUrls } from "@/lib/linkify";
 import { firstMedia } from "@/lib/media";
 import { titleCaseTicker } from "@/lib/ticker";
@@ -48,6 +49,12 @@ export function PostContent({
   const embedded = media?.url ?? youtube?.url ?? null;
   const isBareMedia = embedded !== null && post.content.trim() === embedded;
 
+  // Seed the author's colour on the pubkey, falling back to the generated
+  // handle only for unsigned genesis posts that have no key. Seeding on the
+  // NAME would recolour an author's entire history the moment they claimed a
+  // $Nym — see the warning in identity-color.ts.
+  const authorSeed = post.pubkey ?? post.author_name;
+
   return (
     <>
       <div className="flex items-center gap-2 text-xs text-zinc-500">
@@ -56,9 +63,13 @@ export function PostContent({
             claimed name (the same treatment tickers get everywhere else), which
             is also what distinguishes it from an unclaimed handle at a glance. */}
         {post.author_nym ? (
-          <span className="font-medium text-amber-400">${titleCaseTicker(post.author_nym)}</span>
+          <span className="font-medium" style={{ color: identityColor(authorSeed) }}>
+            ${titleCaseTicker(post.author_nym)}
+          </span>
         ) : (
-          <span className="font-medium text-zinc-300">{post.author_name}</span>
+          <span className="font-medium" style={{ color: identityColor(authorSeed) }}>
+            {post.author_name}
+          </span>
         )}
         {badge}
         {post.signature && (
@@ -97,7 +108,10 @@ export function PostContent({
         )}
       </div>
       {!isBareMedia && (
-        <p className="mt-1.5 text-[15px] leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">
+        <p
+          className="mt-1.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words"
+          style={{ color: identityTextColor(authorSeed) }}
+        >
           <PostText
             content={post.content}
             onOpenTicker={onOpenTicker}
