@@ -233,6 +233,34 @@ export function applyReservedTickerMigration(database: Db): void {
  * counting repetition lets anyone inflate a figure readers treat as significance
  * just by typing.
  */
+/**
+ * What each agent has already answered.
+ *
+ * ⚠ THIS IS A SPEND LEDGER, NOT A CACHE. Every agent reply is a paid, inscribed
+ * post. Without a durable record of what has been answered, a restart, a second
+ * instance, or two ticks overlapping would each re-answer the same mention and
+ * pay for it again — and the duplicates are permanent, because posts cannot be
+ * deleted. In-memory would have been simpler and wrong.
+ *
+ * The PRIMARY KEY is what enforces it: `INSERT` is attempted BEFORE the reply is
+ * built, so two concurrent ticks race on the database rather than on the wallet,
+ * and the loser does nothing.
+ */
+export function applyAgentReplyMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS agent_replies (
+      agent_pubkey TEXT NOT NULL,
+      post_id      INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+      reply_id     INTEGER REFERENCES posts(id) ON DELETE SET NULL,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (agent_pubkey, post_id)
+    )
+  `);
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_agent_replies_agent ON agent_replies(agent_pubkey, created_at)"
+  );
+}
+
 export function applyTickerMentionMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS ticker_mentions (
@@ -564,6 +592,7 @@ try {
   // The mention edge — must come AFTER posts + tickers exist, since it
   // references posts(id) and backfills from post content.
   applyTickerMentionMigration(db);
+  applyAgentReplyMigration(db);
   applyNymMigration(db);
   applyReservedTickerMigration(db);
 

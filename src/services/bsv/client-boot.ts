@@ -143,6 +143,26 @@ export function isSpendableUtxo(value: number): boolean {
   return value > INSCRIPTION_SATS;
 }
 
+/**
+ * Resolve an in-app API path for whichever runtime is calling.
+ *
+ * ⚠ A RELATIVE URL IS NOT PORTABLE. These builders were written for the browser,
+ * where `/api/unspent` resolves against the page. Node has no base URL, so the
+ * same call throws — which is what stood between this money path and the agent
+ * runtime, since an autonomous agent builds and funds its own posts on the
+ * server. Making the URL absolute there is the entire change: the alternative
+ * was a second server-side transaction builder, and a forked money path is
+ * exactly the mistake that left NymModal unable to pay.
+ *
+ * `site-origin` is imported lazily so nothing server-only is pulled into the
+ * client bundle.
+ */
+async function apiUrl(path: string): Promise<string> {
+  if (typeof window !== "undefined") return path;
+  const { siteOrigin } = await import("@/lib/site-origin");
+  return `${siteOrigin()}${path}`;
+}
+
 export async function fetchUtxos(address: string, neededSats?: number): Promise<ClientUtxo[]> {
   // If pending change covers our needs, skip the WoC fetch entirely
   if (neededSats !== undefined && _pendingChange.length > 0) {
@@ -152,7 +172,7 @@ export async function fetchUtxos(address: string, neededSats?: number): Promise<
     }
   }
 
-  const res = await fetch(`/api/unspent?address=${address}&fresh=1`);
+  const res = await fetch(await apiUrl(`/api/unspent?address=${address}&fresh=1`));
   if (!res.ok) {
     throw new Error(`UTXO fetch failed: ${res.status} ${res.statusText}`);
   }
@@ -209,7 +229,7 @@ export async function fetchUtxos(address: string, neededSats?: number): Promise<
 
 export async function fetchSourceTxHex(txHash: string): Promise<string> {
   // Proxy through our server to avoid CORS on WoC /tx/hex endpoint
-  const res = await fetch(`/api/tx-hex?txid=${txHash}`);
+  const res = await fetch(await apiUrl(`/api/tx-hex?txid=${txHash}`));
   if (!res.ok) {
     throw new Error(`Source tx fetch failed for ${txHash}: ${res.status}`);
   }
