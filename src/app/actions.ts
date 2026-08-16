@@ -18,6 +18,7 @@ import {
   isPaidPostingEnabled,
   minimumPlatformSats,
 } from "@/lib/post-economics";
+import { MAX_POST_CHARS } from "@/lib/post-length";
 import { rateLimit } from "@/lib/rate-limit";
 import {
   FREE_BOOT_COST_SATS,
@@ -100,7 +101,9 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   const content = formData.get("content");
   if (typeof content !== "string" || content.trim().length === 0)
     return { ok: false, reason: "bad_input" };
-  if (content.length > 1000) return { ok: false, reason: "bad_input" };
+  // Not a length limit — see `post-length.ts`. Paid posting prices length;
+  // this only stops a script writing a novel into every feed poll.
+  if (content.length > MAX_POST_CHARS) return { ok: false, reason: "bad_input" };
 
   const author = formData.get("author");
   const authorName =

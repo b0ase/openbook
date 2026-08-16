@@ -8,6 +8,7 @@ import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useMediaUpload } from "@/hooks/useMediaUpload";
 import { useVoiceToText } from "@/hooks/useVoiceToText";
 import { type AgentTurn, appendTurn, formatTranscript, hashTurn } from "@/lib/agent-record";
+import { MAX_POST_CHARS } from "@/lib/post-length";
 import { parseSlashCommand } from "@/lib/slash";
 import { ACCEPTED_MIME } from "@/lib/upload";
 import { createPost, getPostingMode } from "./actions";
@@ -574,7 +575,7 @@ export function PostForm({
               ? "Setting up your identity..."
               : (placeholder ?? "Share an idea...")
           }
-          maxLength={1000}
+          maxLength={MAX_POST_CHARS}
           disabled={!identity && !needsUnlock}
           onKeyDown={handleKeyDown}
           className={`block w-full bg-zinc-900 border rounded-3xl pl-12 pr-14 py-3 sm:pl-13 sm:py-4 text-sm sm:text-base resize-none focus:outline-none placeholder:text-zinc-600 min-h-[48px] sm:min-h-[56px] max-h-[200px] disabled:opacity-50 scrollbar-hide ${

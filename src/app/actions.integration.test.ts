@@ -11,6 +11,7 @@
 
 import { PrivateKey } from "@bsv/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MAX_POST_CHARS } from "@/lib/post-length";
 
 // ── Module mocks (must be declared before imports that use them) ─────────────
 
@@ -139,9 +140,22 @@ describe("createPost — integration", () => {
     expect(result.reason).toBe("bad_input");
   });
 
-  it("bad_input: content over 1000 chars returns bad_input", async () => {
-    const longContent = "x".repeat(1001);
-    const { fd } = await makeSignedFormData(longContent);
+  /**
+   * ⚠ THE 1,000-CHARACTER LIMIT WAS REMOVED ON PURPOSE (owner, 2026-08-16), so
+   * this pair replaces a test that asserted it. Posting is paid and priced by
+   * size, so length polices itself with the author's own money. What remains is
+   * an ABUSE ceiling, and it is still asserted — every post is re-sent to every
+   * client on every feed poll, so an unbounded body is a bill everyone pays.
+   */
+  it("accepts a post far longer than the old 1,000-character limit", async () => {
+    const { fd } = await makeSignedFormData("x".repeat(5_000));
+
+    const result = await createPost(fd);
+    expect(result.ok).toBe(true);
+  });
+
+  it("bad_input: content above the abuse ceiling is still refused", async () => {
+    const { fd } = await makeSignedFormData("x".repeat(MAX_POST_CHARS + 1));
 
     const result = await createPost(fd);
     expect(result.ok).toBe(false);

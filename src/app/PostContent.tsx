@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { LinkPreviewCard } from "@/components/LinkPreviewCard";
 import { MediaEmbed, YouTubeEmbed } from "@/components/MediaEmbed";
 import { identityColor, identityTextColor } from "@/lib/identity-color";
 import { findUrls } from "@/lib/linkify";
 import { firstMedia, storedNameFromUrl } from "@/lib/media";
+import { shouldFold } from "@/lib/post-length";
 import { titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import { firstYouTube } from "@/lib/youtube";
@@ -45,6 +47,18 @@ export function PostContent({
    */
   attachmentNames?: Record<string, string>;
 }) {
+  /**
+   * Long posts fold in the feed.
+   *
+   * There is no length LIMIT any more (posting is paid and priced by size — see
+   * `post-length.ts`), which makes very long posts possible and therefore makes
+   * folding necessary: one of them between two short posts hides everything
+   * after it, so the fold protects OTHER people's posts more than the reader.
+   */
+  const expandable = shouldFold(post.content);
+  const [expanded, setExpanded] = useState(false);
+  const folded = expandable && !expanded;
+
   const urls = findUrls(post.content).map((u) => u.url);
   const media = firstMedia(urls);
   // A YouTube link has no file extension, so it is invisible to `firstMedia`
@@ -118,16 +132,37 @@ export function PostContent({
         )}
       </div>
       {!isBareMedia && (
-        <p
-          className="mt-1.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words"
-          style={{ color: identityTextColor(authorSeed) }}
-        >
-          <PostText
-            content={post.content}
-            onOpenTicker={onOpenTicker}
-            tickerSupply={tickerSupply}
-          />
-        </p>
+        <>
+          <p
+            className={`mt-1.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words ${
+              folded ? "line-clamp-[12]" : ""
+            }`}
+            style={{ color: identityTextColor(authorSeed) }}
+          >
+            <PostText
+              content={post.content}
+              onOpenTicker={onOpenTicker}
+              tickerSupply={tickerSupply}
+            />
+          </p>
+          {/* ⚠ CLAMPED, NOT TRUNCATED. The whole text stays in the DOM and only
+              its height is capped, so Find-in-page, screen readers, copy-paste
+              and selection all still reach the words a reader paid to have kept
+              forever. Slicing the string would make the feed quietly disagree
+              with what is on-chain.
+
+              A `<button>`, which `PostList`'s row-click guard already treats as
+              interactive — so expanding a post cannot also open its thread. */}
+          {expandable && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="mt-1 text-[12px] text-zinc-500 underline underline-offset-2 transition-colors hover:text-zinc-300"
+            >
+              {folded ? "Show more" : "Show less"}
+            </button>
+          )}
+        </>
       )}
       {/* A direct media link is SHOWN; anything else falls through to the unfurl
           card. Both never render for the same post — a media file is not HTML, so

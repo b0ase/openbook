@@ -41,7 +41,7 @@ User's share = their weight / total weight of all contributors
 | Active window | 30 days | "Active contributor" = distinct pubkey with **≥3 posts** in the last 30 days (`minPostsForPricing: 3`; used by dynamic pricing) | tunable |
 | Free boots per user | 15 | Each new account gets 15 floor-priced boots before self-funding kicks in | tunable |
 
-All parameters are exposed for the fairness agent to adjust in later phases. They are the governance surface — the agent tunes knobs, it doesn't rewrite the formula.
+All parameters are exposed for governance to adjust in later phases. They are the governance surface — the agent tunes knobs, it doesn't rewrite the formula.
 
 **Implementation note:** the contributor pool 80% is currently DERIVED in `split.ts` as `bootFeeSats - platformSats - bonusSats` — the `poolShare: 0.8` field in `FAIRNESS_CONFIG` is documented for clarity but not actually read by code. Treat the table value as the documented intent; the source of truth is the platformCut + creatorBonus subtraction. Rounding dust from the pool floor() is added to the creator's bonus payout so every sat of the boot is accounted for in the same tx.
 
@@ -248,3 +248,24 @@ Do you get it, anon?
 ### Still open
 
 - **Genesis contributors**: Should the founding conversation participants get a permanent base weight, or do they enter the decay curve like everyone else? Currently they enter the decay curve.
+
+## "Fairness agent" was a misnomer, and the term is retired (owner, 2026-08-16)
+
+The phrase appeared in DIRECTION.md, DECISIONS.md, this file and the agent's own
+suggested questions. It has been removed from every user-facing surface and from the
+living docs.
+
+**Two things were wrong with it.** There is no *agent* — the split is arithmetic in
+`services/fairness/split.ts`, executed in one transaction, with nothing deciding anything
+at run time. And it was not *fair*: it pays by a weighted formula, which is a rule, not a
+moral property. The owner's objection is that it was never fair even in the OpenCook model
+it was inherited from, and a name that claims a virtue the code does not implement is worse
+than a dull one.
+
+Say what it is instead: **contribution scoring** (who is owed a share) and **the payout
+split** (how a boost is divided). The `services/fairness/` directory keeps its name — a
+rename is a wide refactor with no user-visible benefit — but the words the product uses
+should not.
+
+⚠ DECISIONS.md keeps the phrase in its historical entries on purpose. Those record what was
+decided at the time, and editing them would make the record wrong rather than better.

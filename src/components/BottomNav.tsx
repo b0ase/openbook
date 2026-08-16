@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { BookMark } from "./icons/BookMark";
 
 /**
  * The app's bottom tab bar, ported from bChat (`bit-sign/src/components/BottomNav.tsx`).
@@ -115,9 +116,13 @@ export function BottomNav() {
                 }
               >
                 {center ? (
-                  // The wordmark, not a stroke glyph — same reasoning as bChat's
-                  // `b` mark: the raised slot holds the product, not a category.
-                  <span className="text-[19px] font-semibold leading-none tracking-tight">$</span>
+                  // The BRAND MARK, not a stroke glyph — same reasoning as bChat's
+                  // `b`: the raised slot holds the product, not a category. It is
+                  // the open book from `public/icon.svg`, so the centre button and
+                  // the installed app icon are recognisably the same thing. It was
+                  // a bare `$`, which is the sigil every TICKER wears — the one
+                  // glyph guaranteed not to mean "this app" in particular.
+                  <BookMark size={24} />
                 ) : (
                   <svg
                     width={20}

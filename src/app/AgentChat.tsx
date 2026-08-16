@@ -10,21 +10,35 @@ interface Message {
 const SUGGESTED = [
   "What is this?",
   "How does boosting work?",
-  "What's the fairness agent?",
+  "How are payouts split?",
   "How do I post?",
 ];
 
 export function AgentChat({
   highlight,
   openOnMount = false,
+  fullPage = false,
 }: {
   highlight?: boolean;
   /**
    * Start with the chat already open — for the Agent TAB, where the agent is the
-   * destination rather than a pill in the compose row. Closing returns to the
-   * pill, which is the same control it is everywhere else.
+   * destination rather than a pill in the compose row.
    */
   openOnMount?: boolean;
+  /**
+   * Render as the PAGE rather than as a modal card.
+   *
+   * ⚠ FOR THE AGENT TAB. A floating card is what a chat looks like when it is
+   * interrupting something else; on its own tab there is nothing to interrupt,
+   * and a card sitting in the middle of an empty page reads as a dialog that
+   * lost its parent. bChat's agent is a full-bleed composer for the same reason,
+   * and this board should feel like the same product.
+   *
+   * The conversation, streaming, rate limits and footer are shared with the
+   * modal — only the frame changes, so the agent cannot answer differently
+   * depending on where you opened it.
+   */
+  fullPage?: boolean;
 }) {
   const [open, setOpen] = useState(openOnMount);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -78,11 +92,15 @@ export function AgentChat({
   useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      // ⚠ NOT WHEN THE CHAT IS THE PAGE. Escape closing a modal is correct;
+      // Escape emptying the Agent tab would leave an "Ask AI" pill floating in a
+      // blank page with no way back, which is the same mistake as hiding a
+      // control that turns out to be the only way in.
+      if (e.key === "Escape" && !fullPage) setOpen(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
+  }, [open, fullPage]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -175,7 +193,9 @@ export function AgentChat({
     inputRef.current?.blur();
   }
 
-  if (!open) {
+  // On its own tab there is no closed state — the pill is the compose-row
+  // affordance, and rendering it here would replace the page with a button.
+  if (!open && !fullPage) {
     return (
       <button
         type="button"
@@ -214,13 +234,15 @@ export function AgentChat({
 
   return (
     <>
-      {/* Backdrop */}
-      <button
-        type="button"
-        className="fixed inset-0 z-50 w-full bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out] cursor-default"
-        aria-label="Close dialog"
-        onClick={() => setOpen(false)}
-      />
+      {/* Backdrop — modal only. On its own tab there is nothing behind to dim. */}
+      {!fullPage && (
+        <button
+          type="button"
+          className="fixed inset-0 z-50 w-full bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out] cursor-default"
+          aria-label="Close dialog"
+          onClick={() => setOpen(false)}
+        />
+      )}
 
       {/* Modal — bottom-sheet on mobile, centered on desktop. The card is
           flex-col with max-h capped so the messages list compresses when the
@@ -234,11 +256,24 @@ export function AgentChat({
           `BOTTOM_NAV_HEIGHT_CLASS` in `components/BottomNav.tsx`; the two are
           literals rather than a shared constant because Tailwind scans source
           text and cannot see an interpolated value. Change one, change both. */}
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-2 pb-[calc(0.5rem+3.5rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(1rem+3.5rem)] pointer-events-none">
+      <div
+        className={
+          fullPage
+            ? "flex h-full w-full"
+            : "fixed inset-0 z-50 flex items-end sm:items-center justify-center px-2 pb-[calc(0.5rem+3.5rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(1rem+3.5rem)] pointer-events-none"
+        }
+      >
         <div
-          // The max-heights subtract the tab bar too, for the same reason as the
-          // padding above: without it a tall card grows back down behind the bar.
-          className="w-full sm:max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden pointer-events-auto animate-[slideUp_0.3s_ease-out_backwards] shadow-2xl flex flex-col max-h-[calc(100svh-env(safe-area-inset-top)-0.5rem-3.5rem)] sm:max-h-[calc(100dvh-2rem-3.5rem)]"
+          // Modal: a capped card. The max-heights subtract the tab bar so a tall
+          // card does not grow back down behind it.
+          // Full page: no border, no radius, no cap — it fills the tab's scroll
+          // region, so the message list grows and the input row stays at the
+          // bottom of the screen, which is what a chat surface is.
+          className={
+            fullPage
+              ? "flex h-full w-full min-h-0 flex-col bg-black"
+              : "w-full sm:max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden pointer-events-auto animate-[slideUp_0.3s_ease-out_backwards] shadow-2xl flex flex-col max-h-[calc(100svh-env(safe-area-inset-top)-0.5rem-3.5rem)] sm:max-h-[calc(100dvh-2rem-3.5rem)]"
+          }
           role="dialog"
           aria-modal="true"
           aria-label="OpenBooks Agent"
@@ -261,7 +296,7 @@ export function AgentChat({
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close"
-              className="text-zinc-600 hover:text-zinc-300 transition-colors"
+              className={`text-zinc-600 transition-colors hover:text-zinc-300 ${fullPage ? "hidden" : ""}`}
             >
               <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path
@@ -281,7 +316,12 @@ export function AgentChat({
           <div
             ref={messagesContainerRef}
             onScroll={handleUserScroll}
-            className="flex-1 min-h-0 sm:h-[450px] sm:flex-none overflow-y-auto overscroll-y-contain scrollbar-hide px-4 py-3 space-y-3"
+            className={`min-h-0 flex-1 overflow-y-auto overscroll-y-contain scrollbar-hide px-4 py-3 space-y-3 ${
+              // A modal caps the list so the card stays a card. On its own tab it
+              // must GROW instead, or the input row floats mid-page above dead
+              // space and the surface reads as a widget again.
+              fullPage ? "" : "sm:h-[450px] sm:flex-none"
+            }`}
             style={{ scrollbarWidth: "none" }}
           >
             {messages.map((msg) => (

@@ -19,7 +19,7 @@
 **Tagline:** *A platform that builds itself, then lets anyone do the same.*
 **Subtitle:** *Agentic Fairness*
 
-Start with literally nothing — just a board for posting ideas. Every post is logged on-chain (BSV). A fairness agent tracks contributions. The platform evolves based on what users request. Eventually, any post can become its own project with the same model.
+Start with literally nothing — just a board for posting ideas. Every post is logged on-chain (BSV). Contribution scoring tracks who wrote what. The platform evolves based on what users request. Eventually, any post can become its own project with the same model.
 
 **"The first proof that this works is the platform itself."**
 
@@ -93,7 +93,7 @@ Once this model is proven on OpenCook, any idea posted here can spawn its own pr
 
 1. User posts idea
 2. Logged on-chain (immutable record)
-3. Fairness agent watches (learns who contributed what)
+3. Contribution scoring watches (learns who contributed what)
 4. Features get built (by team, agents, or community)
 5. Platform evolves
 6. Contributors get credit (based on on-chain history)
@@ -127,7 +127,7 @@ the thing to design against.
 
 ## The Recursive Model
 
-Once the platform works, any post can become its own project. Someone posts an idea, it gets booted (economic signal), and if it gains enough traction it spawns into its own platform with the same contribution tracking, fairness agent, and model.
+Once the platform works, any post can become its own project. Someone posts an idea, it gets booted (economic signal), and if it gains enough traction it spawns into its own platform with the same contribution tracking, payout split, and model.
 
 "Every idea is a seed. Every seed can grow into a forest."
 
