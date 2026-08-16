@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { claimNym, resolveTickers } from "@/app/actions";
+import { claimNym, getPostingMode, resolveTickers } from "@/app/actions";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { canonicalTicker, isValidTicker, titleCaseTicker } from "@/lib/ticker";
 
@@ -107,6 +107,36 @@ export function NymModal({
       fd.set("author", identity.name);
       fd.set("pubkey", signed.pubkey);
       fd.set("signature", signed.signature);
+
+      // ⚠ CLAIMING IS A POST, SO CLAIMING COSTS WHAT A POST COSTS. `claimNym`
+      // forwards this straight to `createPost`, which refuses an unpaid post
+      // whenever PAID_POSTING is on — so without this the claim fails for
+      // everyone with a generic error, which is exactly what happened when paid
+      // posting was first switched on.
+      const mode = await getPostingMode();
+      const { payForPost } = await import("@/services/bsv/pay-for-post");
+      const paid = await payForPost({
+        mode,
+        wif: identity.wif,
+        address: identity.address,
+        content,
+        author: identity.name,
+        sig: signed.signature,
+        pubkey: signed.pubkey,
+        parent: null,
+      });
+      if (!paid.ok) {
+        // Money failures name themselves rather than hiding behind "try again",
+        // and nothing was broadcast, so nothing was spent.
+        setError(
+          paid.status === "insufficient_funds" || paid.status === "no_utxos"
+            ? "Not enough funds to claim a name — add some and try again. Nothing was spent."
+            : "Couldn't pay for that claim — nothing was spent. Try again."
+        );
+        setState("idle");
+        return;
+      }
+      if (paid.rawTx) fd.set("raw_tx", paid.rawTx);
 
       const res = await claimNym(fd);
       if (res.ok) {

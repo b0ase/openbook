@@ -50,8 +50,10 @@ outpoint `<txid>_<vout>`** — not the SQLite id, not a content hash. See DECISI
       public indexer (`ordinals.gorillapool.io/api/inscriptions/txid/<txid>`) returns vout 0 as
       1 sat owned by the author with **`origin.outpoint` assigned**, `data.insc.file`
       (564 bytes, `application/json`) and the decoded `data.insc.json` — recognition, not just shape.
-      `types: ["json"]`, `spend: ""`. **Caveat: recognised at 0-conf (`height: null`); re-check after
-      a block confirms.** The `api.1sat.app` host 404s on `/tx`, `/txos/txid` and `/inscriptions/txid`
+      `types: ["json"]`, `spend: ""`. **CONFIRMED IN A BLOCK** — re-checked at height `962564`,
+      idx 18: still 1 sat, still owned by the author, origin outpoint intact, still unspent. So this
+      is not 0-conf mempool optimism; a public indexer holds a confirmed, ownable, transferable
+      post. The `api.1sat.app` host 404s on `/tx`, `/txos/txid` and `/inscriptions/txid`
       — use the GorillaPool host above, it is the one that answers.
 - [x] **Compose box wired** — asks `getPostingMode()`, builds + broadcasts, sends `raw_tx`, and
       reports money failures honestly ("nothing was spent") rather than "failed to post".

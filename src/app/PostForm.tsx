@@ -219,50 +219,28 @@ export function PostForm({
         // they wrote; assume paid and they spend money on a transaction the
         // server would have accepted for nothing.
         const mode = await getPostingMode();
-        if (mode.paid) {
-          const { postPrice, currentFeeRateSatsPerKb } = await import("@/lib/post-economics");
-          const { clientSidePost } = await import("@/services/bsv/client-post");
-          const { onchainRecord } = await import("@/lib/onchain-record");
+        const { payForPost } = await import("@/services/bsv/pay-for-post");
+        const paid = await payForPost({
+          mode,
+          wif: currentIdentity.wif,
+          address: currentIdentity.address,
+          content,
+          author: currentIdentity.name,
+          sig: sig?.signature ?? null,
+          pubkey: sig?.pubkey ?? null,
+          parent: parentId ?? null,
+        });
 
-          // The SAME envelope the server-funded path anchors, so a paid post and
-          // a free one are the same record to anybody reading the chain.
-          const payload = onchainRecord("post", {
-            content,
-            author: currentIdentity.name,
-            sig: sig?.signature ?? null,
-            pubkey: sig?.pubkey ?? null,
-            parent: parentId ?? null,
-          });
-
-          // Price the WHOLE transaction, not the payload: the miner charges for
-          // the transaction, and the envelope plus inputs and change dwarf the
-          // text on a short post.
-          const price = postPrice(payload.length + 600, {
-            markupPercent: mode.markupPercent,
-            // Same rate the transaction builder will use, so the quote and the
-            // transaction cannot disagree.
-            feeRateSatsPerKb: await currentFeeRateSatsPerKb(),
-          });
-
-          const paid = await clientSidePost(
-            currentIdentity.wif,
-            currentIdentity.address,
-            payload,
-            mode.platformAddress,
-            price
-          );
-
-          if (paid.status !== "success") {
-            // ⚠ NOTHING IS SENT TO THE SERVER ON FAILURE. A post the author did
-            // not pay for must not be stored, and `createPost` would refuse it
-            // anyway — reporting here keeps their draft recoverable instead of
-            // showing a generic server rejection.
-            onPostRejected?.(tempId, paid.status);
-            onDone?.(false, paid.status);
-            return;
-          }
-          formData.set("raw_tx", paid.rawTx);
+        if (!paid.ok) {
+          // ⚠ NOTHING IS SENT TO THE SERVER ON FAILURE. Reporting here keeps
+          // their draft recoverable instead of showing a generic server
+          // rejection, and the status says honestly that nothing was spent.
+          onPostRejected?.(tempId, paid.status);
+          onDone?.(false, paid.status);
+          return;
         }
+        // Null in free mode — there is nothing to attach and that is not a failure.
+        if (paid.rawTx) formData.set("raw_tx", paid.rawTx);
 
         const result = await createPost(formData);
         if (!result.ok) {
