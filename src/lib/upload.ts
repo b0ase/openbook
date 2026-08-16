@@ -35,12 +35,14 @@ export type UploadReject = "empty" | "too_large" | "unsupported_type";
  * model. That reasoning was right and the owner took the decision anyway, so the
  * threat model is handled rather than waved past:
  *
- *  - A PDF can contain JavaScript, so `/m/[name]` serves it under
- *    `Content-Security-Policy: sandbox` — a unique opaque origin, no script, no
- *    reach into our cookies or storage. That is what makes same-origin hosting
- *    of an active format survivable, and removing it re-opens stored XSS.
- *  - It is never framed in the feed automatically. A stranger's PDF is a card
- *    and a link; only our own uploads preview, and only when scrolled to.
+ *  - It is never framed in the feed automatically, and a STRANGER'S PDF is never
+ *    framed at all — a card and a link. Only our own uploads preview, and only
+ *    when the reader asks for one.
+ *  - `frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN` on `/m/`, so nobody
+ *    can frame our user content into their own page.
+ *  - The served `Content-Type` comes from the extension in this table, never from
+ *    the upload, with `nosniff` — so a lie about the MIME cannot cause a browser
+ *    to treat the bytes as something else.
  *  - Every stored file is hash-checked against a blocklist before it is written
  *    (`upload-audit.ts`), so a takedown can be made to STICK rather than being
  *    undone by the next re-upload.
@@ -75,19 +77,17 @@ const TYPES: Record<string, { kind: UploadKind; ext: string }> = {
 };
 
 /**
- * Formats that are ACTIVE — they can carry script, so they must never be served
- * as a plain same-origin document.
+ * ⚠ PDFs ARE SERVED UNSANDBOXED, DELIBERATELY. There was a `needsSandbox()`
+ * predicate here and a `Content-Security-Policy: sandbox` on `/m/`. Both were
+ * removed after testing in a real browser: Chrome's PDF viewer will not render
+ * in any sandboxed context, so the header silently broke every inline preview,
+ * and the risk it was buying was smaller than it claimed — PDF JavaScript runs
+ * in PDFium with no DOM, cookies or storage access.
  *
- * ⚠ THIS IS A DECLARATION, NOT THE ENFORCEMENT. The header that actually lands
- * is the `/m/:name*` entry in `next.config.ts`, because a security header set on
- * a route's Response is overwritten by the global `/(.*)` entry. This function
- * exists so the list of active formats is stated once, in the same file as the
- * table that admits them, and is unit-tested — if anything is added here, the
- * config's sandbox must already cover it.
+ * A predicate asserting a protection we no longer apply is worse than none, so
+ * it is gone rather than left to be trusted. The reasoning that replaced it
+ * lives in the `/m/:name*` header block in `next.config.ts`.
  */
-export function needsSandbox(ext: string): boolean {
-  return ext === "pdf";
-}
 
 /**
  * Per-kind size ceilings.

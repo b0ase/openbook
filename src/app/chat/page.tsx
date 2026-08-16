@@ -28,14 +28,22 @@ export default function ChatPage() {
     <AppProviders>
       <div className={`min-h-[100dvh] bg-black text-white ${BOTTOM_NAV_HEIGHT_CLASS}`}>
         <SiteNav supportAddress={getServerAddress()} />
-        <header className="border-b border-zinc-900 px-4 py-3">
-          <h1 className="text-sm font-medium text-white">Threads</h1>
-          {/* Says the quiet part out loud: nothing here is private. */}
-          <p className="mt-0.5 text-[11px] text-zinc-600">
-            Conversations you are part of. All public — private rooms don't exist yet.
-          </p>
-        </header>
-        <ThreadList />
+        {/* ⚠ `max-w-2xl`, THE SAME COLUMN AS EVERY OTHER PAGE. Without it this
+            list ran the full width of the window while `/market`, the feed and
+            the leaderboards all sit in a 2xl column — so moving between tabs
+            resized the content, which reads as landing on a different site
+            rather than a different tab. The width is part of the app's shape,
+            not per-page styling. */}
+        <div className="mx-auto w-full max-w-2xl">
+          <header className="border-b border-zinc-900 px-4 py-3">
+            <h1 className="text-sm font-medium text-white">Threads</h1>
+            {/* Says the quiet part out loud: nothing here is private. */}
+            <p className="mt-0.5 text-[11px] text-zinc-600">
+              Conversations you are part of. All public — private rooms don't exist yet.
+            </p>
+          </header>
+          <ThreadList />
+        </div>
         <BottomNav />
       </div>
     </AppProviders>

@@ -88,11 +88,17 @@ function DownloadLink({ url, label = "Download" }: { url: string; label?: string
  * people's servers on scroll. Ours is our own bandwidth and our own bytes, so it
  * previews; anyone else's gets a card and a link.
  *
- * The frame is sandboxed WITHOUT `allow-same-origin`, so the document runs in an
- * opaque origin even though it is served from our host. `/m/[name]` additionally
- * sends `Content-Security-Policy: sandbox` — the frame attribute and the
- * response header are two independent controls on the same hole, because a PDF
- * can carry JavaScript and this one is served same-origin.
+ * ⚠ NO `sandbox` ATTRIBUTE, AND IT IS NOT AN OVERSIGHT. It had one. Chrome's PDF
+ * viewer refuses to render in ANY sandboxed context — the attribute and the
+ * response's `Content-Security-Policy: sandbox` each block it independently, so
+ * the frame mounted and stayed blank. Verified in a browser across three
+ * variants: with the attribute it fails, without it the same file renders.
+ *
+ * The reasoning the sandbox rested on was also weaker than it read. PDF
+ * JavaScript runs in PDFium's own engine — no DOM, no cookies, no localStorage —
+ * so it cannot reach a session. See the `/m/:name*` block in `next.config.ts`
+ * for what actually holds the line, and `scripts/takedown.mjs` for the answer to
+ * the risk that genuinely remains, which is content spoofing rather than script.
  */
 function PdfEmbed({ url, label }: { url: string; label?: string }) {
   const [open, setOpen] = useState(false);
@@ -135,10 +141,16 @@ function PdfEmbed({ url, label }: { url: string; label?: string }) {
 
       {selfHosted && open && (
         <iframe
-          src={url}
+          // ⚠ `?embed=1` IS A CACHE KEY, NOT A FLAG THE SERVER READS. `/m/` serves
+          // with `immutable, max-age=1yr`, so any browser that fetched a PDF while
+          // the response still carried `Content-Security-Policy: sandbox` has that
+          // header cached for a year — and a cached sandboxed response renders
+          // blank no matter what the server sends today. Framing a distinct URL
+          // sidesteps every such cached copy. It costs one re-download per file
+          // and is then cached normally under this URL.
+          src={`${url}${url.includes("?") ? "&" : "?"}embed=1`}
           title="PDF preview"
           loading="lazy"
-          sandbox="allow-scripts"
           className="h-[460px] w-full border-0 border-t border-zinc-800 bg-zinc-900"
         />
       )}

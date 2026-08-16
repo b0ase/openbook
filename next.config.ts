@@ -129,11 +129,12 @@ const nextConfig: NextConfig = {
               // to `default-src 'self'` and every embed is silently blocked —
               // which is what happened before this line existed.
               // `'self'` is here for ONE thing: framing a PDF we host, from
-              // `/m/`, in `PdfEmbed`. Those responses are served under their own
-              // `Content-Security-Policy: sandbox` (see the `/m/` entry below),
-              // so the framed document runs in an opaque origin and the "a frame
-              // can execute script" objection above is answered rather than
-              // ignored. Without this the preview is silently blocked.
+              // `/m/`, in `PdfEmbed`. Without it the preview is silently blocked.
+              // The "a frame can execute script" objection above still stands for
+              // FOREIGN hosts, which is why this is `'self'` and not `https:` —
+              // and why a stranger's PDF is never framed at all, only linked.
+              // What `/m/` itself is served under is spelled out in its own entry
+              // below, including why it is not sandboxed.
               "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
               "frame-ancestors 'none'",
             ].join("; "),
@@ -163,21 +164,38 @@ const nextConfig: NextConfig = {
          * response carried none of it. Anything security-relevant about `/m/`
          * belongs in this block.
          *
-         * `sandbox` puts the response in a unique opaque origin. It is what makes
-         * hosting an ACTIVE format survivable: a PDF can carry JavaScript, and a
-         * PDF served as an ordinary same-origin document is script running with
-         * our cookies — stored XSS from a file any anonymous user can upload.
+         * ⚠ THERE IS DELIBERATELY NO `sandbox` TOKEN, AND THAT WAS A REVERSAL.
+         * This header carried `sandbox` on the reasoning that a PDF can contain
+         * JavaScript, so serving one same-origin would be stored XSS. Tested in a
+         * real browser, both halves of that turned out to be wrong:
          *
-         * `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` are the
-         * narrowest pair that still lets `PdfEmbed` show a preview. The global
-         * `DENY` above would block our own frame as well as everyone else's,
-         * which is the difference between a preview and a blank rectangle.
+         *  - `sandbox` makes Chrome's PDF viewer refuse to render in a FRAME. It
+         *    renders fine on direct navigation, which is why the header looked
+         *    correct for a week while every inline preview was blank. The iframe
+         *    `sandbox` ATTRIBUTE blocks it independently, so both had to go.
+         *  - The risk it was buying was smaller than claimed. PDF JavaScript runs
+         *    in PDFium's own engine: no DOM, no cookies, no localStorage. It
+         *    cannot read a session. The genuine residual risk of hosting user
+         *    PDFs on our origin is CONTENT SPOOFING — a convincing fake page on
+         *    our domain — which is inherent to hosting user files at all and is
+         *    answered by `scripts/takedown.mjs`, not by a header.
+         *
+         * What still holds the line here: `nosniff` (no type confusion),
+         * `frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN` (nobody else
+         * can frame our user content into their page), an extension chosen by us
+         * rather than the uploader, and no SVG in the upload table at all — an
+         * uploaded SVG really would be same-origin script, and it is still
+         * refused.
+         *
+         * The global `X-Frame-Options: DENY` above would block our own frame as
+         * well as everyone else's, which is the difference between a preview and
+         * a blank rectangle.
          */
         source: "/m/:name*",
         headers: [
           {
             key: "Content-Security-Policy",
-            value: "sandbox; frame-ancestors 'self'",
+            value: "frame-ancestors 'self'",
           },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "X-Content-Type-Options", value: "nosniff" },
