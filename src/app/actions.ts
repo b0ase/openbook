@@ -32,6 +32,7 @@ import {
   isValidTicker,
   ROOT_TICKER,
 } from "@/lib/ticker";
+import { tickerTransferAnnouncement, validateTransfer } from "@/lib/ticker-transfer";
 import { generateAnonName } from "@/lib/utils";
 
 async function getBsvSdk() {
@@ -634,8 +635,18 @@ export async function claimNym(formData: FormData): Promise<NymResult> {
 
   // Cheap pre-check so the common failure costs nothing. It is NOT the guard —
   // two people can pass this at once. The PRIMARY KEY below is what decides.
-  const existing = db.prepare("SELECT symbol FROM tickers WHERE symbol = ?").get(symbol);
-  if (existing) return { ok: false, reason: "taken" };
+  //
+  // ⚠ COMPARE THE OWNER, NOT MERE EXISTENCE. This used to reject any symbol that
+  // had a row at all, which quietly made a whole class of names unclaimable by
+  // the very people entitled to them: `registerTickers` founds a ticker for
+  // whoever MENTIONS it first, so anyone who wrote about a name before deciding
+  // to adopt it had already locked themselves out of it. The same bug made
+  // `transferTicker` pointless — the recipient would own the name and still be
+  // unable to go by it.
+  const existing = db.prepare("SELECT pubkey FROM tickers WHERE symbol = ?").get(symbol) as
+    | { pubkey: string | null }
+    | undefined;
+  if (existing && existing.pubkey !== pubkey) return { ok: false, reason: "taken" };
 
   // The claim goes through the ordinary post path, so the content the user signed
   // must be exactly what gets posted. The caller signs this same string.
@@ -681,6 +692,98 @@ export async function claimNym(formData: FormData): Promise<NymResult> {
     ).run(pubkey, symbol, address);
   })();
 
+  return { ok: true, symbol };
+}
+
+export type TransferResult =
+  | { ok: true; symbol: string }
+  | {
+      ok: false;
+      reason: "invalid" | "invalid_recipient" | "same_owner" | "not_owner" | "post_failed";
+    };
+
+/**
+ * Hand a `$Ticker` to another identity.
+ *
+ * Exists because `registerTickers` registers every mentioned symbol to the
+ * POSTER, so simply writing about an unclaimed name founds it — and with
+ * `symbol` as a PRIMARY KEY there is otherwise no way to undo that, ever.
+ *
+ * A transfer is a POST, exactly as a claim is: signed by the current owner, paid
+ * for, and inscribed. On a board whose proposition is a permanent public record,
+ * a change of ownership belongs in that record and not only in a table row.
+ *
+ * ⚠ THE CONTENT IS CHECKED TO *BE* THE ANNOUNCEMENT, AND THIS IS THE WHOLE
+ * SECURITY OF IT. `createPost` verifies the author's signature over the post
+ * CONTENT — it knows nothing about the `symbol` and `to_pubkey` form fields, and
+ * those fields are not signed. Without the equality check below, an attacker
+ * could take any validly signed post of the owner's and submit it here with
+ * whatever symbol and recipient they liked, and the signature would still verify.
+ * Rebuilding the expected sentence and demanding an exact match is what binds
+ * the signature to *this* symbol and *this* recipient.
+ */
+export async function transferTicker(formData: FormData): Promise<TransferResult> {
+  const rawSymbol = formData.get("symbol");
+  const rawTo = formData.get("to_pubkey");
+  const fromPubkey = formData.get("pubkey");
+  const content = formData.get("content");
+  if (
+    typeof rawSymbol !== "string" ||
+    typeof rawTo !== "string" ||
+    typeof fromPubkey !== "string" ||
+    !fromPubkey ||
+    typeof content !== "string"
+  ) {
+    return { ok: false, reason: "invalid" };
+  }
+
+  const symbol = canonicalTicker(rawSymbol.trim().replace(/^\$+/, ""));
+  const toPubkey = rawTo.trim().toLowerCase();
+
+  const checked = validateTransfer(symbol, toPubkey, fromPubkey);
+  if (!checked.ok) {
+    return {
+      ok: false,
+      reason: checked.reason === "invalid_symbol" ? "invalid" : checked.reason,
+    };
+  }
+
+  // See the ⚠ above. This is what makes the signature mean anything.
+  if (content !== tickerTransferAnnouncement(symbol, toPubkey)) {
+    return { ok: false, reason: "invalid" };
+  }
+
+  // Ownership is checked BEFORE the post is paid for, so the common refusal —
+  // trying to give away a name you do not hold — costs nothing.
+  const owner = db.prepare("SELECT pubkey FROM tickers WHERE symbol = ?").get(symbol) as
+    | { pubkey: string | null }
+    | undefined;
+  if (!owner || owner.pubkey !== fromPubkey) return { ok: false, reason: "not_owner" };
+
+  const result = await createPost(formData);
+  if (!result.ok) return { ok: false, reason: "post_failed" };
+
+  // Re-read ownership inside the transaction: the check above happened before a
+  // network round trip, and the name could have moved in between.
+  let moved = false;
+  db.transaction(() => {
+    const current = db.prepare("SELECT pubkey FROM tickers WHERE symbol = ?").get(symbol) as
+      | { pubkey: string | null }
+      | undefined;
+    if (!current || current.pubkey !== fromPubkey) return;
+    db.prepare("UPDATE tickers SET pubkey = ? WHERE symbol = ?").run(toPubkey, symbol);
+    // The old holder cannot keep displaying a name they no longer own. The
+    // RECIPIENT is deliberately not given the nym here: owning a ticker and
+    // going by it are separate acts, and `claimNym` — which checks ownership,
+    // and will now pass for them — is where the second one happens.
+    db.prepare("DELETE FROM nyms WHERE symbol = ?").run(symbol);
+    moved = true;
+  })();
+
+  // The announcement is already inscribed either way. It is advisory: the
+  // ticker table is what ownership is read from, so say plainly that it did not
+  // move rather than reporting a success the database does not agree with.
+  if (!moved) return { ok: false, reason: "not_owner" };
   return { ok: true, symbol };
 }
 
