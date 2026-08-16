@@ -9,6 +9,7 @@ import { InstallPitch } from "@/components/InstallPitch";
 import { NymModal } from "@/components/NymModal";
 import { ProtectModal } from "@/components/ProtectModal";
 import { RestoreModal } from "@/components/RestoreModal";
+import { TransferTickerModal } from "@/components/TransferTickerModal";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useInstallContext } from "@/contexts/InstallContext";
 import { satsToDollars, useBsvPrice } from "@/hooks/useBsvPrice";
@@ -25,7 +26,7 @@ import {
 } from "@/services/bsv/backup-template";
 import { encryptWif } from "@/services/bsv/crypto";
 import { getStoredAnonName, isEffectivelyProtected, unlockIdentity } from "@/services/bsv/identity";
-import { getHoldings, getNym, type Holding } from "./actions";
+import { getHoldings, getNym, getOwnedTickers, type Holding } from "./actions";
 import { FundAddress } from "./FundAddress";
 
 const BACKED_UP_KEY = "openbook_identity_backed_up";
@@ -150,6 +151,10 @@ export function IdentityChip({
   const [nym, setNym] = useState<string | null>(() => readCachedNym());
   const [showNymModal, setShowNymModal] = useState(false);
   const [holdings, setHoldings] = useState<Holding[]>([]);
+  // Names this identity OWNS — distinct from holdings, which are mention shares.
+  const [ownedTickers, setOwnedTickers] = useState<string[]>([]);
+  const [transferSymbol, setTransferSymbol] = useState<string | null>(null);
+  const [pubkeyCopied, setPubkeyCopied] = useState(false);
   const [holdingsExpanded, setHoldingsExpanded] = useState(false);
 
   // Deposit modal
@@ -305,6 +310,13 @@ export function IdentityChip({
   useEffect(() => {
     if (!open || !identity?.pubkey) return;
     let live = true;
+    void getOwnedTickers(identity.pubkey)
+      .then((t) => {
+        if (live) setOwnedTickers(t);
+      })
+      .catch(() => {
+        if (live) setOwnedTickers([]);
+      });
     void getHoldings(identity.pubkey)
       .then((h) => {
         if (live) setHoldings(h);
@@ -690,6 +702,21 @@ export function IdentityChip({
           balance={balanceSats ?? undefined}
           onClose={() => setShowDeposit(false)}
           onSecure={openProtectModal}
+        />
+      )}
+
+      {transferSymbol && identity && (
+        <TransferTickerModal
+          open={transferSymbol !== null}
+          symbol={transferSymbol}
+          onClose={() => setTransferSymbol(null)}
+          onTransferred={(symbol) => {
+            // The name is gone from this identity: drop it from the list, and
+            // clear the display name if it WAS the display name — the panel
+            // must not keep showing a name this account no longer owns.
+            setOwnedTickers((prev) => prev.filter((s) => s !== symbol));
+            setNym((current) => (current === symbol ? null : current));
+          }}
         />
       )}
 
@@ -1671,6 +1698,52 @@ export function IdentityChip({
                 )}
               </p>
             </div>
+
+            {/* ── Names you own ──
+                ⚠ OWNING A NAME IS NOT THE SAME AS HOLDING UNITS OF IT, and the
+                two are shown separately because they behave differently. The
+                Tokens block below is a SHARE of a name's mentions, which anyone
+                earns by citing it. This block is the single pubkey in
+                `tickers.pubkey` — set by whoever mentioned the name FIRST — and
+                it is the only thing that decides who may go by the name or hand
+                it on. Merely writing about an unclaimed name founds it, so
+                people end up owning names they never meant to claim; this is
+                where they can see that and put it right. */}
+            {ownedTickers.length > 0 && (
+              <div className="px-3 py-2.5 border-b border-amber-400/10 space-y-2">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">
+                  Names you own
+                </span>
+                <div className="space-y-1">
+                  {ownedTickers.map((symbol) => (
+                    <div key={symbol} className="flex items-center justify-between gap-2">
+                      <span className="text-[13px] font-medium text-amber-400">${symbol}</span>
+                      <button
+                        type="button"
+                        onClick={() => setTransferSymbol(symbol)}
+                        className="relative -my-2 py-2 text-[11px] text-zinc-400 underline underline-offset-2 decoration-zinc-700 hover:text-zinc-200 hover:decoration-zinc-500 transition-colors"
+                      >
+                        Transfer
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-zinc-600 leading-relaxed">
+                  Your account key — give this to someone sending you a name.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (identity) void navigator.clipboard?.writeText(identity.pubkey);
+                    setPubkeyCopied(true);
+                    setTimeout(() => setPubkeyCopied(false), 1500);
+                  }}
+                  className="w-full truncate rounded border border-zinc-800 bg-black px-2 py-1.5 text-left font-mono text-[10px] text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                >
+                  {pubkeyCopied ? "Copied" : identity?.pubkey}
+                </button>
+              </div>
+            )}
 
             {/* ── Tokens ──
                 ⚠ THESE ARE TOKENS, NOT A PREVIEW OF TOKENS. Posting IS the mint

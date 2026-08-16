@@ -787,6 +787,25 @@ export async function transferTicker(formData: FormData): Promise<TransferResult
   return { ok: true, symbol };
 }
 
+/**
+ * The `$Ticker`s this identity OWNS — which is not the same as the tickers it
+ * holds units of.
+ *
+ * `getHoldings` answers "what share of the mentions of a name are mine", which
+ * is what the wallet shows. Ownership is a different fact: the single pubkey in
+ * `tickers.pubkey`, set by whoever mentioned the name FIRST, and the only thing
+ * that decides who may adopt it as a nym or hand it on. An identity routinely
+ * holds units of names it does not own — citing `$B0ase` once earns a share of
+ * it without earning any say over it.
+ */
+export async function getOwnedTickers(pubkey: string): Promise<string[]> {
+  if (!pubkey || typeof pubkey !== "string") return [];
+  const rows = db
+    .prepare("SELECT symbol FROM tickers WHERE pubkey = ? ORDER BY created_at ASC, symbol ASC")
+    .all(pubkey) as Array<{ symbol: string }>;
+  return rows.map((r) => r.symbol);
+}
+
 /** The public name an identity goes by, or null if it is still anonymous. */
 export async function getNym(pubkey: string): Promise<string | null> {
   if (!pubkey) return null;
