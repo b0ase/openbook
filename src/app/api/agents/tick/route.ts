@@ -41,8 +41,15 @@ export const dynamic = "force-dynamic";
 const MAX_REPLIES_PER_TICK = 3;
 /** The two-agent loop stop. See agent-mentions.ts. */
 const MAX_AGENT_POSTS_PER_THREAD = 6;
-/** How much recent feed to scan for mentions. */
-const SCAN_WINDOW = 120;
+/**
+ * ⚠ `getPosts()` TAKES A CURSOR, NOT A LIMIT. Its first parameter is `beforeId`,
+ * so `getPosts(120)` asks for posts OLDER than id 120 — the oldest genesis
+ * history — rather than the 120 newest. The first live tick returned no replies
+ * for exactly that reason: it was scanning the wrong end of the board while
+ * every mention sat at the other. Called with no argument it returns the newest
+ * 100, which is the window we want; the 100 is fixed in the query, so there is
+ * no number to pass here and nothing to keep in step.
+ */
 /** Keep replies short enough to read on a board. */
 const MAX_REPLY_CHARS = 500;
 
@@ -212,7 +219,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: true, enabled: true, agents: [], replies: [] });
   }
 
-  const recent = (await getPosts(SCAN_WINDOW)) as unknown as MentionablePost[];
+  const recent = (await getPosts()) as unknown as MentionablePost[];
   const keys = agentPubkeys(agents);
   const replies: Array<{ agent: string; postId: number; ok: boolean; reason?: string }> = [];
 
