@@ -2,6 +2,53 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-16 (agents on the board) — the inscription gate passed, and claiming a name was dead
+
+- **Category: verification, bug fix, feature, docs.** Owner asked for an agent account on the live
+  board. Second identity held on `www.openbooks.space` — a different origin is a different
+  `localStorage`, so an agent can hold its own key without touching the owner's on the bare domain.
+- **⚠ THE BLOCKING MILESTONE PASSED.** ROADMAP's *"broadcast ONE inscription and confirm a public
+  indexer shows it — nothing may be charged for until this passes"* is done, with a real post
+  (2080, tx `af3436bc…`). GorillaPool returns vout 0 as 1 sat owned by the author with
+  `origin.outpoint` assigned and the JSON payload decoded — recognition, not shape. **Re-checked
+  after confirmation at height 962564**: still 1 sat, origin intact, unspent. Endpoint note:
+  `api.1sat.app` 404s on `/tx`, `/txos/txid` and `/inscriptions/txid`; use
+  `ordinals.gorillapool.io/api/inscriptions/txid/<txid>`.
+- **⚠ CLAIMING A `$NYM` WAS BROKEN IN PRODUCTION FOR EVERY USER.** Reproduced live: three attempts
+  at `$Occam`, each dying with the catch-all *"Couldn't post that — try again"*. `claimNym` forwards
+  to `createPost`, but `NymModal` never asked `getPostingMode()` and never attached a `raw_tx` —
+  confirmed from the network trace (one POST to the server action, no `/api/unspent`, no broadcast).
+  With `PAID_POSTING` on, `createPost` refused it. "Names" is in the header nav, so a headline
+  feature was dead and said nothing useful about why.
+- **Root cause was the shape, not the logic:** paid posting lived inline in `PostForm`, so a second
+  route into `createPost` had nothing to reuse. Extracted `services/bsv/pay-for-post.ts`; both
+  callers go through it. Money failures in the claim modal now name themselves and say nothing was
+  spent. `$Occam` claimed and verified on chain (post 2081, tx `4aa6731a…`, vout 0).
+- **Docs were lying to users.** CLAUDE.md and ROADMAP both said posting was free and server-funded
+  and that we anchor rather than inscribe. Production charges ~113 sats/post (1 inscribed, 12 to the
+  platform, ~100 fee) and every post carries a `vout`. CLAUDE.md is read into `agent-prompt.ts` per
+  request, so the live Ask-AI agent was serving that as fact — corrected loudly, legacy behaviour
+  kept below for the genesis anchors.
+- **Feature: per-author colour** (`lib/identity-color.ts`), derived from the pubkey — no migration,
+  no picker, applies retroactively, identical server and client. Seeded on the PUBKEY, not the name,
+  or claiming a `$Nym` would recolour an author's whole history.
+- **Shipped it twice wrong first, both caught from the live site.** (1) Ten hues at >= 18° apart put
+  two live authors at 285/305 — reported as *"both purple"* — and a third collided outright at only
+  four users; the test had certified 18° as fine. Now eight hues at >= 28° crossing colour families,
+  plus a second axis. (2) That second axis was lightness, and HSL lightness is not perceptually
+  uniform: `$B0ase` shipped at `hsl(248 85% 56%)` = **2.75:1** contrast, under the 4.5:1 floor.
+  Second axis is now saturation at constant lightness, with a real WCAG contrast test (hsl→rgb →
+  relative luminance → ratio) over 200 seeds. **Do not vary lightness per identity.**
+- **Open, for the owner.** (a) On-chain records still stamp `"app":"opencook"` under the $OpenBooks
+  brand, permanently, one post at a time — flipping it is a DECISIONS-class call given the
+  bsvibes→opencook precedent warns a partial sweep is an execution risk. (b) **Citing a ticker mints
+  the citer a unit** — one mention of `$B0ase` gave this agent 1/3 = 33% of it. That is the
+  mechanism a `$features`/per-feature-`$tag` scheme would run on, so it wants deciding first.
+  (c) `opencook.fun` is a live public deploy on a stale database still serving the rejected
+  *"A platform that builds itself"* tagline.
+- 720 unit tests green, tsc and production build clean. Commits `5765f49`, `ed8a59a`, `0aefe80`,
+  `6ee3be7`, `06b7b02`, `4ed8188`.
+
 ## 2026-08-14 (root address) — the site loads on `openbooks.space`, not `/$openbooks`
 
 - **Category: routing / UX.** *"we want to load the site on openbooks.space not /$openbooks"*.
