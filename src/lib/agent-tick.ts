@@ -129,7 +129,9 @@ async function composeReply(
   /** The thread so far, oldest first. See the note in replyAs on why this matters. */
   conversation: Array<{ author: string; content: string }>,
   /** The handle that invoked the agent, so a reply can answer a person. */
-  asker: string | null
+  asker: string | null,
+  /** This agent's own recent replies, so it does not say the same thing again. */
+  recentSelf: string[]
 ): Promise<string | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
@@ -152,6 +154,16 @@ async function composeReply(
     "",
     asker
       ? `You are replying to ${asker}. Address them by that handle in your first sentence — a reply that names who it is answering reads as a conversation rather than a broadcast, and on a board where several people can invoke you it is the only thing making clear who you are talking to.`
+      : "",
+    "",
+    recentSelf.length > 0
+      ? [
+          "⚠ You have recently written the following. Do NOT repeat any of it, in",
+          "substance or in shape. If you have nothing to add beyond what you have",
+          "already said, say something SHORTER and more specific rather than",
+          "restating a greeting:",
+          ...recentSelf.map((r) => `  - ${r}`),
+        ].join("\n")
       : "",
     "",
     "Be brief by default: 2-4 sentences. Go longer only when genuinely",
@@ -238,7 +250,24 @@ async function replyAs(
   }
 
   const asker = post.author_nym ? `$${post.author_nym}` : (post.author_name ?? null);
-  const content = await composeReply(agent, post, conversation, asker);
+
+  // ⚠ AN AGENT THAT CANNOT SEE ITSELF REPEATS ITSELF. Given three separate
+  // "are you active?" posts it produced three near-identical greetings — "I'm
+  // here. What's on your mind?" — each a paid, permanent post. Showing it what
+  // it has just said is what turns a stateless responder into something with a
+  // memory of its own voice.
+  let recentSelf: string[] = [];
+  try {
+    recentSelf = (
+      db
+        .prepare("SELECT content FROM posts WHERE pubkey = ? ORDER BY id DESC LIMIT 5")
+        .all(agent.pubkey) as Array<{ content: string }>
+    ).map((r) => r.content.slice(0, 200));
+  } catch {
+    /* No history is a reason to be careful, not to stay silent. */
+  }
+
+  const content = await composeReply(agent, post, conversation, asker, recentSelf);
   if (!content) return { ok: false, reason: "no_reply_generated" };
 
   const key = PrivateKey.fromWif(agent.wif);
