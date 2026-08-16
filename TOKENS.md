@@ -592,8 +592,10 @@ address, keeps one origin and one identity, and preserves real client IPs for th
 
 **Where the idea does hold is the ROOT.** `openbooks.space` ↔ `$OpenBook` is a genuine
 correspondence: the root token has a real-world name and every other token hangs off it as a
-path. Renaming the site to it is cheap — `ONCHAIN_APP` stays `opencook` regardless and
-nothing on-chain moves.
+path. Renaming the site to it is cheap — the site name and `ONCHAIN_APP` are separate knobs,
+so renaming one never forces the other. (`ONCHAIN_APP` did later move, `opencook` → `openbook`
+on 2026-08-16 on the owner's instruction, but as its own deliberate act — not as a consequence
+of any site rename.)
 
 **The plural is an accepted mismatch.** The domain is `openbooks.space` because no `openbook`
 domain was available, while the root token is `$OpenBook`. The owner has decided not to
@@ -979,8 +981,11 @@ Two caveats before anyone starts:
 - **Old records stay as they are.** OP_RETURNs are immutable, so any reader has to handle both the
   bespoke envelope (2,000+ existing records) and the standard one. `onchain-record.ts` already
   documents that contract; bump `v` when the shape changes.
-- **`ONCHAIN_APP` is still `opencook`.** There is a documented partial-sweep hazard around
-  renaming it. Settle that before or with any format change, not after.
+- **`ONCHAIN_APP` is `openbook`** (was `opencook`; changed 2026-08-16 on the owner's
+  instruction). The partial-sweep hazard was settled rather than deferred: the literal lives in
+  one constant, and every literal ever written is kept in `ONCHAIN_APP_HISTORY` with
+  `isOurRecord()` so no reader goes blind to the 2,081 records inscribed under the old name.
+  **Readers must match the history, never the current literal.**
 
 **Ration the social schemas — they are features, not formats:**
 
@@ -1356,8 +1361,10 @@ a different object from an ordinary unit, which is the ambiguity already flagged
   matching the upstream principle that value comes from contribution.
 - Not a governance token. Token-weighted voting is the plutocracy failure mode already
   identified in DIRECTION.md's table (Botto row).
-- Not a rebrand. `ONCHAIN_APP` stays `opencook` until OpenBook runs its own mainnet
-  deployment — see the partial-sweep hazard note in `src/lib/onchain-record.ts`.
+- Not a rebrand. (Superseded 2026-08-16: `ONCHAIN_APP` is now `openbook`, changed on the
+  owner's instruction without waiting for a separate mainnet deployment. The partial-sweep
+  hazard it was waiting on is handled by `ONCHAIN_APP_HISTORY` + `isOurRecord()` — see
+  `src/lib/onchain-record.ts`.)
 
 ## Open questions
 

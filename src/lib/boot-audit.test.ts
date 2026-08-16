@@ -7,7 +7,7 @@ describe("bootAuditPayload", () => {
       bootAuditPayload({ postId: 7, booter: "1BooterAddr", funded: "booter", total: 1234 })
     );
     expect(p.v).toBe(1);
-    expect(p.app).toBe("opencook");
+    expect(p.app).toBe("openbook");
     expect(p.type).toBe("boot_split");
     expect(p.post_id).toBe(7);
     expect(p.booter).toBe("1BooterAddr");

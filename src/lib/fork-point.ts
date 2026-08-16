@@ -7,6 +7,12 @@
  * under `app: "opencook"`, and they are reproduced here faithfully rather than
  * re-created. Everything after 2023 is OpenBooks's own timeline.
  *
+ * ⚠ THE `app` LITERAL DOES NOT MARK THE FORK, AND NEVER DID. This fork kept
+ * writing `app: "opencook"` too, so records 1..~2081 share that tag across both
+ * sides of the boundary; `ONCHAIN_APP` only became "openbook" on 2026-08-16.
+ * `FORK_POINT_ID` is what separates upstream's history from ours — do not reach
+ * for the `app` tag to do that job, it cannot.
+ *
  * ⚠ THIS IS A HISTORICAL FACT, NOT A SETTING. It records something that already
  * happened, so it never changes. Do not "update" it when new posts arrive — the
  * fork point does not move, and moving it would silently reclassify other

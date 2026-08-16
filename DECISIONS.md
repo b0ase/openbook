@@ -4,6 +4,28 @@
 
 ## Naming
 
+- **The on-chain `app` literal is `openbook`** (2026-08-16, owner's instruction; was `opencook`,
+  which was itself flipped from `bsvibes` at Phase-7). Reverses the standing "not a rebrand —
+  `ONCHAIN_APP` stays `opencook` until OpenBook runs its own mainnet deployment" note in TOKENS.md.
+  **Why it was safe to do now rather than wait:** the thing that entry was deferring was the
+  partial-sweep hazard, and that hazard is a property of the literal being scattered — it isn't.
+  It lives in one constant, and no reader in this repo filters on it.
+  - **What makes this rename different from the last one:** `bsvibes` → `opencook` was a clean
+    break from post #1 with nothing to stay compatible with. This one happened with **2,081
+    records already permanently inscribed** under `opencook`. They cannot be rewritten — that is
+    the product working as intended — so the stream genuinely splits, at a *deploy* boundary
+    rather than a fixed post id.
+  - **So the compatibility burden moved to readers, and is handled explicitly.**
+    `ONCHAIN_APP_HISTORY` lists every literal ever written and `isOurRecord()` matches against it.
+    **A reader keying on the current literal alone silently loses all pre-rename history** — the
+    worst failure mode for a permanence-first product, because the data is intact and only the
+    reader is blind. Append to the history on any future rename; never edit or remove an entry.
+  - **`v` was NOT bumped.** The reader contract says bump only when a field's meaning changes or a
+    field is removed/renamed. `app` means what it always meant; it holds a different value.
+    Bumping would orphan readers of ~2,000 already-anchored genesis records for no gain.
+  - **The `app` tag does not mark the fork and never did** — this fork wrote `opencook` too, so
+    records 1..~2081 share the tag across the fork boundary. `FORK_POINT_ID` is the only thing
+    that separates upstream history from ours.
 - **Project name:** OpenCook (formerly "Build From Nothing" → "BSVibes" — renamed 2026-03-23; rebranded to OpenCook 2026-06-13)
 - **Subtitle:** Agentic Fairness — fairness enforced by autonomous AI agents, not committees
 - **bOpen.ai** is the toolkit, not the product. "created with bopen.ai" shown in UI
