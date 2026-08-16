@@ -19,12 +19,17 @@ panel showing what you hold.
 
 **Two things are true that a reader needs to know up front:**
 
-1. **We ANCHOR, we do not INSCRIBE.** Every post gets an `OP_FALSE OP_RETURN` record — a permanent,
-   signed, timestamped *audit trail*. That output is provably unspendable, so **no post is yet an
-   on-chain object anyone can own or transfer.** A post is a token in the database and the UI, with
-   an independent chain record beside it.
-2. **Nothing costs money yet.** Posting, claiming a name and boosting are free (server-funded).
-   Every economic decision in TOKENS.md is gated on that changing.
+1. **We INSCRIBE — this went live and both statements below were reversed on 2026-08-16.** Every
+   post is written to a **1-satoshi spendable output** at the author's address inside a 1Sat ordinal
+   envelope, so a post **is** an on-chain object its author can own and transfer, identified by its
+   **origin outpoint `<txid>_<vout>`**. Verified against a live post, not inferred: every post in
+   the feed now carries a `vout`. The older `OP_FALSE OP_RETURN` anchor was an *unspendable* audit
+   trail — the 2,006 genesis records are still exactly that and stay readable.
+2. **Posting costs the author money.** `PAID_POSTING` is **ON in production**. A post spends about
+   **113 sats (~$0.0017)**: 1 sat inscribed, 12 sats to the platform address, ~100 sats fee. A
+   funded wallet is now a precondition for posting — a fresh unfunded account is refused with
+   "No funds yet — add some to post" *before* anything is broadcast, so nothing is spent on a
+   refusal. The economic decisions in TOKENS.md are no longer gated on this changing; it changed.
 
 ## The next milestone: paid posting + inscription
 
@@ -40,9 +45,14 @@ outpoint `<txid>_<vout>`** — not the SQLite id, not a content hash. See DECISI
 `client-post.ts` (browser builds + funds + broadcasts), `paid-post.ts` (server verifies), and
 `createPost` storing the outpoint (`posts.vout`) instead of paying to anchor.
 
-- [ ] ⚠ **Broadcast ONE inscription and confirm a public indexer shows it.** The envelope follows
-      the 1Sat convention and is unit-tested for shape, but shape is not recognition. **Nothing may
-      be charged for until this passes.** It costs a few pence and only the owner can authorise it.
+- [x] ⚠ **Broadcast ONE inscription and confirm a public indexer shows it.** **PASSED 2026-08-16.**
+      Post 2080, tx `af3436bc34fdde906a47cfcea867c4c8a2b0f496d637653528a3a03885ded506`. GorillaPool's
+      public indexer (`ordinals.gorillapool.io/api/inscriptions/txid/<txid>`) returns vout 0 as
+      1 sat owned by the author with **`origin.outpoint` assigned**, `data.insc.file`
+      (564 bytes, `application/json`) and the decoded `data.insc.json` — recognition, not just shape.
+      `types: ["json"]`, `spend: ""`. **Caveat: recognised at 0-conf (`height: null`); re-check after
+      a block confirms.** The `api.1sat.app` host 404s on `/tx`, `/txos/txid` and `/inscriptions/txid`
+      — use the GorillaPool host above, it is the one that answers.
 - [x] **Compose box wired** — asks `getPostingMode()`, builds + broadcasts, sends `raw_tx`, and
       reports money failures honestly ("nothing was spent") rather than "failed to post".
 

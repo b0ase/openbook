@@ -160,8 +160,22 @@ All on-chain payloads are JSON inside OP_FALSE OP_RETURN outputs:
 
 ## Request Flows
 
-**Post creation:**
-PostForm → signPost (ECDSA) → createPost server action → verify signature → insert DB → logPostOnChain (fire-and-forget OP_RETURN) → return post ID → optimistic UI update → Feed polls for confirmation
+**Post creation — PAID + INSCRIBED (`PAID_POSTING` is ON in production; verified 2026-08-16):**
+PostForm → `getPostingMode()` → signPost (ECDSA) → **browser builds, funds and broadcasts a 1Sat
+inscription tx** (`client-post.ts`) → createPost server action with `raw_tx` → verify signature +
+verify payment (`paid-post.ts`) → insert DB storing the **origin outpoint** (`posts.vout`) → optimistic
+UI update → Feed polls for confirmation.
+
+⚠ **Posting SPENDS THE AUTHOR'S OWN SATS — do not tell users posting is free.** ~113 sats/post
+(~$0.0017): 1 sat inscribed to the author's own address, 12 sats to the platform, ~100 sats fee. A
+wallet with **confirmed** funds is a precondition; `/api/balance` reports confirmed-only as
+spendable, so freshly-deposited 0-conf money will not post until a block lands. Every money failure
+is refused BEFORE broadcast (`insufficient_funds`, `no_utxos`, `payment_required` → see
+`POST_FAILURE_TEXT` in `Feed.tsx`), so a refusal never charges the author.
+
+**Legacy (pre-2026-08-16):** posting was free and server-funded — `logPostOnChain` fire-and-forget
+`OP_RETURN`, with `anchor-sweep.ts` retrying. The 2,006 genesis records are those unspendable
+anchors and stay readable; the sweep still serves them.
 
 **Boot payment (paid):**
 BootButton/useBoot → bootPost server action (checks free quota) → requiresPayment response → fetch /api/boot-shares (split calculation) → clientSideBoot (browser builds multi-output BSV tx) → broadcast via ARC → POST /api/boot-confirm with rawTx + booterPubkey + signature (server verifies the booter's ECDSA signature over `boot:<postId>:<txid>` and derives the credited address from the verified pubkey, verifies hash(rawTx)===txid, parses P2PKH outputs locally to check split, re-broadcasts via ARC as safety net, records payouts, emits TX_CONFLICT vs ARC_UNAVAILABLE codes) → Feed polls for bootboard update
