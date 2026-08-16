@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppProviders } from "@/components/AppProviders";
 import { BottomNav } from "@/components/BottomNav";
 import { SiteNav } from "@/components/SiteNav";
+import { mintPriceSats } from "@/lib/mint-price";
 import { siteOrigin } from "@/lib/site-origin";
 import { leaderboardHref, titleCaseTicker } from "@/lib/ticker";
 import { getServerAddress } from "@/services/bsv/wallet";
@@ -63,10 +64,16 @@ export default async function MarketPage() {
               <span className="text-amber-400">Market</span>
             </h1>
             <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
-              Every token, how many units exist, and how many people hold one. A unit is minted for
-              each post that names it.{" "}
-              {/* Said plainly rather than left to be discovered by tapping. */}
-              <span className="text-zinc-600">Nothing is for sale yet.</span>
+              The price of the next unit, how many exist, and how many people hold one. A unit is
+              minted for each post that names it, and the price rises with supply — so an early unit
+              is worth what it now costs to mint a fresh one.{" "}
+              {/* ⚠ SAID PLAINLY: the curve is the design, the charge is still
+                  flat. Advertising a price nobody is billed would be the platform
+                  lying about its own economics, on the page that exists to price
+                  things. */}
+              <span className="text-zinc-600">
+                Resale isn't built yet, and posting is still charged at a flat rate.
+              </span>
             </p>
 
             <ol className="mt-5 divide-y divide-zinc-800/60">
@@ -88,6 +95,17 @@ export default async function MarketPage() {
                       ${titleCaseTicker(b.symbol)}
                     </span>
                     <span className="shrink-0 text-right font-mono text-[11px] tabular-nums text-zinc-500">
+                      {/* ⚠ EVERY TOKEN HAS A DIFFERENT PRICE, and that is the
+                          point. The mint price rises with supply, so this is the
+                          cost of the NEXT unit of this particular word — which is
+                          also the ceiling on what its seats resell for, since
+                          nobody rationally pays more second-hand than it costs to
+                          mint a fresh one. A market page without prices on it is
+                          just a list of names. */}
+                      <span className="text-amber-500/80">
+                        {mintPriceSats(b.total).toLocaleString()} sats
+                      </span>
+                      <span className="text-zinc-700"> · </span>
                       {b.total} {b.total === 1 ? "unit" : "units"}
                       <span className="text-zinc-700"> · </span>
                       {/* The number the owner actually asked for: how many PEOPLE
