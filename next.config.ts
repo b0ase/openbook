@@ -128,7 +128,13 @@ const nextConfig: NextConfig = {
               // pasting a link. Without any frame-src the directive falls back
               // to `default-src 'self'` and every embed is silently blocked —
               // which is what happened before this line existed.
-              "frame-src https://www.youtube-nocookie.com https://www.youtube.com",
+              // `'self'` is here for ONE thing: framing a PDF we host, from
+              // `/m/`, in `PdfEmbed`. Those responses are served under their own
+              // `Content-Security-Policy: sandbox` (see the `/m/` entry below),
+              // so the framed document runs in an opaque origin and the "a frame
+              // can execute script" objection above is answered rather than
+              // ignored. Without this the preview is silently blocked.
+              "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
               "frame-ancestors 'none'",
             ].join("; "),
           },
@@ -143,6 +149,38 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+      {
+        /**
+         * Uploaded files, which are bytes a stranger chose.
+         *
+         * ⚠ THESE HEADERS MUST LIVE HERE, NOT IN THE ROUTE HANDLER. A header set
+         * on the `Response` in `app/m/[name]/route.ts` is OVERWRITTEN by the
+         * `/(.*)` entry above — verified by serving a PDF and reading the wire,
+         * where the route's `sandbox` had been replaced by the site policy. So
+         * the route looked correct, the comment claimed a protection, and the
+         * response carried none of it. Anything security-relevant about `/m/`
+         * belongs in this block.
+         *
+         * `sandbox` puts the response in a unique opaque origin. It is what makes
+         * hosting an ACTIVE format survivable: a PDF can carry JavaScript, and a
+         * PDF served as an ordinary same-origin document is script running with
+         * our cookies — stored XSS from a file any anonymous user can upload.
+         *
+         * `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` are the
+         * narrowest pair that still lets `PdfEmbed` show a preview. The global
+         * `DENY` above would block our own frame as well as everyone else's,
+         * which is the difference between a preview and a blank rectangle.
+         */
+        source: "/m/:name*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "sandbox; frame-ancestors 'self'",
+          },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
         ],
       },
     ];

@@ -2,7 +2,6 @@ import {
   contentDisposition,
   contentTypeForExt,
   downloadFilename,
-  needsSandbox,
   parseStoredName,
 } from "@/lib/upload";
 import { getUpload, isBlockedHash } from "@/lib/upload-audit";
@@ -63,16 +62,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ name: string }>
       : "inline",
   };
 
-  // ⚠ ACTIVE FORMATS GET AN OPAQUE ORIGIN. A PDF can contain JavaScript, and a
-  // PDF served as an ordinary same-origin document is a script running on our
-  // origin with our cookies — stored XSS, from a file any anonymous user can
-  // upload. `sandbox` with no allow-* puts the response in a unique opaque
-  // origin: the browser's viewer still renders it, embedded script cannot reach
-  // anything of ours. Removing this line re-opens that hole silently, because
-  // nothing about the page will look different.
-  if (needsSandbox(parsed.ext)) {
-    headers["Content-Security-Policy"] = "sandbox";
-  }
-
+  // ⚠ THE SANDBOX FOR ACTIVE FORMATS IS SET IN `next.config.ts`, NOT HERE. A
+  // `Content-Security-Policy` set on this Response is OVERWRITTEN by the global
+  // `/(.*)` header entry — confirmed by serving a PDF and reading the wire,
+  // where a `sandbox` set here had been replaced by the site-wide policy. So it
+  // is deliberately absent rather than present-and-useless: a security header
+  // that looks applied but is not is worse than no header, because nothing about
+  // the response or the page reveals the difference.
+  //
+  // See the `/m/:name*` block in `next.config.ts`, which is what actually lands.
   return new Response(new Uint8Array(bytes), { headers });
 }

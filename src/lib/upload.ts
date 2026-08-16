@@ -75,12 +75,15 @@ const TYPES: Record<string, { kind: UploadKind; ext: string }> = {
 };
 
 /**
- * Formats that are ACTIVE — they can carry script and must never be served as a
- * plain same-origin document.
+ * Formats that are ACTIVE — they can carry script, so they must never be served
+ * as a plain same-origin document.
  *
- * Kept as a predicate rather than an inline `ext === "pdf"` at the serving route,
- * because the next active format added to the table above must not be able to
- * reach the network without someone deciding what happens here.
+ * ⚠ THIS IS A DECLARATION, NOT THE ENFORCEMENT. The header that actually lands
+ * is the `/m/:name*` entry in `next.config.ts`, because a security header set on
+ * a route's Response is overwritten by the global `/(.*)` entry. This function
+ * exists so the list of active formats is stated once, in the same file as the
+ * table that admits them, and is unit-tested — if anything is added here, the
+ * config's sandbox must already cover it.
  */
 export function needsSandbox(ext: string): boolean {
   return ext === "pdf";
