@@ -20,6 +20,18 @@ import { ThreadList } from "./ThreadList";
  * and that is decided in the browser (see `ThreadList` — the signing key never
  * reaches the server).
  */
+/**
+ * ⚠ DYNAMIC, AND IT HAS TO BE. Without this Next PRERENDERED THIS PAGE AT BUILD
+ * TIME, when the database is empty — so production served a permanently empty
+ * directory (`initial: []` was visible in the live payload) while the same code
+ * worked locally. `/market` escaped it only by exporting `revalidate`; the
+ * leaderboard index carries the same note for the same reason.
+ *
+ * A directory of everything claimed on the board is exactly the kind of page
+ * that must not be frozen at the moment the container was built.
+ */
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Threads — $OpenBooks",
   description: "Public threads you have started or replied to, newest activity first.",

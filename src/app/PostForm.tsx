@@ -13,6 +13,16 @@ import { ACCEPTED_MIME } from "@/lib/upload";
 import { createPost, getPostingMode } from "./actions";
 import { TickerHint } from "./TickerHint";
 
+/**
+ * Set once this person has successfully posted.
+ *
+ * Prefixed `openbook_` like every other key — `lib/storage-keys.ts` migrates the
+ * old `opencook_*` names at module load, so a returning user keeps their state.
+ * Only ever written after a post LANDS, so a failed attempt does not retire a
+ * hint the person still needs.
+ */
+const HAS_POSTED_KEY = "openbook_has_posted";
+
 interface PostFormProps {
   onPostCreated?: (content: string, author: string, tempId: number) => void;
   onPostRejected?: (tempId: number, reason?: string) => void;
@@ -27,8 +37,9 @@ interface PostFormProps {
    */
   parentId?: number;
   /**
-   * Drop the footer row (install bookmark, Ask AI, keyboard hint). Those belong
-   * to the feed's primary compose box; inside a thread they are noise.
+   * Drop the footer row (install bookmark, keyboard hint). Those belong to the
+   * feed's primary compose box; inside a thread they are noise. The "Ask AI"
+   * pill used to live there too, until the agent got its own tab.
    */
   compact?: boolean;
   placeholder?: string;
@@ -49,6 +60,28 @@ export function PostForm({
   // to it directly), so the hint needs its own copy of the text.
   const [draft, setDraft] = useState("");
   const [justPosted, setJustPosted] = useState(false);
+  /**
+   * The Enter-to-post hint, shown until this person has posted once.
+   *
+   * ⚠ DEFAULTS TO HIDDEN AND IS TURNED ON AFTER MOUNT, NOT READ DURING RENDER.
+   * The server has no localStorage, so a lazy initialiser reading it would make
+   * the client's first render disagree with the server's HTML — a hydration
+   * mismatch. Defaulting the other way (shown, then hidden) would flash the hint
+   * at every returning user, which is worse than a new user seeing it appear a
+   * frame late.
+   */
+  const [showEnterHint, setShowEnterHint] = useState(false);
+
+  useEffect(() => {
+    try {
+      setShowEnterHint(localStorage.getItem(HAS_POSTED_KEY) !== "1");
+    } catch {
+      // Private mode or storage disabled: show it. The cost of showing a hint to
+      // someone who has posted before is a line of text; the cost of hiding it
+      // from someone who has not is the shortcut being undiscoverable.
+      setShowEnterHint(true);
+    }
+  }, []);
   const [resumeNudge, setResumeNudge] = useState(false);
   const { identity, needsUnlock, sign, requireIdentity } = useIdentityContext();
   // Set when the user tries to submit while locked — drives a focus + amber
@@ -177,6 +210,15 @@ export function PostForm({
       setDraft("");
       setJustPosted(true);
       setTimeout(() => setJustPosted(false), 1500);
+      // They have now posted, so the hint has done its job and retires. Written
+      // here rather than on submit: a post that failed teaches nothing, and the
+      // hint is exactly what that person still needs.
+      setShowEnterHint(false);
+      try {
+        localStorage.setItem(HAS_POSTED_KEY, "1");
+      } catch {
+        /* Storage unavailable — the hint simply stays. Harmless. */
+      }
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
         // Hands-free on touch: don't re-pop the keyboard after posting (you post
@@ -764,13 +806,16 @@ export function PostForm({
           uses a sm:hidden spacer to hold the left cell's shape. */}
       {!compact && (
         <div className="grid grid-cols-3 items-center mt-1 ml-1 mr-1 max-h-12 overflow-visible opacity-100 transition-all duration-200 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:mt-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:max-h-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:opacity-0 pointer-coarse:group-has-[textarea:focus,.compose-send:focus]:overflow-hidden">
-          {/* ⚠ THE "Enter to post, Shift+Enter for new line" HINT WAS REMOVED HERE
-              (owner, 2026-08-16). Only the posted-confirmation stays — it is an
-              `aria-live` region, so it is feedback rather than chrome. The cost of
-              dropping the hint is that Enter-to-post is now undiscoverable on
-              desktop until someone tries it; the Send button still works, so
-              nothing is unreachable, and the row is quieter. */}
+          {/* ⚠ FIRST-TIME USERS ONLY (owner, 2026-08-16). The hint was removed
+              outright, then restored under this condition: Enter-to-post is
+              undiscoverable without it, and permanent for everyone it is chrome
+              that never stops explaining something you learned on day one. It
+              retires the moment you successfully post. Desktop only — on mobile
+              there is a Send button and no Enter key worth describing. */}
           <div className="hidden sm:flex items-center gap-2">
+            {showEnterHint && (
+              <p className="text-[11px] text-zinc-600">Enter to post, Shift+Enter for new line</p>
+            )}
             <span
               className={`text-[11px] text-green-500 transition-opacity duration-300 ${justPosted ? "opacity-100" : "opacity-0"}`}
               aria-live="polite"

@@ -28,7 +28,14 @@ import { listTickerBoards } from "../actions";
  * derivation lands this is the page that gains a column, and the wallet balance
  * at that address becomes the first honest measure of what a word is worth.
  */
-export const revalidate = 30;
+/**
+ * ⚠ DYNAMIC, NOT ISR. With `revalidate` this page is PRERENDERED AT BUILD TIME,
+ * when the database is empty — so every deploy served an empty market until the
+ * first revalidation. `/chat` hit exactly that and served `initial: []` in
+ * production while working locally. One indexed GROUP BY per request is the same
+ * cost `/leaderboard` already accepted for the same reason.
+ */
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Market — $OpenBooks",

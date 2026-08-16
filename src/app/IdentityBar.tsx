@@ -1188,6 +1188,41 @@ export function IdentityChip({
       )}
 
       <div ref={dropdownRef} className={inline ? "" : "relative"}>
+        {/* ⚠ THE WALLET TAB MUST SHOW SOMETHING WHEN LOCKED. `identity` is null
+            while an encrypted key is locked — the chip normally covers that by
+            rendering the cached name — but `inline` hides the chip, so the panel
+            below (`open && identity`) rendered NOTHING and the tab was a blank
+            page with no way to unlock. Reading has never required signing in;
+            seeing your own balance does. */}
+        {inline && !identity && (
+          <div
+            className="relative w-full rounded-xl border border-amber-400/20 px-4 py-6 text-center"
+            style={{ backgroundColor: "#0f0f0f" }}
+          >
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
+            <p className="text-sm font-semibold text-white">{displayName}</p>
+            <p className="mx-auto mt-1 max-w-xs text-[12px] leading-relaxed text-zinc-500">
+              {needsUnlock
+                ? "Your wallet is locked. Enter your passphrase to see what you hold."
+                : "Setting up your account…"}
+            </p>
+            {needsUnlock && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (isReadOnly) {
+                    openInAppPrompt();
+                    return;
+                  }
+                  openSignIn();
+                }}
+                className="mt-4 rounded-full bg-amber-500 px-4 py-1.5 text-xs font-medium text-black transition-colors hover:bg-amber-400"
+              >
+                Unlock
+              </button>
+            )}
+          </div>
+        )}
         {/* Chip — when locked, click opens SignInModal instead of dropdown.
             Hidden in `inline` mode: the panel below is already open and is the
             whole page, so a chip that toggles it would be a control that closes
