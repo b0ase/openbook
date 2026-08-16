@@ -505,6 +505,34 @@ export function applyTickerMentionMigration(database: Db): void {
     "CREATE INDEX IF NOT EXISTS idx_mentions_target_symbol ON ticker_mentions(target_symbol)"
   );
 
+  /**
+   * How many units this edge carries. One, unless it was BOUGHT.
+   *
+   * ⚠ A COLUMN RATHER THAN N ROWS, and the reason is the unique index above.
+   * `(post_id, symbol)` is unique for untargeted edges — deliberately, so naming
+   * a word twice in one post mints one unit — which means a thousand-unit
+   * purchase cannot be a thousand rows without a thousand posts to hang them
+   * on. Widening the CHECK to admit a fourth `target_type` would have meant
+   * rebuilding a table that already holds every unit anyone owns; adding a
+   * column does not.
+   *
+   * ⚠ SUPPLY IS THEREFORE `SUM(units)`, NEVER `COUNT(*)`. Every reader of this
+   * table that means "how many units exist" or "how many does this person hold"
+   * has to sum. The ones that mean "how many POSTS said this word" (usage,
+   * corpus size) correctly keep counting rows, and the difference is the whole
+   * reason both kinds of query exist. Getting this wrong makes a purchase
+   * invisible to the market page while the buyer's wallet shows it.
+   *
+   * DEFAULT 1 backfills every existing edge to exactly what it was worth
+   * before: one unit for one naming.
+   */
+  addColumnIfMissing(
+    database,
+    "ticker_mentions",
+    "units",
+    "units INTEGER NOT NULL DEFAULT 1 CHECK (units >= 1)"
+  );
+
   backfillTickerMentions(database);
 }
 

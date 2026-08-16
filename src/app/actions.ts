@@ -1,6 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
+import { parseBuyCommand } from "@/lib/buy-command";
 import { screenContent } from "@/lib/content-filter";
 import { db } from "@/lib/db";
 import { FORK_POINT_ID } from "@/lib/fork-point";
@@ -398,15 +399,35 @@ function recordTickerMentions(
   pubkey: FormDataEntryValue | null
 ): void {
   try {
-    const symbols = distinctTickers(content);
-    if (!symbols.length) return;
     const pk = typeof pubkey === "string" ? pubkey : null;
     const insert = db.prepare(
-      `INSERT OR IGNORE INTO ticker_mentions (symbol, post_id, pubkey, target_type)
-       VALUES (?, ?, ?, 'none')`
+      `INSERT OR IGNORE INTO ticker_mentions (symbol, post_id, pubkey, target_type, units)
+       VALUES (?, ?, ?, 'none', ?)`
     );
+
+    /**
+     * ⚠ A BUY MINTS WHAT IT PAID FOR, AND IS CHECKED FIRST.
+     *
+     * `/buy 1000 $Memeplex` names a ticker, so the ordinary path below would
+     * mint exactly one unit of it — while `mintChargeSats` had already billed
+     * the buyer for a thousand. The two derive the buy from the SAME string
+     * through the SAME parser precisely so they cannot disagree about what was
+     * bought; deriving it twice by different rules is how a charge and a
+     * delivery come apart.
+     *
+     * One row, `units` many. See the column's note in `db.ts` for why it is not
+     * a thousand rows.
+     */
+    const buy = parseBuyCommand(content);
+    if (buy) {
+      insert.run(buy.symbol, postId, pk, buy.units);
+      return;
+    }
+
+    const symbols = distinctTickers(content);
+    if (!symbols.length) return;
     const all = db.transaction(() => {
-      for (const symbol of symbols) insert.run(symbol, postId, pk);
+      for (const symbol of symbols) insert.run(symbol, postId, pk, 1);
     });
     all();
   } catch (e) {
@@ -1251,7 +1272,10 @@ export async function getTickerSupply(symbols: string[]): Promise<Record<string,
   const placeholders = wanted.map(() => "?").join(",");
   const rows = db
     .prepare(
-      `SELECT symbol, COUNT(*) AS n
+      // SUM(units), not COUNT(*) — see `ticker_mentions.units`. A bought
+      // position is one row carrying many units, so counting rows would show a
+      // thousand-unit holder as one.
+      `SELECT symbol, SUM(units) AS n
          FROM ticker_mentions
         WHERE symbol IN (${placeholders})
         GROUP BY symbol`
@@ -1376,8 +1400,10 @@ export async function listTickerBoards(limit = 100): Promise<TickerBoardSummary[
   const capped = Math.min(Math.max(1, limit), 200);
   const rows = db
     .prepare(
+      // `total` SUMS units (a purchase is one row worth many); `holders`
+      // still counts distinct people, which rows are the right unit for.
       `SELECT symbol,
-              COUNT(*) AS total,
+              SUM(units) AS total,
               COUNT(DISTINCT CASE WHEN pubkey IS NOT NULL AND pubkey <> '' THEN pubkey END)
                 AS holders
          FROM ticker_mentions
@@ -1439,8 +1465,16 @@ export async function getTickerLeaderboard(
 
   const totals = db
     .prepare(
-      `SELECT COUNT(*) AS total,
-              SUM(CASE WHEN pubkey IS NOT NULL AND pubkey <> '' THEN 1 ELSE 0 END) AS attributed
+      // Both figures are UNITS — the page prints them as a supply and an
+      // owned share, and the unowned remainder is their difference.
+      // ⚠ COALESCE, BECAUSE THIS AGGREGATE IS NOT GROUPED. `SUM()` over no rows
+      // is NULL where `COUNT(*)` was 0 — so the "nobody has written this name"
+      // check below silently stopped firing and every unwritten name rendered
+      // an empty leaderboard instead of 404ing.
+      `SELECT COALESCE(SUM(units), 0) AS total,
+              COALESCE(
+                SUM(CASE WHEN pubkey IS NOT NULL AND pubkey <> '' THEN units ELSE 0 END), 0
+              ) AS attributed
          FROM ticker_mentions WHERE symbol = ?`
     )
     .get(canonical) as { total: number; attributed: number | null };
@@ -1459,7 +1493,7 @@ export async function getTickerLeaderboard(
   const capped = Math.min(Math.max(1, limit), 100);
   const rows = db
     .prepare(
-      `SELECT m.pubkey AS pubkey, COUNT(*) AS units, n.symbol AS nym
+      `SELECT m.pubkey AS pubkey, SUM(m.units) AS units, n.symbol AS nym
          FROM ticker_mentions m
          LEFT JOIN nyms n ON n.pubkey = m.pubkey
         WHERE m.symbol = ? AND m.pubkey IS NOT NULL AND m.pubkey <> ''
@@ -1555,8 +1589,8 @@ export async function getHoldings(pubkey: string): Promise<Holding[]> {
   const namedRows = db
     .prepare(
       `SELECT m.symbol AS symbol,
-              SUM(CASE WHEN m.pubkey = ? THEN 1 ELSE 0 END) AS mine,
-              COUNT(*) AS total,
+              SUM(CASE WHEN m.pubkey = ? THEN m.units ELSE 0 END) AS mine,
+              SUM(m.units) AS total,
               t.root_id AS root_id,
               (SELECT p.tx_id FROM posts p WHERE p.id = t.root_id) AS tx_id
          FROM ticker_mentions m
@@ -1875,7 +1909,7 @@ export async function getMintQuote(
   const placeholders = wanted.map(() => "?").join(",");
   const rows = db
     .prepare(
-      `SELECT symbol, COUNT(*) AS n FROM ticker_mentions
+      `SELECT symbol, SUM(units) AS n FROM ticker_mentions
         WHERE symbol IN (${placeholders}) GROUP BY symbol`
     )
     .all(...wanted) as Array<{ symbol: string; n: number }>;

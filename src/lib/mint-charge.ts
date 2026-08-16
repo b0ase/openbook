@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
+import { parseBuyCommand } from "./buy-command";
 import { db as defaultDb } from "./db";
-import { mintPriceSats, quoteMintSats } from "./mint-price";
+import { mintCostForRange, mintPriceSats, quoteMintSats } from "./mint-price";
 import { distinctTickers } from "./ticker";
 
 type Db = ReturnType<typeof Database>;
@@ -41,6 +42,14 @@ type Db = ReturnType<typeof Database>;
  * So this is deliberately generous. It is not an exploit surface worth closing
  * further: gaming it requires several other people to name your word in the
  * seconds between your quote and your broadcast, and wins a fraction of a penny.
+ *
+ * ⚠ FOR A BULK BUY THE FORGIVENESS SCALES WITH THE SIZE — `SLACK × units ×
+ * base`, because a drift of five units shifts the price of EVERY unit in the
+ * range. At the 10,000-unit ceiling that is ~5.6M sats (under a dollar at the
+ * rate this was written), and it is the price of not rejecting a large purchase
+ * because one stranger named the word first. A satoshi-capped band was
+ * considered and rejected: it would cover only a hundredth of a unit of drift on
+ * a thousand-unit buy, i.e. it would reject almost every bulk buy that raced.
  */
 export const MINT_SLACK_UNITS = 5;
 
@@ -58,7 +67,7 @@ export function mintSupplies(symbols: readonly string[], database: Db = defaultD
   const placeholders = wanted.map(() => "?").join(",");
   const rows = database
     .prepare(
-      `SELECT symbol, COUNT(*) AS n FROM ticker_mentions
+      `SELECT symbol, SUM(units) AS n FROM ticker_mentions
         WHERE symbol IN (${placeholders}) GROUP BY symbol`
     )
     .all(...wanted) as Array<{ symbol: string; n: number }>;
@@ -75,6 +84,16 @@ export function mintSupplies(symbols: readonly string[], database: Db = defaultD
  * `recordTickerMentions` inserts.
  */
 export function mintChargeSats(content: string, database: Db = defaultDb): number {
+  // ⚠ A BUY IS PRICED FIRST AND ON ITS OWN. `/buy 1000 $Memeplex` names a
+  // ticker, so falling through to the ordinary path would charge for ONE unit
+  // and mint a thousand. The command IS the whole message (`parseBuyCommand` is
+  // anchored), so there is nothing else in it to price.
+  const buy = parseBuyCommand(content);
+  if (buy) {
+    const supply = mintSupplies([buy.symbol], database);
+    return mintCostForRange(supply.get(buy.symbol) ?? 0, buy.units);
+  }
+
   const symbols = distinctTickers(content);
   if (!symbols.length) return 0;
   const supply = mintSupplies(symbols, database);
@@ -90,6 +109,15 @@ export function mintChargeSats(content: string, database: Db = defaultDb): numbe
  * priced from zero, i.e. at base.
  */
 export function mintFloorSats(content: string, database: Db = defaultDb): number {
+  // Same order as the charge, and it has to be: a buy checked as an ordinary
+  // mention would accept one unit's payment for a thousand units of stock.
+  const buy = parseBuyCommand(content);
+  if (buy) {
+    const supply = mintSupplies([buy.symbol], database);
+    const from = Math.max(0, (supply.get(buy.symbol) ?? 0) - MINT_SLACK_UNITS);
+    return mintCostForRange(from, buy.units);
+  }
+
   const symbols = distinctTickers(content);
   if (!symbols.length) return 0;
   const supply = mintSupplies(symbols, database);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { BuyConfirm } from "@/components/BuyConfirm";
 import { InlineAgentTranscript } from "@/components/InlineAgentAnswer";
 import { InstallBookmark } from "@/components/InstallBookmark";
 import { PermanenceGate } from "@/components/PermanenceGate";
@@ -8,8 +9,10 @@ import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useMediaUpload } from "@/hooks/useMediaUpload";
 import { useVoiceToText } from "@/hooks/useVoiceToText";
 import { type AgentTurn, appendTurn, formatTranscript, hashTurn } from "@/lib/agent-record";
+import { type BuyCommand, parseBuyCommand } from "@/lib/buy-command";
 import { MAX_POST_CHARS } from "@/lib/post-length";
 import { parseSlashCommand } from "@/lib/slash";
+import { titleCaseTicker } from "@/lib/ticker";
 import { ACCEPTED_MIME } from "@/lib/upload";
 import { createPost, getPostingMode } from "./actions";
 import { TickerHint } from "./TickerHint";
@@ -100,6 +103,18 @@ export function PostForm({
   const wantedToPostRef = useRef(false);
   // One-time permanence acknowledgement gate, shown before the user's FIRST post.
   const [showPermanenceGate, setShowPermanenceGate] = useState(false);
+  /**
+   * The buy awaiting confirmation, or null.
+   *
+   * Held in state rather than a ref because the confirm sheet renders FROM it —
+   * a ref would not re-render, which is the whole difference between a pending
+   * value and a visible one.
+   */
+  const [pendingBuy, setPendingBuy] = useState<BuyCommand | null>(null);
+  // What the draft would buy, if anything — read once per render and shared by
+  // the hint line and the suppression of TickerHint below, so the two cannot
+  // disagree about whether this is a purchase.
+  const draftBuy = parseBuyCommand(draft);
   // The inline agent answer. Ephemeral — see InlineAgentAnswer for why it is
   // never posted.
   const [chain, setChain] = useState<AgentTurn[]>([]);
@@ -448,6 +463,22 @@ export function PostForm({
       return;
     }
 
+    /**
+     * ⚠ A BUY IS CONFIRMED BEFORE IT IS PAID FOR. The command walks up the mint
+     * curve, so its cost is QUADRATIC in the number of units — nobody can look
+     * at `/buy 1000 $Memeplex` and know what it will take. Everything else in
+     * this box costs roughly the same as everything else in this box; this does
+     * not, so it gets a figure and a second tap.
+     *
+     * Identity is required FIRST (above) so the confirm is never shown to
+     * somebody who would then be asked to sign in and lose it.
+     */
+    const buy = parseBuyCommand(trimmed);
+    if (buy) {
+      setPendingBuy(buy);
+      return;
+    }
+
     // One-time permanence acknowledgement before the user's first permanent
     // on-chain post (Phase 3 surfacing). After they confirm once, never again.
     const acked =
@@ -768,7 +799,14 @@ export function PostForm({
           vanished. */}
       {draft.trimStart().startsWith("/") && (
         <p className="mt-1.5 px-1 text-[11px] text-zinc-500">
-          {parseSlashCommand(draft) ? (
+          {draftBuy ? (
+            <>
+              <span className="text-amber-400">/buy</span> {draftBuy.units.toLocaleString()}{" "}
+              {draftBuy.units === 1 ? "unit" : "units"} of{" "}
+              <span className="text-amber-400">${titleCaseTicker(draftBuy.symbol)}</span> &mdash;
+              you&rsquo;ll see the price before paying
+            </>
+          ) : parseSlashCommand(draft) ? (
             <>
               <span className="text-amber-400">/agent</span> asks the AI &mdash; this won&rsquo;t be
               posted
@@ -776,13 +814,18 @@ export function PostForm({
           ) : (
             <>
               Starts with &ldquo;/&rdquo; but isn&rsquo;t a command, so it posts as written. Try{" "}
-              <span className="text-amber-400">/agent</span>
+              <span className="text-amber-400">/agent</span> or{" "}
+              <span className="text-amber-400">/buy 100 $Ticker</span>
             </>
           )}
         </p>
       )}
-      {/* Claim-vs-cite disclosure for any $Ticker being typed. See TickerHint. */}
-      <TickerHint content={draft} />
+      {/* Claim-vs-cite disclosure for any $Ticker being typed. See TickerHint.
+          ⚠ SUPPRESSED FOR A BUY. The hint prices ONE unit of a word, which is
+          the wrong number by three orders of magnitude next to `/buy 1000 $X` —
+          and the two would sit one line apart. The confirm sheet carries the
+          real figure. */}
+      {!draftBuy && <TickerHint content={draft} />}
       {uploading && (
         <p className="mt-1 text-[11px] text-zinc-500" aria-live="polite">
           {uploadTotal > 1
@@ -846,6 +889,29 @@ export function PostForm({
               off centre. */}
           <div />
         </div>
+      )}
+      {pendingBuy && (
+        <BuyConfirm
+          buy={pendingBuy}
+          onCancel={() => setPendingBuy(null)}
+          onConfirm={(text) => {
+            setPendingBuy(null);
+            // ⚠ THE CANONICAL TEXT, NOT WHAT WAS TYPED. `/buy 1,000 $memeplex`
+            // and `/buy 1000 $MEMEPLEX` are the same purchase, and the record
+            // that goes on chain — which the server re-parses to decide what to
+            // mint — has to be the normalised one.
+            if (!identity) return;
+            const acked =
+              typeof window !== "undefined" &&
+              localStorage.getItem("openbook_permanence_ack") === "1";
+            if (!acked) {
+              pendingPostRef.current = { identity, content: text };
+              setShowPermanenceGate(true);
+              return;
+            }
+            performSubmit(identity, text);
+          }}
+        />
       )}
       {showPermanenceGate && (
         <PermanenceGate

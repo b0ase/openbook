@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LinkPreviewCard } from "@/components/LinkPreviewCard";
 import { MediaEmbed, YouTubeEmbed } from "@/components/MediaEmbed";
+import { parseBuyCommand } from "@/lib/buy-command";
 import { identityColor, identityTextColor } from "@/lib/identity-color";
 import { findUrls } from "@/lib/linkify";
 import { firstMedia, storedNameFromUrl } from "@/lib/media";
@@ -60,6 +61,12 @@ export function PostContent({
   const [expanded, setExpanded] = useState(false);
   const folded = expandable && !expanded;
   const [copied, setCopied] = useState(false);
+
+  /**
+   * The purchase this post records, if it is one. Parsed from the content with
+   * the same function that priced and minted it — see the render below.
+   */
+  const buy = parseBuyCommand(post.content);
 
   const urls = findUrls(post.content).map((u) => u.url);
   const media = firstMedia(urls);
@@ -222,21 +229,43 @@ export function PostContent({
           </a>
         )}
       </div>
-      {!isBareMedia && (
-        <>
-          <p
-            className={`mt-1.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words ${
-              folded ? "line-clamp-[12]" : ""
-            }`}
-            style={{ color: identityTextColor(authorSeed) }}
+      {/* ⚠ A PURCHASE IS NOT A SENTENCE. `/buy 1000 $Memeplex` is a command that
+          happens to be stored as a post — rendering it verbatim shows the reader
+          a piece of syntax rather than the thing that happened, and the thing
+          that happened (somebody took a thousand units of a word, and moved its
+          price) is one of the more interesting events on this board. Read from
+          the SAME parser the charge and the mint use, so the feed cannot
+          describe a purchase differently from how it was billed. */}
+      {buy ? (
+        <p className="mt-1.5 flex flex-wrap items-baseline gap-1.5 text-[15px] leading-relaxed">
+          <span className="text-zinc-400">bought</span>
+          <span className="font-mono tabular-nums text-white">{buy.units.toLocaleString()}</span>
+          <span className="text-zinc-400">{buy.units === 1 ? "unit of" : "units of"}</span>
+          <button
+            type="button"
+            onClick={() => onOpenTicker?.(buy.symbol)}
+            disabled={!onOpenTicker}
+            className="font-medium text-amber-400 transition-colors enabled:hover:text-amber-300 disabled:cursor-default"
           >
-            <PostText
-              content={post.content}
-              onOpenTicker={onOpenTicker}
-              tickerSupply={tickerSupply}
-            />
-          </p>
-          {/* ⚠ CLAMPED, NOT TRUNCATED. The whole text stays in the DOM and only
+            ${titleCaseTicker(buy.symbol)}
+          </button>
+        </p>
+      ) : (
+        !isBareMedia && (
+          <>
+            <p
+              className={`mt-1.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words ${
+                folded ? "line-clamp-[12]" : ""
+              }`}
+              style={{ color: identityTextColor(authorSeed) }}
+            >
+              <PostText
+                content={post.content}
+                onOpenTicker={onOpenTicker}
+                tickerSupply={tickerSupply}
+              />
+            </p>
+            {/* ⚠ CLAMPED, NOT TRUNCATED. The whole text stays in the DOM and only
               its height is capped, so Find-in-page, screen readers, copy-paste
               and selection all still reach the words a reader paid to have kept
               forever. Slicing the string would make the feed quietly disagree
@@ -244,16 +273,17 @@ export function PostContent({
 
               A `<button>`, which `PostList`'s row-click guard already treats as
               interactive — so expanding a post cannot also open its thread. */}
-          {expandable && (
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="mt-1 text-[12px] text-zinc-500 underline underline-offset-2 transition-colors hover:text-zinc-300"
-            >
-              {folded ? "Show more" : "Show less"}
-            </button>
-          )}
-        </>
+            {expandable && (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="mt-1 text-[12px] text-zinc-500 underline underline-offset-2 transition-colors hover:text-zinc-300"
+              >
+                {folded ? "Show more" : "Show less"}
+              </button>
+            )}
+          </>
+        )
       )}
       {/* A direct media link is SHOWN; anything else falls through to the unfurl
           card. Both never render for the same post — a media file is not HTML, so

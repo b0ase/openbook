@@ -45,6 +45,10 @@ import { db } from "@/lib/db";
 import { MINT_SLACK_UNITS } from "@/lib/mint-charge";
 import { MINT_BASE_SATS } from "@/lib/mint-price";
 import { MIN_ECONOMIC_OUTPUT_SATS, postPrice } from "@/lib/post-economics";
+
+/** Shorthand — the markup floor rides alongside every mint charge below. */
+const MIN_ECONOMIC = MIN_ECONOMIC_OUTPUT_SATS;
+
 import { buildInscriptionScript, INSCRIPTION_SATS } from "@/services/bsv/inscription";
 import { logPostOnChain } from "@/services/bsv/onchain";
 import { createPost, getPostingMode } from "./actions";
@@ -308,6 +312,122 @@ describe("paid posting", () => {
       expect(
         await createPost(form(me, content, fundedTx(me, { content, platformSats: longStale })))
       ).toEqual({ ok: false, reason: "invalid_payment" });
+    });
+  });
+
+  /**
+   * `/buy N $Ticker` — units without a post about the word.
+   *
+   * It goes through `createPost` like everything else that reaches the chain,
+   * so what is tested here is the part that is NOT like everything else: the
+   * price is quadratic, one row carries many units, and a buy must never be
+   * billed as an ordinary one-unit mention.
+   */
+  describe("bulk buy", () => {
+    it("mints the units it paid for, in ONE row", async () => {
+      const me = identity();
+      const content = "/buy 10 $Bulk";
+      // 10 units from an empty supply: 113 × (1+2+…+10).
+      const mint = MINT_BASE_SATS * ((10 * 11) / 2);
+      expect(
+        (
+          await createPost(
+            form(me, content, fundedTx(me, { content, platformSats: MIN_ECONOMIC + mint }))
+          )
+        ).ok
+      ).toBe(true);
+
+      const rows = db
+        .prepare("SELECT COUNT(*) AS rows, SUM(units) AS units FROM ticker_mentions WHERE symbol=?")
+        .get("BULK") as { rows: number; units: number };
+      // ⚠ ONE ROW. The unique index on (post_id, symbol) is why units is a
+      // column rather than ten rows — see the note in db.ts.
+      expect(rows).toEqual({ rows: 1, units: 10 });
+    });
+
+    it("REFUSES a bulk buy paid for as a single mention", async () => {
+      // The failure this exists to catch: `/buy 1000 $X` names a ticker, so a
+      // charge that fell through to the ordinary path would bill for one unit
+      // and mint a thousand.
+      const me = identity();
+      const content = "/buy 1000 $Cheapskate";
+      const oneUnit = MIN_ECONOMIC + MINT_BASE_SATS;
+      expect(
+        await createPost(form(me, content, fundedTx(me, { content, platformSats: oneUnit })))
+      ).toEqual({ ok: false, reason: "invalid_payment" });
+      expect(db.prepare("SELECT COUNT(*) n FROM ticker_mentions").get()).toEqual({ n: 0 });
+    });
+
+    it("prices the SECOND buy higher — the curve is the mechanism", async () => {
+      const first = identity();
+      // ⚠ 20 UNITS, COMFORTABLY PAST `MINT_SLACK_UNITS`. At a smaller supply the
+      // tolerance band legitimately swallows the whole rise, and the test would
+      // be asserting the band rather than the curve.
+      const a = "/buy 20 $Rising";
+      const costA = MINT_BASE_SATS * ((20 * 21) / 2);
+      expect(
+        (
+          await createPost(
+            form(first, a, fundedTx(first, { content: a, platformSats: MIN_ECONOMIC + costA }))
+          )
+        ).ok
+      ).toBe(true);
+
+      // Supply is 20, so the next five units are the 21st through 25th — and the
+      // price of the FIRST five is no longer enough to buy them.
+      const second = identity();
+      const b = "/buy 5 $Rising";
+      const firstFive = MIN_ECONOMIC + MINT_BASE_SATS * (1 + 2 + 3 + 4 + 5);
+      expect(
+        await createPost(form(second, b, fundedTx(second, { content: b, platformSats: firstFive })))
+      ).toEqual({ ok: false, reason: "invalid_payment" });
+
+      const costB = MINT_BASE_SATS * (21 + 22 + 23 + 24 + 25);
+      expect(
+        (
+          await createPost(
+            form(second, b, fundedTx(second, { content: b, platformSats: MIN_ECONOMIC + costB }))
+          )
+        ).ok
+      ).toBe(true);
+      expect(
+        db.prepare("SELECT SUM(units) AS n FROM ticker_mentions WHERE symbol='RISING'").get()
+      ).toEqual({ n: 25 });
+    });
+
+    it("claims an unclaimed word — buying it IS a founding act", async () => {
+      const me = identity();
+      const content = "/buy 3 $Founded";
+      const mint = MINT_BASE_SATS * (1 + 2 + 3);
+      expect(
+        (
+          await createPost(
+            form(me, content, fundedTx(me, { content, platformSats: MIN_ECONOMIC + mint }))
+          )
+        ).ok
+      ).toBe(true);
+      expect(db.prepare("SELECT symbol FROM tickers WHERE symbol='FOUNDED'").get()).toBeDefined();
+    });
+
+    it("treats a near-miss as an ordinary post, not a purchase", async () => {
+      // `/buy 10 $A for the room` is prose. It must mint ONE unit like any other
+      // post that names a word — never ten, and never be refused as underpaid.
+      const me = identity();
+      const content = "/buy 10 $Nearmiss for the room";
+      expect(
+        (
+          await createPost(
+            form(
+              me,
+              content,
+              fundedTx(me, { content, platformSats: MIN_ECONOMIC + MINT_BASE_SATS })
+            )
+          )
+        ).ok
+      ).toBe(true);
+      expect(
+        db.prepare("SELECT SUM(units) AS n FROM ticker_mentions WHERE symbol='NEARMISS'").get()
+      ).toEqual({ n: 1 });
     });
   });
 
