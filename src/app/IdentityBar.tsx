@@ -387,6 +387,12 @@ export function IdentityChip({
 
   useEffect(() => {
     if (!open) return;
+    // ⚠ NOT IN `inline` MODE: THE PANEL IS THE PAGE, SO THERE IS NO "OUTSIDE".
+    // On the Wallet tab this closed the wallet on the first tap anywhere — the
+    // header, the background, the tab bar — and the chip that would reopen it is
+    // deliberately hidden there, so the wallet vanished with no way back. As a
+    // dropdown, dismiss-on-outside-click is correct and stays.
+    if (inline) return;
     function handleClickOutside(e: MouseEvent) {
       // Don't close the dropdown if a passphrase modal is open — those modals
       // render outside dropdownRef so every click inside them would otherwise
@@ -398,7 +404,7 @@ export function IdentityChip({
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open, showProtectModal, showChangePassModal, closeDropdown]);
+  }, [inline, open, showProtectModal, showChangePassModal, closeDropdown]);
 
   // Destroy manage session on tab blur — same pattern password managers use.
   useEffect(() => {
