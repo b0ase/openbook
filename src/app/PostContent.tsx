@@ -6,6 +6,7 @@ import { MediaEmbed, YouTubeEmbed } from "@/components/MediaEmbed";
 import { identityColor, identityTextColor } from "@/lib/identity-color";
 import { findUrls } from "@/lib/linkify";
 import { firstMedia, storedNameFromUrl } from "@/lib/media";
+import { postHref, postUrl } from "@/lib/post-href";
 import { shouldFold } from "@/lib/post-length";
 import { titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
@@ -58,6 +59,7 @@ export function PostContent({
   const expandable = shouldFold(post.content);
   const [expanded, setExpanded] = useState(false);
   const folded = expandable && !expanded;
+  const [copied, setCopied] = useState(false);
 
   const urls = findUrls(post.content).map((u) => u.url);
   const media = firstMedia(urls);
@@ -111,12 +113,88 @@ export function PostContent({
             interactive, so this opens the permalink rather than the thread
             overlay. */}
         <a
-          href={`/p/${post.id}`}
+          href={postHref(post.id)}
           className="transition-colors hover:text-zinc-300"
           title="Permalink to this post"
         >
           <time suppressHydrationWarning>{timeAgo(post.created_at)}</time>
         </a>
+        {/* ⚠ THE PERMALINK NEEDS TO BE VISIBLE, not just present. It existed on
+            the timestamp — the convention X uses — and the owner still reported
+            that a post "has no unique URL", because a date in the same grey as
+            the rest of the line announces nothing, and on a touch screen there
+            is no hover to discover it with. A control you cannot see is a
+            control you do not have. Copying beats navigating here: the reason
+            to want a post's address is almost always to paste it somewhere. */}
+        <button
+          type="button"
+          onClick={() => {
+            /**
+             * ⚠ NEVER CLAIM A COPY THAT DID NOT HAPPEN, and never fail silently
+             * either. Clipboard writes are refused on insecure origins, in some
+             * in-app WebViews, and whenever the document is not focused — and
+             * `navigator.clipboard` is simply ABSENT in others, which is why
+             * this is not written as one optional-chained promise chain: `?.`
+             * would short-circuit past the `.catch` and leave the button doing
+             * nothing at all. A control that does nothing visible would
+             * recreate the very problem it exists to fix, so every failure
+             * falls back to OPENING the permalink, which puts the address in
+             * the bar where it can be copied by hand.
+             */
+            const fallback = () => {
+              window.location.href = postHref(post.id);
+            };
+            const clipboard = navigator.clipboard;
+            if (!clipboard?.writeText) {
+              fallback();
+              return;
+            }
+            clipboard
+              .writeText(postUrl(window.location.origin, post.id))
+              .then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              })
+              .catch(fallback);
+          }}
+          title="Copy link to this post"
+          className={`relative -m-3 p-3 inline-flex items-center transition-colors ${
+            copied ? "text-amber-400" : "text-zinc-600 hover:text-zinc-300"
+          }`}
+        >
+          <span className="sr-only">Copy link to this post</span>
+          {copied ? (
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          ) : (
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <path d="M16 6l-4-4-4 4" />
+              <path d="M12 2v14" />
+            </svg>
+          )}
+        </button>
         {post.tx_id && (
           <a
             href={`https://whatsonchain.com/tx/${post.tx_id}`}

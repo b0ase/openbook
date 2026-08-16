@@ -2,6 +2,38 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-17 (a post's address, in the address bar)
+
+- **Category: bug fix, feature.** Owner reported — for the second time — that a post "still doesn't
+  have a unique URL". It had one: `/p/<id>` shipped in `bbf3bc6` and the live feed serves those
+  links today. **Nothing ever SHOWED it.** Tapping a post opened `ThreadView`, and only
+  `handleOpenTicker` pushed a URL — a thread reached from a post called `setThreadRootId`
+  directly and pushed nothing, so the address bar still read `/` and Back left the site.
+  The one visible affordance was the timestamp, which on a touch screen has no hover to reveal it.
+- **`Feed.openThread(rootId)`** now wraps every open: state + `pushState(postHref(rootId))`. All
+  three `onOpenThread={setThreadRootId}` call sites rewired (feed rows, header, wallet holdings).
+  `popstate` checks the post address FIRST — `/p/123` names no ticker, so falling through to the
+  ticker parser would have closed the thread the URL was pointing at.
+- **A visible copy-link button** on every post, beside the on-chain icon, in `PostContent` — so it
+  appears identically in the feed, in a thread and on the permalink page. `button` is already in
+  `PostList`'s `INTERACTIVE` list, so it cannot trigger the row click. Every clipboard failure
+  (absent API, insecure origin, unfocused document, in-app WebView) falls back to OPENING the
+  permalink rather than doing nothing — a dead control is the bug being fixed, not an acceptable
+  degradation.
+- **`src/lib/post-href.ts`** — `postHref` / `parsePostHref` / `postUrl`, because the address is now
+  written from three places and parsed in a fourth. 17 unit tests, weighted to what must NOT parse
+  as a post address. Same rule as `tickerHref`, for the same reason.
+- **Verified in a real browser** (dev server, feed with inherited posts revealed): tap a post →
+  `/p/1974`; Back → `/` and the overlay closes; Forward → `/p/1974` and it reopens; the copy button
+  does not open the thread; `/p/1974` cold-loads the post with `<title>` "anon_37sc on $OpenBooks".
+- **Also fixed a lint error on committed code** (`AgentChat.tsx`): the GitHub link was icon-only
+  with an `aria-label`, which Biome's `useAnchorContent` rejects. Replaced with an `sr-only` span,
+  matching the on-chain link's pattern.
+- **Ruled out:** making the thread a real route. The overlay exists precisely so opening a thread
+  cannot disturb the feed's scroll machinery; `pushState` gives the address without the remount.
+- **Unchanged and still next:** flipping the post charge onto the mint curve (the race in the
+  handoff must be solved first), resale, token-gated rooms, `/buy N $ticker`.
+
 ## 2026-08-16 (agents on the board) — the inscription gate passed, and claiming a name was dead
 
 - **Category: verification, bug fix, feature, docs.** Owner asked for an agent account on the live

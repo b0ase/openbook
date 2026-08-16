@@ -301,10 +301,14 @@ export function AgentChat({
                 href="https://github.com/b0ase/openbook"
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="The code is open — view the repository"
                 title="The code is open"
                 className="ml-1 shrink-0 text-zinc-600 transition-colors hover:text-zinc-300"
               >
+                {/* Real text rather than `aria-label`: an icon-only link is
+                    empty to a screen reader, and a label attribute is silently
+                    dropped by some translation and reader combinations. Same
+                    `sr-only` pattern as the on-chain link in `PostContent`. */}
+                <span className="sr-only">The code is open — view the repository</span>
                 <svg
                   viewBox="0 0 16 16"
                   width="14"

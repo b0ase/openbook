@@ -25,6 +25,7 @@ import "@/lib/storage-keys";
 import { BottomNav } from "@/components/BottomNav";
 import { extractUrls } from "@/lib/link-preview";
 import { storedNameFromUrl } from "@/lib/media";
+import { parsePostHref, postHref } from "@/lib/post-href";
 import {
   distinctTickers,
   isRootTicker,
@@ -701,6 +702,32 @@ function FeedContent({
     el.scrollBy(0, -1);
   }, [scrollRef]);
 
+  /**
+   * Open a thread AND give it an address.
+   *
+   * ⚠ EVERY WAY OF OPENING A THREAD HAS TO GO THROUGH HERE. `handleOpenTicker`
+   * already pushed `/$ticker`, so a thread reached by clicking a NAME was
+   * addressable — but a thread reached by tapping a POST called
+   * `setThreadRootId` directly and pushed nothing. The address bar still said
+   * `/`, Back left the site instead of closing the overlay, and the owner
+   * reported (twice) that a post had no URL of its own. It had one; nothing on
+   * screen or in the browser ever showed it.
+   *
+   * `/p/<rootId>` is the same address the permalink route serves, so pasting
+   * what the bar now shows reproduces what the sharer was looking at — the test
+   * `tickerHref`'s comment sets for any thread URL.
+   *
+   * pushState rather than a navigation, for the reason the overlay exists: a
+   * real navigation remounts the feed and loses the reader's place.
+   */
+  const openThread = useCallback((rootId: number) => {
+    setThreadRootId(rootId);
+    const href = postHref(rootId);
+    if (window.location.pathname !== href) {
+      window.history.pushState({ post: rootId }, "", href);
+    }
+  }, []);
+
   // `$Ticker` → the thread it names. Resolved on CLICK rather than pre-fetched
   // for every rendered post: a click is rare, a feed render is constant, and
   // resolving lazily keeps the ticker feature off the 5s poll entirely.
@@ -764,6 +791,15 @@ function FeedContent({
   // Close on Back, rather than letting Back leave the site while a thread is open.
   useEffect(() => {
     const onPop = () => {
+      // A post address is checked FIRST and answers on its own: `/p/123` names
+      // no ticker, so falling through to the ticker parser would close the
+      // thread the URL is currently pointing at — leaving the bar and the
+      // screen disagreeing after a single Back or Forward.
+      const postId = parsePostHref(window.location.pathname);
+      if (postId !== null) {
+        setThreadRootId(postId);
+        return;
+      }
       const fromUrl = parseTickerPath(window.location.pathname);
       const leaf = fromUrl.at(-1);
       // No ticker in the URL and the root's own name both mean the feed.
@@ -824,7 +860,7 @@ function FeedContent({
         genesisHydrated={genesisHydrated}
         genesisVisited={genesisVisited}
         onScrollToGenesis={handleGoOrigin}
-        onOpenThread={setThreadRootId}
+        onOpenThread={openThread}
       />
 
       {/* Published funding address — see SupportAddress for why this reverses the
@@ -887,7 +923,7 @@ function FeedContent({
             onFreeBootUsed={handleFreeBootUsed}
             bootPrice={bootPrice}
             freeBootsRemaining={freeBootsRemaining}
-            onOpenThread={setThreadRootId}
+            onOpenThread={openThread}
             onOpenTicker={handleOpenTicker}
           />
 
@@ -1016,7 +1052,7 @@ function FeedContent({
         <ThreadView
           key={threadRootId}
           rootId={threadRootId}
-          onOpenThread={setThreadRootId}
+          onOpenThread={openThread}
           bootPrice={bootPrice}
           freeBootsRemaining={freeBootsRemaining}
           onClose={() => {
