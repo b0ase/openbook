@@ -673,7 +673,7 @@ export function getStoredHint(): string | undefined {
 // that flips true on first-ever save. It drives the install pitch, the first-
 // earning prompt, etc. We keep it as-is for those existing consumers.
 //
-// E27 adds a per-address flag layered on top: `opencook_saved:<addr6>` storing
+// E27 adds a per-address flag layered on top: `openbook_saved:<addr6>` storing
 // the ISO date of the most recent save for that address. Each rotation creates
 // a new address, so users need to save once per identity — but global
 // "backedUp ever?" semantics are preserved.
@@ -681,7 +681,7 @@ export function getStoredHint(): string | undefined {
 // `addr6 = address.slice(1, 7)` to match `buildFilename`'s addr6 convention
 // (skip the leading "1" since all P2PKH addresses start with that).
 
-const ADDR_SAVED_KEY_PREFIX = "opencook_saved:";
+const ADDR_SAVED_KEY_PREFIX = "openbook_saved:";
 
 function addrSlug(address: string): string {
   return address.slice(1, 7);

@@ -16,6 +16,12 @@ import { useFeedPolling } from "@/hooks/useFeedPolling";
 import { useScrollTracker } from "@/hooks/useScrollTracker";
 import { FORK_POINT_ID, isInheritedPost } from "@/lib/fork-point";
 import { readCachedNym } from "@/lib/nym-cache";
+// Imported for its module-load side effect: copies this user's `opencook_*`
+// storage entries to `openbook_*` BEFORE React renders. Several of these keys
+// are read in lazy `useState` initialisers during the first render, so a
+// `useEffect` here would land too late and the user would see their read
+// position, permanence acknowledgement and backup flag all reset for one paint.
+import "@/lib/storage-keys";
 import {
   distinctTickers,
   isRootTicker,
@@ -322,7 +328,7 @@ function FeedContent({
   const lastReadIdRef = useRef<number | null | undefined>(undefined);
   if (lastReadIdRef.current === undefined) {
     const raw =
-      typeof window !== "undefined" ? localStorage.getItem("opencook_last_read_id") : null;
+      typeof window !== "undefined" ? localStorage.getItem("openbook_last_read_id") : null;
     lastReadIdRef.current = raw ? Number(raw) : null;
   }
   const firstUnreadIdRef = useRef<number | undefined>(undefined);
@@ -608,12 +614,12 @@ function FeedContent({
   // Persist the newest-seen id whenever the user is caught up (at the live bottom).
   useEffect(() => {
     if (mode !== "live" || !isAtBottom || serverPosts.length === 0) return;
-    localStorage.setItem("opencook_last_read_id", String(serverPosts[0].id));
+    localStorage.setItem("openbook_last_read_id", String(serverPosts[0].id));
   }, [isAtBottom, mode, serverPosts]);
   useEffect(() => {
     const save = () => {
       if (mode === "live" && isAtBottomRef.current && serverPosts.length > 0) {
-        localStorage.setItem("opencook_last_read_id", String(serverPosts[0].id));
+        localStorage.setItem("openbook_last_read_id", String(serverPosts[0].id));
       }
     };
     const onVis = () => {

@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 
 export type CurrencyMode = "noob" | "goat";
 
-const STORAGE_KEY = "opencook_currency_mode";
+const STORAGE_KEY = "openbook_currency_mode";
 
 /**
  * Toggle between Noob Mode (dollars) and Goat Mode (sats).

@@ -11,9 +11,9 @@ import {
 } from "react";
 import { isEffectivelyProtected } from "@/services/bsv/identity";
 
-const ENGAGED_KEY = "opencook_install_engaged";
-const BACKED_UP_KEY = "opencook_identity_backed_up";
-const SHEET_SHOWN_KEY = "opencook_install_sheet_shown"; // sessionStorage
+const ENGAGED_KEY = "openbook_install_engaged";
+const BACKED_UP_KEY = "openbook_identity_backed_up";
+const SHEET_SHOWN_KEY = "openbook_install_sheet_shown"; // sessionStorage
 const SHEET_DELAY_MS = 800;
 
 /**
@@ -63,7 +63,7 @@ interface InstallContextValue {
   markEngaged: () => void;
   /**
    * True if the user has saved a recovery file at least once (mirrored from
-   * the `opencook_identity_backed_up` localStorage flag). The install pitch is
+   * the `openbook_identity_backed_up` localStorage flag). The install pitch is
    * gated on this — without a recovery file, a fresh install lands in a new
    * sandbox with no recovery path. Source of truth for the trigger.
    */

@@ -28,8 +28,8 @@ import { getStoredAnonName, isEffectivelyProtected, unlockIdentity } from "@/ser
 import { getHoldings, getNym, type Holding } from "./actions";
 import { FundAddress } from "./FundAddress";
 
-const BACKED_UP_KEY = "opencook_identity_backed_up";
-const PASSPHRASE_NUDGE_DISMISSED_UNTIL_KEY = "opencook_passphrase_nudge_dismissed_until";
+const BACKED_UP_KEY = "openbook_identity_backed_up";
+const PASSPHRASE_NUDGE_DISMISSED_UNTIL_KEY = "openbook_passphrase_nudge_dismissed_until";
 const PASSPHRASE_NUDGE_BACKOFF_DAYS = 30;
 
 function isPassphraseNudgeSuppressed(): boolean {

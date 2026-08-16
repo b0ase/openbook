@@ -17,7 +17,7 @@
  * self-corrects on unlock.
  */
 
-const NYM_KEY = "opencook_nym";
+const NYM_KEY = "openbook_nym";
 
 export function readCachedNym(pubkey?: string): string | null {
   if (typeof window === "undefined") return null;

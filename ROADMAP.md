@@ -97,6 +97,27 @@ Full reasoning in TOKENS.md; these are the live questions, not a summary of sett
 
 ## Backlog — engineering
 
+**From the board** (owner posting as `$B0ase`, 2026-08-16 — read the feed regularly and add what
+he asks for here; the board is where the asks now arrive):
+
+- [ ] **Bitcoin Schema on posts: like, subscribe, share, reply, tag.** Reply already exists
+      (`parent_id` / `getThread` / `ThreadView`), so this is really four new verbs plus adopting a
+      standard envelope for them. ⚠ Decide FIRST whether each verb is a *paid on-chain record* or a
+      database row. Under `PAID_POSTING` a like that inscribes costs the liker ~113 sats, which is
+      a very different product from a free like — and "every like is a paid transaction" is a
+      decision about what the board IS, not an implementation detail. See the `$genius` note below:
+      the same question decides both.
+- [ ] **Tagging a post into a ticker's thread** — "if a user thinks a post needs a tag, they can
+      tag it (e.g. `$genius`) and that adds that post to the `$genius` thread". ⚠ **This was
+      deliberately blocked, and the reason it was blocked has now expired.** The `ticker_mentions`
+      edge table `(from_post, ticker, target)` is built and nothing writes a targeted row, because
+      *"free tags would put `$COOL` on everything within a day and the units could never be
+      recalled"*. Tags are no longer free — `PAID_POSTING` is on, so a tag costs the tagger a real
+      ~113 sats, which is exactly the friction that objection wanted. **The blocker is cleared; the
+      open question is now the split, not the spam.** Still to settle: does tagging mint the
+      TAGGER a unit of `$genius` (today, citing does — one mention of `$B0ase` minted 33% of it),
+      and does the tagged post's author get anything? Answer that before any row is written.
+
 **Boost board presentation** (owner-requested 2026-08-16 — the board is the paid slot, so it is
 the one surface where a bare URL costs somebody money):
 

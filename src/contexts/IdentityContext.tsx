@@ -129,7 +129,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return false; // SSR → false; first client commit sets it
     try {
       // Misdetect escape: a wrongly-flagged real browser tapped "continue anyway".
-      if (sessionStorage.getItem("opencook_inapp_continue") === "1") return false;
+      if (sessionStorage.getItem("openbook_inapp_continue") === "1") return false;
     } catch {
       /* sessionStorage unavailable — fall through to detection */
     }
@@ -147,7 +147,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   // for the rest of the session (persisted so a reload stays dismissed).
   const dismissReadOnly = useCallback(() => {
     try {
-      sessionStorage.setItem("opencook_inapp_continue", "1");
+      sessionStorage.setItem("openbook_inapp_continue", "1");
     } catch {
       /* non-fatal */
     }

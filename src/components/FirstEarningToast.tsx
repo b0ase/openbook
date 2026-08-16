@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const DISMISSED_UNTIL_KEY = "opencook_first_earning_save_dismissed_until";
+const DISMISSED_UNTIL_KEY = "openbook_first_earning_save_dismissed_until";
 const HOUR_MS = 60 * 60 * 1000;
 const BACKOFF_HOURS = 48;
 

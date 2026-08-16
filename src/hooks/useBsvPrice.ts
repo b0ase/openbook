@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const CACHE_KEY = "opencook_bsv_price";
+const CACHE_KEY = "openbook_bsv_price";
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 interface CachedPrice {

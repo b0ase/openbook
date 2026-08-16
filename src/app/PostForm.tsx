@@ -400,7 +400,7 @@ export function PostForm({
     // One-time permanence acknowledgement before the user's first permanent
     // on-chain post (Phase 3 surfacing). After they confirm once, never again.
     const acked =
-      typeof window !== "undefined" && localStorage.getItem("opencook_permanence_ack") === "1";
+      typeof window !== "undefined" && localStorage.getItem("openbook_permanence_ack") === "1";
     if (!acked) {
       pendingPostRef.current = { identity, content: trimmed };
       setShowPermanenceGate(true);
@@ -789,7 +789,7 @@ export function PostForm({
         <PermanenceGate
           onConfirm={() => {
             try {
-              localStorage.setItem("opencook_permanence_ack", "1");
+              localStorage.setItem("openbook_permanence_ack", "1");
             } catch {
               /* localStorage unavailable — gate re-appears next attempt, acceptable */
             }

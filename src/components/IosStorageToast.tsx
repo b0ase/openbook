@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const SHOWN_KEY = "opencook_ios_storage_notice_shown";
+const SHOWN_KEY = "openbook_ios_storage_notice_shown";
 const AUTO_DISMISS_MS = 8000;
 
 function isIosStandalone(): boolean {
@@ -36,7 +36,7 @@ function writeShown(): void {
  * file is the path back.
  *
  * Triggers ONLY when `navigator.standalone === true` (iOS-specific) AND
- * `opencook_ios_storage_notice_shown` localStorage flag is unset. Android
+ * `openbook_ios_storage_notice_shown` localStorage flag is unset. Android
  * standalone (display-mode: standalone) is excluded because Chrome on Android
  * doesn't have iOS's ITP-style storage eviction.
  *

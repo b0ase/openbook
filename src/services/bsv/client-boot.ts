@@ -91,7 +91,7 @@ export function acquireTxMutex(): Promise<() => void> {
 
 /** UTXOs consumed as inputs — blacklist for stale WoC data.
  *  Persisted to localStorage so it survives page refreshes. */
-const SPENT_STORAGE_KEY = "opencook_spent_utxos";
+const SPENT_STORAGE_KEY = "openbook_spent_utxos";
 
 function loadSpentSet(): Set<string> {
   try {
