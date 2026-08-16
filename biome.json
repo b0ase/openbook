@@ -45,7 +45,8 @@
       "!**/build",
       "!**/node_modules",
       "!**/next-env.d.ts",
-      "!**/globals.css"
+      "!**/globals.css",
+      "!**/*.code-workspace"
     ]
   }
 }

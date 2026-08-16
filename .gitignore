@@ -68,3 +68,9 @@ openbook-server-key*
 # Uploaded media — lives on the persistent volume in production (UPLOAD_PATH),
 # and beside local.db in development. Never committed.
 uploads/
+
+# Editor workspace files. They hold LOCAL FILESYSTEM PATHS to other projects on
+# the author's machine — exactly the incidental leakage Hard Rule #6 is about,
+# since repo files are public and effectively permanent. A `git add -A` will
+# sweep one up if it is not ignored, which is how it nearly got committed.
+*.code-workspace
