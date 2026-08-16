@@ -103,7 +103,20 @@ export function PostContent({
           />
         )}
         <span>·</span>
-        <time suppressHydrationWarning>{timeAgo(post.created_at)}</time>
+        {/* ⚠ THE TIMESTAMP IS THE PERMALINK, the way it is on X. A post had no
+            URL of its own, so the only way to reach one was to scroll a feed to
+            it — unshareable, on a board whose claim is that what you wrote is
+            yours. The timestamp is the conventional place to put it and costs no
+            new chrome. `PostList`'s row-click guard already treats an `<a>` as
+            interactive, so this opens the permalink rather than the thread
+            overlay. */}
+        <a
+          href={`/p/${post.id}`}
+          className="transition-colors hover:text-zinc-300"
+          title="Permalink to this post"
+        >
+          <time suppressHydrationWarning>{timeAgo(post.created_at)}</time>
+        </a>
         {post.tx_id && (
           <a
             href={`https://whatsonchain.com/tx/${post.tx_id}`}

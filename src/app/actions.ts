@@ -1766,6 +1766,24 @@ export async function getNewPosts(sinceId: number): Promise<Post[]> {
  * Deliberately NOT filtered by `parent_id`: a root carries `root_id = id`, so it
  * is included and appears first.
  */
+/**
+ * One post by id, for its permalink.
+ *
+ * ⚠ A POST NEEDS ITS OWN URL, and until now it had none — the only way to reach
+ * one was to find it in a feed. That makes a post unshareable, which is a strange
+ * property for a board whose whole claim is that what you wrote is yours and
+ * permanent: you owned it and could not link to it.
+ *
+ * Carries the full `POST_SELECT` shape so a permalink renders identically to the
+ * same post in the feed — same boost count, same reply count, same unfurl. A
+ * thinner query here would make a shared link look like a different post.
+ */
+export async function getPostById(id: number): Promise<Post | null> {
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const row = db.prepare(`${POST_SELECT} WHERE p.id = ?`).get(Math.floor(id)) as Post | undefined;
+  return row ?? null;
+}
+
 export async function getThread(rootId: number): Promise<Post[]> {
   if (!Number.isInteger(rootId) || rootId <= 0) return [];
   // ⚠ THE SECOND CLAUSE IS THE BRANCH POINTS, AND IT IS NOT OPTIONAL. Claiming a
