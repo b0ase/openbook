@@ -255,6 +255,12 @@ export function applyTickerMeaningMigration(database: Db): void {
       updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+  // The ANCHOR: what the word means in the world, before this board touched it.
+  // Separate from `meaning` because they answer different questions — "what does
+  // this word mean" vs "what has it come to mean here" — and because the anchor
+  // is fetched once while the meaning is re-read as usage moves.
+  addColumnIfMissing(database, "ticker_meanings", "anchor", "anchor TEXT");
+  addColumnIfMissing(database, "ticker_meanings", "anchor_url", "anchor_url TEXT");
 }
 
 /**

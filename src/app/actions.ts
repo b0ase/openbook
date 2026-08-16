@@ -841,11 +841,24 @@ export async function getOwnedTickers(pubkey: string): Promise<string[]> {
  * Null until the corpus is thick enough to say anything — an honest absence
  * beats a confident definition drawn from two posts.
  */
-export async function getTickerMeaningFor(
-  symbol: string
-): Promise<{ meaning: string; corpusSize: number; updatedAt: string } | null> {
+export async function getTickerMeaningFor(symbol: string): Promise<{
+  /** What the board has made it mean. Null until the corpus can support one. */
+  meaning: string | null;
+  /** What it means in the world — the prior the board accretes on top of. */
+  anchor: string | null;
+  anchorUrl: string | null;
+  corpusSize: number;
+  updatedAt: string;
+} | null> {
   const m = getTickerMeaning(symbol);
-  return m ? { meaning: m.meaning, corpusSize: m.corpusSize, updatedAt: m.updatedAt } : null;
+  if (!m) return null;
+  return {
+    meaning: m.meaning ?? null,
+    anchor: m.anchor ?? null,
+    anchorUrl: m.anchorUrl ?? null,
+    corpusSize: m.corpusSize,
+    updatedAt: m.updatedAt,
+  };
 }
 
 /**

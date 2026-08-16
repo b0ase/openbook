@@ -94,6 +94,7 @@ export function ThreadView({
   const [authored, setAuthored] = useState<Post[]>([]);
   /** What this word has come to mean, written by its agent from actual usage. */
   const [meaning, setMeaning] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState<{ text: string; url: string | null } | null>(null);
   const [path, setPath] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [optimistic, setOptimistic] = useState<OptimisticReply[]>([]);
@@ -158,10 +159,15 @@ export function ThreadView({
       if (t) {
         void getTickerMeaningFor(t)
           .then((m) => {
-            if (live) setMeaning(m?.meaning ?? null);
+            if (!live) return;
+            setMeaning(m?.meaning ?? null);
+            setAnchor(m?.anchor ? { text: m.anchor, url: m.anchorUrl ?? null } : null);
           })
           .catch(() => {
-            if (live) setMeaning(null);
+            if (live) {
+              setMeaning(null);
+              setAnchor(null);
+            }
           });
         void getPostsByNym(t)
           .then((rows) => {
@@ -408,6 +414,23 @@ export function ThreadView({
                 TOKENS.md "A keyword is a living definition". Absent until the
                 corpus can support one; an honest silence beats a confident
                 definition drawn from two posts. */}
+            {anchor && (
+              <div className="mx-4 mt-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
+                <p className="text-[10px] uppercase tracking-widest text-zinc-500">The word</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-zinc-400">{anchor.text}</p>
+                {anchor.url && (
+                  <a
+                    href={anchor.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1.5 inline-block text-[10px] text-zinc-600 underline underline-offset-2 hover:text-zinc-400"
+                  >
+                    Wikipedia · CC BY-SA
+                  </a>
+                )}
+              </div>
+            )}
+
             {meaning && (
               <div className="mx-4 mb-1 mt-2 rounded-lg border border-amber-400/15 bg-amber-400/[0.03] px-3 py-2.5">
                 <p className="text-[10px] uppercase tracking-widest text-amber-400/60">

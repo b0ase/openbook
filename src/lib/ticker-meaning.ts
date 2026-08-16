@@ -32,9 +32,81 @@ const MAX_MEANING_CHARS = 400;
 
 export interface TickerMeaning {
   symbol: string;
-  meaning: string;
+  meaning: string | null;
   corpusSize: number;
   updatedAt: string;
+  /** What the word means in the world, before this board touched it. */
+  anchor?: string | null;
+  anchorUrl?: string | null;
+}
+
+/**
+ * The word's meaning in the world, fetched once from Wikipedia.
+ *
+ * ⚠ THIS IS A PRIOR, NOT A DEFINITION THIS BOARD OWNS. It is what stops a
+ * keyword being defined by whatever happened to be said in it first: `$pink`
+ * whose only post is a post ABOUT dilution would otherwise come to mean
+ * dilution. The anchor holds the colour; the board accretes on top of it.
+ *
+ * ⚠ WIKIPEDIA, NOT A DICTIONARY. Cambridge and friends are copyrighted, and
+ * anything stored here could end up displayed or inscribed. Wikipedia is
+ * CC BY-SA, so it is usable with attribution — which is why `anchor_url` is
+ * stored alongside and always shown.
+ *
+ * Fetched ONCE per word and never re-fetched: the anchor is the fixed point.
+ * Words with no article (`$B0ase`, `$Memeplex`) simply have none, and the UI
+ * shows nothing rather than something wrong.
+ */
+export async function fetchAnchor(symbol: string): Promise<{ text: string; url: string } | null> {
+  const canonical = canonicalTicker(symbol);
+  if (!isValidTicker(canonical)) return null;
+  // Title-case: Wikipedia titles are case-sensitive after the first letter, and
+  // an all-caps title misses almost everything.
+  const title = canonical.charAt(0) + canonical.slice(1).toLowerCase();
+  try {
+    const res = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+      { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      type?: string;
+      extract?: string;
+      content_urls?: { desktop?: { page?: string } };
+    };
+    // Disambiguation pages describe the ambiguity, not the word — worse than
+    // nothing, because they read as a definition.
+    if (data.type === "disambiguation") return null;
+    const text = (data.extract ?? "").trim();
+    if (text.length < 20) return null;
+    return {
+      text: text.length > 500 ? `${text.slice(0, 499).trimEnd()}…` : text,
+      url: data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${title}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch and store the anchor if this word has never had one. Safe to call often. */
+export async function ensureAnchor(symbol: string): Promise<void> {
+  const canonical = canonicalTicker(symbol);
+  if (!isValidTicker(canonical)) return;
+  try {
+    const row = db.prepare("SELECT anchor FROM ticker_meanings WHERE symbol = ?").get(canonical) as
+      | { anchor: string | null }
+      | undefined;
+    if (row?.anchor) return;
+    const found = await fetchAnchor(canonical);
+    if (!found) return;
+    db.prepare(
+      `INSERT INTO ticker_meanings (symbol, meaning, corpus_size, anchor, anchor_url)
+       VALUES (?, NULL, 0, ?, ?)
+       ON CONFLICT(symbol) DO UPDATE SET anchor = excluded.anchor, anchor_url = excluded.anchor_url`
+    ).run(canonical, found.text, found.url);
+  } catch {
+    /* An absent anchor is a missing nicety, never a failure. */
+  }
 }
 
 export function getTickerMeaning(symbol: string): TickerMeaning | null {
@@ -42,10 +114,17 @@ export function getTickerMeaning(symbol: string): TickerMeaning | null {
   if (!isValidTicker(canonical)) return null;
   const row = db
     .prepare(
-      "SELECT symbol, meaning, corpus_size, updated_at FROM ticker_meanings WHERE symbol = ?"
+      "SELECT symbol, meaning, corpus_size, updated_at, anchor, anchor_url FROM ticker_meanings WHERE symbol = ?"
     )
     .get(canonical) as
-    | { symbol: string; meaning: string; corpus_size: number; updated_at: string }
+    | {
+        symbol: string;
+        meaning: string | null;
+        corpus_size: number;
+        updated_at: string;
+        anchor: string | null;
+        anchor_url: string | null;
+      }
     | undefined;
   if (!row) return null;
   return {
@@ -53,6 +132,8 @@ export function getTickerMeaning(symbol: string): TickerMeaning | null {
     meaning: row.meaning,
     corpusSize: row.corpus_size,
     updatedAt: row.updated_at,
+    anchor: row.anchor,
+    anchorUrl: row.anchor_url,
   };
 }
 
@@ -116,8 +197,25 @@ export async function deriveTickerMeaning(symbol: string): Promise<string | null
   const corpus = corpusFor(canonical);
   if (corpus.length < MIN_CORPUS) return null;
 
+  const anchorRow = db
+    .prepare("SELECT anchor FROM ticker_meanings WHERE symbol = ?")
+    .get(canonical) as { anchor: string | null } | undefined;
+
   const system = [
     `You maintain the definition of the word "$${canonical}" on a public board.`,
+    anchorRow?.anchor
+      ? [
+          "",
+          "What the word means in the world (the starting point, not the answer):",
+          anchorRow.anchor,
+          "",
+          "⚠ This is the ANCHOR. A thread whose few posts happen to be ABOUT the",
+          "word rather than USING it must not be allowed to redefine it — a $pink",
+          "containing one post about dilution still means the colour. Depart from",
+          "the anchor only where usage genuinely and repeatedly departs from it,",
+          "and say so when it does.",
+        ].join("\n")
+      : "",
     "",
     "You are not deciding what it means. You are reporting what the people using",
     "it have made it mean. Read the posts below — every one of them used this",

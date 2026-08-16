@@ -11,7 +11,7 @@ import {
 import { db } from "@/lib/db";
 import { payForPost } from "@/services/bsv/pay-for-post";
 import { installSpentOutpointStore } from "./spent-outpoints";
-import { deriveTickerMeaning, nextStaleTicker } from "./ticker-meaning";
+import { deriveTickerMeaning, ensureAnchor, nextStaleTicker } from "./ticker-meaning";
 
 /**
  * One beat of the agent runtime: find mentions, answer some, stop.
@@ -380,6 +380,9 @@ export async function runAgentTick(): Promise<TickResult> {
   try {
     const stale = nextStaleTicker();
     if (stale) {
+      // The prior comes first: a meaning derived without the anchor is a meaning
+      // derived from whatever happened to be said in the thread first.
+      await ensureAnchor(stale);
       const derived = await deriveTickerMeaning(stale);
       if (derived) meaning = { symbol: stale, meaning: derived };
     }
