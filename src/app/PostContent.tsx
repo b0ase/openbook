@@ -9,6 +9,7 @@ import { findUrls } from "@/lib/linkify";
 import { firstMedia, storedNameFromUrl } from "@/lib/media";
 import { postHref, postUrl } from "@/lib/post-href";
 import { shouldFold } from "@/lib/post-length";
+import { parseSendCommand } from "@/lib/send-command";
 import { titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import { firstYouTube } from "@/lib/youtube";
@@ -67,6 +68,8 @@ export function PostContent({
    * the same function that priced and minted it — see the render below.
    */
   const buy = parseBuyCommand(post.content);
+  /** The gift this post records, if it is one — same parser that moved the units. */
+  const send = parseSendCommand(post.content);
 
   const urls = findUrls(post.content).map((u) => u.url);
   const media = firstMedia(urls);
@@ -236,7 +239,34 @@ export function PostContent({
           price) is one of the more interesting events on this board. Read from
           the SAME parser the charge and the mint use, so the feed cannot
           describe a purchase differently from how it was billed. */}
-      {buy ? (
+      {send ? (
+        /* ⚠ A GIFT IS THE MOST READABLE EVENT ON THIS BOARD, and it is the one
+           most obviously ruined by printing its syntax. The recipient is rendered
+           the way people are rendered everywhere else — `$Nym` in amber — rather
+           than as the `@Nym` that was typed, because `@` is input grammar and `$`
+           is how this board names a person. An address recipient is shown
+           truncated: the full 34 characters would dominate the line and nobody
+           reads them. */
+        <p className="mt-1.5 flex flex-wrap items-baseline gap-1.5 text-[15px] leading-relaxed">
+          <span className="text-zinc-400">sent</span>
+          <span className="font-mono tabular-nums text-white">{send.units.toLocaleString()}</span>
+          <span className="text-zinc-400">{send.units === 1 ? "unit of" : "units of"}</span>
+          <button
+            type="button"
+            onClick={() => onOpenTicker?.(send.symbol)}
+            disabled={!onOpenTicker}
+            className="font-medium text-amber-400 transition-colors enabled:hover:text-amber-300 disabled:cursor-default"
+          >
+            ${titleCaseTicker(send.symbol)}
+          </button>
+          <span className="text-zinc-400">to</span>
+          <span className="font-medium text-amber-400">
+            {send.recipient.kind === "nym"
+              ? `$${titleCaseTicker(send.recipient.value)}`
+              : `${send.recipient.value.slice(0, 6)}…${send.recipient.value.slice(-4)}`}
+          </span>
+        </p>
+      ) : buy ? (
         <p className="mt-1.5 flex flex-wrap items-baseline gap-1.5 text-[15px] leading-relaxed">
           <span className="text-zinc-400">bought</span>
           <span className="font-mono tabular-nums text-white">{buy.units.toLocaleString()}</span>

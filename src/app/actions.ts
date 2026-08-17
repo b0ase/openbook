@@ -44,6 +44,7 @@ import { MAX_POST_CHARS } from "@/lib/post-length";
 import { rateLimit } from "@/lib/rate-limit";
 import { admitFounder, enterRoom, mayEnter, type RoomAccess, roomAccess } from "@/lib/room-access";
 import { enterRoomMessage } from "@/lib/room-entry-message";
+import { parseSendCommand, type SendRecipient } from "@/lib/send-command";
 import {
   FREE_BOOT_COST_SATS,
   hasDailyBudget,
@@ -97,6 +98,16 @@ export interface CreatePostResult {
     | "payment_required"
     /** A transaction was supplied but does not do what it claims. */
     | "invalid_payment";
+  /**
+   * What a `/send` in this post actually did.
+   *
+   * ⚠ SEPARATE FROM `ok`, BECAUSE THE POST SUCCEEDS EITHER WAY. The transfer runs
+   * after the post is stored and cannot un-store it, so a send to an unknown
+   * recipient leaves a published message that did nothing. The composer needs to be
+   * able to say so about a post the author can see — reporting `ok: true` and
+   * nothing else would be the interface hiding a failed transfer.
+   */
+  send?: SendOutcome;
 }
 
 /**
@@ -390,6 +401,10 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   // the ticket had not been minted yet.
   admitFounders(postId, pubkey);
 
+  // ⚠ AFTER the mention pass, which SKIPS a send entirely — so nothing has been
+  // minted and the units about to move are ones the sender already held.
+  const sendOutcome = executeSend(content.trim(), pubkey);
+
   // Fire-and-forget: log on-chain, update tx_id if successful
   const trimmedContent = content.trim();
   const sigStr = typeof signature === "string" ? signature : null;
@@ -430,7 +445,7 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   // committed; the preview attaches when it arrives and the feed poll picks it up.
   void unfurlFirstLink(postId, trimmedContent);
 
-  return { ok: true };
+  return sendOutcome ? { ok: true, send: sendOutcome } : { ok: true };
 }
 
 /**
@@ -452,6 +467,77 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
  * here and have no writer yet: tagging is gated on paid posting. The columns
  * exist so that gate opens onto a schema that already fits.
  */
+/**
+ * Resolve a `/send` recipient to a pubkey — the one lookup that must not be loose.
+ *
+ * ⚠ NO FUZZY MATCHING, NO NEAREST NEIGHBOUR, NO CREATION. A send is irreversible
+ * and pays nothing back, so "did you mean" has no place here: either the recipient
+ * exists exactly as named or the send is refused and the sender keeps their units.
+ * Returning null is always the safe answer.
+ *
+ * An address resolves through two tables because a user may be known by either:
+ * `nyms.address` for somebody who claimed a name, and `identity_addresses` for
+ * everybody else — that map exists because a protected wallet is LOCKED by default
+ * and a locked wallet has an address but no pubkey in the clear.
+ */
+function resolveSendRecipient(recipient: SendRecipient): string | null {
+  if (recipient.kind === "nym") {
+    const row = db.prepare("SELECT pubkey FROM nyms WHERE symbol = ?").get(recipient.value) as
+      | { pubkey: string }
+      | undefined;
+    return row?.pubkey ?? null;
+  }
+
+  const byNym = db.prepare("SELECT pubkey FROM nyms WHERE address = ?").get(recipient.value) as
+    | { pubkey: string }
+    | undefined;
+  if (byNym?.pubkey) return byNym.pubkey;
+
+  const known = db
+    .prepare("SELECT pubkey FROM identity_addresses WHERE address = ?")
+    .get(recipient.value) as { pubkey: string } | undefined;
+  return known?.pubkey ?? null;
+}
+
+export type SendOutcome =
+  | { ok: true; units: number; symbol: string }
+  | { ok: false; reason: "unknown_recipient" | "self" | "insufficient_units" };
+
+/**
+ * Move units from the poster to the named recipient.
+ *
+ * ⚠ THE POST'S SIGNATURE IS THE AUTHORISATION, already verified by `createPost`
+ * over the whole content — which names the symbol, the quantity AND the recipient.
+ * That is why there is no separate signed message here as there is for a listing:
+ * changing any term changes the string that was signed. See `send-command.ts`.
+ *
+ * ⚠ IT RUNS AFTER THE POST IS STORED, AND CANNOT UNDO IT. A refused send therefore
+ * leaves the post standing — which is right, and the reason `SendOutcome` is
+ * returned rather than swallowed: the composer has to be able to say *"that did not
+ * go through"* about a message the author can see published. Silently posting
+ * `/send 1 $Occam @Ghost` and moving nothing is the failure mode to avoid.
+ *
+ * ⚠ SENDING TO YOURSELF IS REFUSED, not treated as a no-op. `transferUnits` would
+ * debit and credit the same row for a net zero, which succeeds and means nothing,
+ * and would leave a permanent public record of a transfer that did not happen.
+ */
+function executeSend(content: string, pubkey: FormDataEntryValue | null): SendOutcome | null {
+  const cmd = parseSendCommand(content);
+  if (!cmd) return null;
+  const from = typeof pubkey === "string" ? pubkey : null;
+  if (!from) return { ok: false, reason: "unknown_recipient" };
+
+  const to = resolveSendRecipient(cmd.recipient);
+  if (!to) return { ok: false, reason: "unknown_recipient" };
+  if (to === from) return { ok: false, reason: "self" };
+
+  // ⚠ ONE TRANSACTION. `transferUnits` debits then credits, and a failure between
+  // the two would destroy somebody's property — the same reason a fill wraps it.
+  const moved = db.transaction(() => transferUnits(cmd.symbol, from, to, cmd.units))();
+  if (!moved) return { ok: false, reason: "insufficient_units" };
+  return { ok: true, units: cmd.units, symbol: cmd.symbol };
+}
+
 /**
  * Admit the founder to every room this post created.
  *
@@ -525,6 +611,17 @@ function recordTickerMentions(
      * One row, `units` many. See the column's note in `db.ts` for why it is not
      * a thousand rows.
      */
+    /**
+     * ⚠ A SEND MINTS NOTHING — CHECKED FIRST, AND THE ORDER IS LOAD-BEARING.
+     *
+     * `/send 1 $Occam @Bob` names a ticker, so the ordinary path below would mint
+     * the sender a FRESH unit of it — on top of the one they are giving away, and
+     * having been charged zero for it by `mintChargeSats`. Supply must be invariant
+     * under a send: units move, nothing is created. The transfer itself happens in
+     * `executeSend`, after this, because it needs the recipient resolved.
+     */
+    if (parseSendCommand(content)) return;
+
     const buy = parseBuyCommand(content);
     if (buy) {
       /**
@@ -568,6 +665,14 @@ function registerTickers(
   pubkey: FormDataEntryValue | null
 ): void {
   try {
+    /**
+     * ⚠ A SEND CLAIMS NOTHING. You cannot give away what does not exist, so
+     * `/send 1 $Nobody @Bob` must fail as a send rather than quietly FOUNDING
+     * `$Nobody` on the way past — which is what would happen here, since claiming
+     * is a side effect of naming. A send names a token it expects to already own.
+     */
+    if (parseSendCommand(content)) return;
+
     const symbols = distinctTickers(content);
     if (!symbols.length) return;
 

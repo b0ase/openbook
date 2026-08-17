@@ -126,6 +126,8 @@ export function ThreadView({
   /** This holder's position — only fetched once the door is open. */
   const [position, setPosition] = useState<RoomPositionData | null>(null);
   const [selling, setSelling] = useState(false);
+  /** Text the Send button drops into the reply box. Nonce so a repeat tap refills. */
+  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | undefined>();
 
   const refresh = useCallback(async () => {
     // The viewer decides what comes back — a room sends its messages only to
@@ -461,7 +463,17 @@ export function ThreadView({
           )}
 
           {/* Already in: your position, kept in view. See `RoomPosition`. */}
-          {position && <RoomPosition position={position} onSell={() => setSelling(true)} />}
+          {position && (
+            <RoomPosition
+              position={position}
+              onSell={() => setSelling(true)}
+              onSend={() =>
+                // Trailing space, and no recipient: the author names who it goes
+                // to. See `prefill` — this fills the box, it does not send.
+                setPrefill({ text: `/send 1 $${position.symbol} `, nonce: Date.now() })
+              }
+            />
+          )}
 
           {/* ⚠ THE DOOR COMES FIRST (owner, 2026-08-17). It sat under the root
             post, on the theory that a buyer should see what they are buying
@@ -678,6 +690,7 @@ export function ThreadView({
               parentId={rootId}
               compact
               placeholder="Reply…"
+              prefill={prefill}
               onPostCreated={handleReplyCreated}
               onPostRejected={handleReplyRejected}
             />

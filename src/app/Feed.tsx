@@ -80,6 +80,15 @@ const POST_FAILURE_TEXT: Record<string, string> = {
   // The mint price could not be read, so nothing was built and nothing was
   // spent. Usually a tab left open across a deploy — see `payForPost`.
   quote_failed: "Couldn't price this post — reload and try again",
+  /**
+   * ⚠ THE POST WENT UP AND THE TRANSFER DID NOT, so these say what did not happen
+   * rather than "failed to post" — which would be false, and would send somebody
+   * looking for a message that is right there in the feed. Your tickets are
+   * untouched in every one of these cases.
+   */
+  send_unknown_recipient: "Nobody here by that name — your tickets are untouched",
+  send_insufficient_units: "You don't hold that many — nothing was sent",
+  send_self: "That's you — nothing was sent",
 };
 
 // A post that was added optimistically before the server confirms it.

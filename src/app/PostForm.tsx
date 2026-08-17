@@ -11,6 +11,7 @@ import { useVoiceToText } from "@/hooks/useVoiceToText";
 import { type AgentTurn, appendTurn, formatTranscript, hashTurn } from "@/lib/agent-record";
 import { type BuyCommand, parseBuyCommand } from "@/lib/buy-command";
 import { MAX_POST_CHARS } from "@/lib/post-length";
+import { parseSendCommand } from "@/lib/send-command";
 import { parseSlashCommand } from "@/lib/slash";
 import { titleCaseTicker } from "@/lib/ticker";
 import { ACCEPTED_MIME } from "@/lib/upload";
@@ -55,6 +56,19 @@ interface PostFormProps {
    */
   compact?: boolean;
   placeholder?: string;
+  /**
+   * Text to drop into the box, from a control elsewhere on the page.
+   *
+   * ⚠ IT DOES NOT SUBMIT, AND THAT IS THE POINT. The Send button in the room card
+   * fills in `/send 1 $Occam ` and leaves the caret after it, so the author types
+   * the recipient themselves and reads the whole instruction before pressing
+   * anything. A button that composed and sent a transfer in one tap would be the
+   * interface giving somebody's property away on a single mis-tap.
+   *
+   * ⚠ AND IT NEVER OVERWRITES WORK IN PROGRESS. Somebody halfway through a reply
+   * who taps Send should not lose the sentence they were writing.
+   */
+  prefill?: { text: string; nonce: number };
 }
 
 export function PostForm({
@@ -64,6 +78,7 @@ export function PostForm({
   addendum,
   compact,
   placeholder,
+  prefill,
 }: PostFormProps): React.JSX.Element {
   const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -72,6 +87,16 @@ export function PostForm({
   // Mirrored for the ticker hint. The textarea is uncontrolled (auto-grow writes
   // to it directly), so the hint needs its own copy of the text.
   const [draft, setDraft] = useState("");
+  // Keyed on the nonce so tapping the same control twice refills; guarded on
+  // emptiness so it cannot eat a draft in progress.
+  const prefillNonce = prefill?.nonce;
+  const prefillText = prefill?.text;
+  useEffect(() => {
+    if (prefillNonce === undefined || !prefillText) return;
+    setDraft((current) => (current.trim() === "" ? prefillText : current));
+    setHasContent(true);
+    textareaRef.current?.focus();
+  }, [prefillNonce, prefillText]);
   const [justPosted, setJustPosted] = useState(false);
   /**
    * The Enter-to-post hint, shown until this person has posted once.
@@ -115,6 +140,17 @@ export function PostForm({
   // the hint line and the suppression of TickerHint below, so the two cannot
   // disagree about whether this is a purchase.
   const draftBuy = parseBuyCommand(draft);
+  /**
+   * What the draft would SEND, if anything.
+   *
+   * ⚠ NO CONFIRM SHEET, UNLIKE A BUY, AND THAT IS A DELIBERATE ASYMMETRY. A buy
+   * gets a second tap because the price is the thing the author cannot see. A send
+   * has no price — but it IS irreversible, and gives away property, so the hint
+   * below spells out the quantity and the recipient in words before they press the
+   * button. Reading back what is about to happen is the check that fits here; a
+   * modal asking "are you sure" about a number they just typed is not.
+   */
+  const draftSend = parseSendCommand(draft);
   // The inline agent answer. Ephemeral — see InlineAgentAnswer for why it is
   // never posted.
   const [chain, setChain] = useState<AgentTurn[]>([]);
@@ -312,6 +348,19 @@ export function PostForm({
         if (!result.ok) {
           onPostRejected?.(tempId, result.reason);
           onDone?.(false, result.reason);
+          return;
+        }
+        /**
+         * ⚠ A PUBLISHED POST WHOSE TRANSFER FAILED IS STILL A FAILURE, and the
+         * one the user most needs told about. The send runs after the post is
+         * stored and cannot un-store it, so `/send 1 $Occam @Ghost` succeeds as a
+         * post and moves nothing — reporting only `ok` would leave somebody
+         * believing they had given a ticket away. The post stays (it is
+         * permanent, and pretending otherwise would be worse); what is reported
+         * is that the transfer did not happen.
+         */
+        if (result.send && !result.send.ok) {
+          onDone?.(false, `send_${result.send.reason}`);
           return;
         }
         onDone?.(true);
@@ -799,7 +848,19 @@ export function PostForm({
           vanished. */}
       {draft.trimStart().startsWith("/") && (
         <p className="mt-1.5 px-1 text-[11px] text-zinc-500">
-          {draftBuy ? (
+          {draftSend ? (
+            <>
+              <span className="text-amber-400">/send</span> {draftSend.units.toLocaleString()}{" "}
+              {draftSend.units === 1 ? "ticket" : "tickets"} of{" "}
+              <span className="text-amber-400">${titleCaseTicker(draftSend.symbol)}</span> to{" "}
+              <span className="text-amber-400">
+                {draftSend.recipient.kind === "nym"
+                  ? `$${titleCaseTicker(draftSend.recipient.value)}`
+                  : `${draftSend.recipient.value.slice(0, 6)}…${draftSend.recipient.value.slice(-4)}`}
+              </span>{" "}
+              &mdash; this cannot be undone
+            </>
+          ) : draftBuy ? (
             <>
               <span className="text-amber-400">/buy</span> {draftBuy.units.toLocaleString()}{" "}
               {draftBuy.units === 1 ? "unit" : "units"} of{" "}
@@ -814,8 +875,9 @@ export function PostForm({
           ) : (
             <>
               Starts with &ldquo;/&rdquo; but isn&rsquo;t a command, so it posts as written. Try{" "}
-              <span className="text-amber-400">/agent</span> or{" "}
-              <span className="text-amber-400">/buy 100 $Ticker</span>
+              <span className="text-amber-400">/agent</span>,{" "}
+              <span className="text-amber-400">/buy 100 $Ticker</span> or{" "}
+              <span className="text-amber-400">/send 1 $Ticker @Nym</span>
             </>
           )}
         </p>
@@ -825,7 +887,7 @@ export function PostForm({
           the wrong number by three orders of magnitude next to `/buy 1000 $X` —
           and the two would sit one line apart. The confirm sheet carries the
           real figure. */}
-      {!draftBuy && <TickerHint content={draft} />}
+      {!draftBuy && !draftSend && <TickerHint content={draft} />}
       {uploading && (
         <p className="mt-1 text-[11px] text-zinc-500" aria-live="polite">
           {uploadTotal > 1

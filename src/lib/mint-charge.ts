@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import { parseBuyCommand } from "./buy-command";
 import { db as defaultDb } from "./db";
 import { mintCostForRange, mintPriceSats, quoteMintSats } from "./mint-price";
+import { parseSendCommand } from "./send-command";
 import { distinctTickers } from "./ticker";
 
 type Db = ReturnType<typeof Database>;
@@ -94,6 +95,18 @@ export function mintedSupplies(symbols: readonly string[], database: Db = defaul
  * `recordTickerMentions` inserts.
  */
 export function mintChargeSats(content: string, database: Db = defaultDb): number {
+  /**
+   * ⚠ A SEND MINTS NOTHING, SO IT COSTS NOTHING TO MINT — checked FIRST, before
+   * anything else looks at the text.
+   *
+   * `/send 1 $Occam @Bob` names a ticker, so falling through would charge the
+   * sender the current mint price to give away a ticket they ALREADY OWN, and
+   * would mint a fresh unit on top of the one being transferred. Units move here;
+   * supply does not change. The send is still paid for — it is a post, and posting
+   * is paid — but the mint charge is zero because nothing is minted.
+   */
+  if (parseSendCommand(content)) return 0;
+
   // ⚠ A BUY IS PRICED FIRST AND ON ITS OWN. `/buy 1000 $Memeplex` names a
   // ticker, so falling through to the ordinary path would charge for ONE unit
   // and mint a thousand. The command IS the whole message (`parseBuyCommand` is
@@ -119,6 +132,11 @@ export function mintChargeSats(content: string, database: Db = defaultDb): numbe
  * priced from zero, i.e. at base.
  */
 export function mintFloorSats(content: string, database: Db = defaultDb): number {
+  // Same order as the charge, and it has to be — including the send, which owes
+  // nothing. A floor above zero here would REJECT every send after broadcast,
+  // for underpaying a mint that never happened.
+  if (parseSendCommand(content)) return 0;
+
   // Same order as the charge, and it has to be: a buy checked as an ordinary
   // mention would accept one unit's payment for a thousand units of stock.
   const buy = parseBuyCommand(content);

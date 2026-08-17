@@ -260,9 +260,12 @@ export function RoomGate({
 export function RoomPosition({
   position,
   onSell,
+  onSend,
 }: {
   position: RoomPositionData;
   onSell: () => void;
+  /** Pre-fill the composer with a `/send` for this room's token. */
+  onSend: () => void;
 }) {
   const bsvPrice = useBsvPrice();
   const usd = (sats: number) => (bsvPrice > 0 ? (sats / 1e8) * bsvPrice : null);
@@ -284,13 +287,29 @@ export function RoomPosition({
             nothing to list, and a Sell button that opens onto a zero balance is
             an interface offering something it cannot do. */}
         {position.units > 0 && (
-          <button
-            type="button"
-            onClick={onSell}
-            className="ml-auto rounded-full border border-zinc-700 px-3 py-0.5 text-[11px] text-zinc-300 transition-colors hover:border-amber-400/50 hover:text-amber-300"
-          >
-            Sell {position.units.toLocaleString()} spare
-          </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            {/* ⚠ GIVING AND SELLING ARE DIFFERENT ACTS AND BOTH BELONG HERE. A
+                room owner's most natural move is handing somebody entry, and
+                until this existed the only route to another account was to list
+                publicly and hope the right person bought it first — an auction
+                with a preferred bidder, not a gift. It pre-fills the composer
+                rather than opening a modal of its own: the command is what gets
+                signed and inscribed, so showing it is also teaching it. */}
+            <button
+              type="button"
+              onClick={onSend}
+              className="rounded-full border border-zinc-700 px-3 py-0.5 text-[11px] text-zinc-300 transition-colors hover:border-amber-400/50 hover:text-amber-300"
+            >
+              Send
+            </button>
+            <button
+              type="button"
+              onClick={onSell}
+              className="rounded-full border border-zinc-700 px-3 py-0.5 text-[11px] text-zinc-300 transition-colors hover:border-amber-400/50 hover:text-amber-300"
+            >
+              Sell {position.units.toLocaleString()}
+            </button>
+          </div>
         )}
       </div>
 
