@@ -1,5 +1,6 @@
 import { loadEnv } from './env'
 import { Addr, bsv, DefaultProvider, TestWallet, toByteString } from 'scrypt-ts'
+import { OrdiProvider } from 'scrypt-ord'
 import { PayToMint } from '../src/contracts/payToMint'
 
 /**
@@ -94,10 +95,27 @@ async function main() {
 
     const network = isMainnet ? bsv.Networks.mainnet : bsv.Networks.testnet
     const address = key.toAddress(network).toString()
-    const provider = new DefaultProvider({ network })
+
+    /**
+     * ⚠ `DefaultProvider` DIED MID-DEPLOY — `WhatsonchainProvider ERROR: socket
+     * hang up` — after it had already broadcast a UTXO-preparation transaction.
+     * That is the worst shape of failure: something went out and the response
+     * was lost.
+     *
+     * `OrdiProvider` broadcasts through GorillaPool's 1Sat endpoint, which is
+     * the right choice here for the same reason `client-post.ts` already prefers
+     * it: **an inscription that is mined but never indexed is, to every wallet
+     * and marketplace, not an inscription.** Going through the ordinals endpoint
+     * feeds the indexer directly instead of waiting for it to notice — and the
+     * indexer is exactly what has to recognise this deploy for the test to mean
+     * anything.
+     */
+    const provider = new OrdiProvider(network)
+    // The balance smell-test is a separate read-only call.
+    const balanceProvider = new DefaultProvider({ network })
 
     if (isMainnet) {
-        const balance = await provider.getBalance(key.toAddress(network))
+        const balance = await balanceProvider.getBalance(key.toAddress(network))
         const total = balance.confirmed + balance.unconfirmed
         if (total > MAX_TEST_BALANCE_SATS) {
             throw new Error(
@@ -140,8 +158,26 @@ async function main() {
     )
     await instance.connect(signer)
 
-    const tx = await instance.deploy(1)
     const explorer = isMainnet ? 'https://whatsonchain.com' : 'https://test.whatsonchain.com'
+
+    /**
+     * ⚠ A LOST RESPONSE IS NOT A FAILED BROADCAST, and a blind retry after one
+     * is how you end up with two deploys of the same symbol. This already
+     * happened: the provider hung up having successfully broadcast, and the only
+     * way to know was to read the chain.
+     */
+    let tx: bsv.Transaction
+    try {
+        tx = await instance.deploy(1)
+    } catch (e) {
+        console.error('')
+        console.error('Deploy failed — but a transaction MAY still have been broadcast.')
+        console.error('CHECK THE CHAIN BEFORE RETRYING:')
+        console.error(`  ${explorer}/address/${address}`)
+        console.error('If a deploy transaction is there, use its txid; do not run this again.')
+        console.error('')
+        throw e
+    }
 
     console.log(`deployed  $${symbol}`)
     console.log(`  txid     ${tx.id}`)
