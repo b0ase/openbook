@@ -1,0 +1,40 @@
+# Contracts
+
+The on-chain half of the token model: a **pay-to-mint covenant** that holds a
+ticker's unissued supply in a contract UTXO and releases units only when the
+spending transaction pays the required price.
+
+## Why this is a separate workspace
+
+⚠ **The sCrypt toolchain must never enter the Next.js build.** It pulls a
+compiler binary and a second Bitcoin library (`scrypt-ts` does not use
+`@bsv/sdk`), and the app's build is already tuned around Turbopack, the React
+Compiler and a set of node-polyfill shims. One `import` from `src/` into here
+would drag all of it into a bundle that ships to browsers.
+
+So: own `package.json`, own `node_modules` (gitignored — the root rule is
+anchored and would not have caught it), and excluded from the app's `tsconfig`
+so `next build` never type-checks it.
+
+Nothing in `src/` imports from this directory. What crosses the boundary is
+**data** — a deployed contract's outpoint and its parameters — never code.
+
+## Why this exists at all
+
+Today `$Ticker` units are rows in `ticker_holdings`. Real money is charged for
+them and the post that names a word is genuinely inscribed, but the units
+themselves are a database ledger — which means the platform is trusted to apply
+transfers, and TOKENS.md is explicit that this is a real assumption rather than
+a trustless one.
+
+A pay-to-mint covenant removes it: the supply lives in a script, the price is
+enforced by the script, and a mint is valid because the chain says so.
+
+## Status
+
+**Testnet only. Nothing here touches mainnet or the live app.**
+
+A covenant bug is not a thrown error — it permanently locks a token's entire
+unissued supply in a UTXO nobody can ever spend. So the order is: local tests
+→ testnet deploy of a throwaway symbol → confirm an indexer sees deploy, mint
+and transfer → only then anything real.

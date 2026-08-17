@@ -74,3 +74,10 @@ uploads/
 # since repo files are public and effectively permanent. A `git add -A` will
 # sweep one up if it is not ignored, which is how it nearly got committed.
 *.code-workspace
+
+# Contract workspace deps. The root rule is anchored (`/node_modules`), so this
+# one has to be named or `git add -A` sweeps up a compiler toolchain.
+contracts/node_modules/
+contracts/artifacts/
+# sCrypt build output — generated from the .ts source, never reviewed by hand.
+contracts/scrypt.index.json

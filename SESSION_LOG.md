@@ -2,6 +2,49 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-17 (the pay-to-mint covenant — testnet)
+
+- **Category: contract (new workspace).** Owner was right to be suspicious: typing `$newticker`
+  **mints nothing on the BSV blockchain.** Verified by grep — zero BSV-20/21 or sCrypt code existed
+  anywhere in `src/`. What IS on chain is the POST (a real 1-sat ordinal) and the mint PAYMENT
+  (real sats to the platform). The ticker's units were a database ledger. Roughly half real, which
+  is what he guessed.
+- **`contracts/` — a separate workspace, deliberately.** Own `package.json`, own `node_modules`
+  (the root gitignore rule is anchored and would NOT have caught it), excluded from the app's
+  `tsconfig`. The sCrypt toolchain pulls a compiler binary and a SECOND Bitcoin library
+  (`scrypt-ts` does not use `@bsv/sdk`); one import from `src/` would drag all of it into a browser
+  bundle. Nothing in `src/` imports it — verified.
+- **`PayToMint extends BSV20V2`** (scrypt-ord) — POW-20's structure with OrdLock's predicate, which
+  is what TOKENS.md specced. Supply lives in a contract UTXO; a mint must produce continuation +
+  units-to-minter + payment-to-treasury, bound by `hash256(outputs) == ctx.hashOutputs`.
+  **Compiles to real Bitcoin script.**
+- **10 tests pass**, and the important ones are refusals: underpaying by ONE satoshi, redirecting
+  the payment, taking more than paid for, dropping the continuation, minting zero, minting beyond
+  supply.
+  - **The price agrees with `mintCostForRange` to the satoshi** across the range — the test imports
+    the app's own pure curve. A one-satoshi disagreement is a mint that can never succeed,
+    discoverable only by broadcasting.
+  - **⚠ A CAUGHT TRAP:** all six rejection tests passed at first *while the happy path was broken* —
+    they were "passing" on a harness error (`token id is not initialized`), which proves nothing.
+    `expectRejection` now asserts the refusal came from the SCRIPT, not the harness.
+- **Design notes worth keeping:** dropped the `trailingOutputs` argument (OrdLock has it for
+  composability; a mint has no use for it, and every spender-controlled byte is one more thing to
+  reason about) — change is now the only output the spender picks. `max` is 21M because BSV-21
+  fixes supply at deploy: "uncapped" is not expressible, so the cap is set unreachable by
+  arithmetic (~250,000 BSV to exhaust) and held in the covenant, which preserves TOKENS.md's rule
+  that *a cap enforced by a covenant is fine; a cap enforced by us is not*.
+- **Environment gotchas:** TypeScript 7 (the Go compiler) breaks `ts-node` — pinned TS 5.8.3 in the
+  workspace. `ts-patch`'s postinstall fails on this `noowners` volume — installed with
+  `--ignore-scripts`. `npm test` compiles first, because a stale artifact silently tests the wrong
+  script.
+- **NOT DONE — needs the owner:** no testnet deploy has run. `deploy-testnet.ts` and
+  `mint-testnet.ts` are written and typecheck, but both need a funded testnet key
+  (`npx scrypt-cli genprivkey` → fund from a faucet). Both refuse to run against a mainnet key.
+- **Still to decide before any of this ships:** the app is unchanged and still uses the ledger. If
+  the covenant lands, `ticker_holdings` demotes from ledger to index of chain state, resale becomes
+  an OrdLock swap (removing the trust assumption in `market.ts`), and the room gate needs an
+  indexer read rather than a `SELECT`.
+
 ## 2026-08-17 (rooms, and a market to get into them)
 
 - **Category: feature (money path), schema, feature.** Owner: *"build it all"* — the room gate and
