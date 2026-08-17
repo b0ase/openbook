@@ -272,9 +272,6 @@ export function RoomPosition({
   const fmtUsd = (v: number | null) =>
     v === null ? "" : ` (≈ $${v < 0.01 ? v.toFixed(5) : v.toFixed(2)})`;
   const unpriced = Math.max(0, position.units - position.pricedUnits);
-  const avg =
-    position.pricedUnits > 0 ? Math.round(position.spentSats / position.pricedUnits) : null;
-
   return (
     <div className="sticky top-0 z-10 -mx-4 mb-2 border-b border-zinc-800/80 bg-black/90 px-4 py-2 backdrop-blur">
       <div className="flex items-baseline gap-2">

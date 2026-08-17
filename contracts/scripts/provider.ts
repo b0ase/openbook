@@ -1,11 +1,11 @@
 import {
-    type AddressOption,
-    bsv,
-    Provider,
-    type TransactionResponse,
-    type TxHash,
-    type UTXO,
-} from 'scrypt-ts'
+  type AddressOption,
+  bsv,
+  Provider,
+  type TransactionResponse,
+  type TxHash,
+  type UTXO,
+} from "scrypt-ts";
 
 /**
  * The provider these scripts use: WhatsOnChain for reads, GorillaPool for the
@@ -50,141 +50,143 @@ import {
  * US cent. `post-economics.ts` reads the live policy instead, because it pays on
  * every post and the difference compounds. Here it does not.
  */
-const SCRIPT_FEE_PER_KB = 500
+const SCRIPT_FEE_PER_KB = 500;
 
 /** Public endpoints are slow before they are broken. 3s was not patience. */
-const TIMEOUT_MS = 20_000
+const TIMEOUT_MS = 20_000;
 
 async function get(url: string): Promise<Response> {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
-    try {
-        return await fetch(url, { signal: controller.signal })
-    } finally {
-        clearTimeout(timer)
-    }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export class ScriptProvider extends Provider {
-    private network: bsv.Networks.Network
+  private network: bsv.Networks.Network;
 
-    constructor(network: bsv.Networks.Network) {
-        super()
-        this.network = network
-        // Some paths inside the tx builder read this global rather than asking
-        // the provider; a mismatch only ever shows up as a rejected broadcast.
-        ;(bsv.Transaction as unknown as { FEE_PER_KB: number }).FEE_PER_KB = SCRIPT_FEE_PER_KB
+  constructor(network: bsv.Networks.Network) {
+    super();
+    this.network = network;
+    // Some paths inside the tx builder read this global rather than asking
+    // the provider; a mismatch only ever shows up as a rejected broadcast.
+    (bsv.Transaction as unknown as { FEE_PER_KB: number }).FEE_PER_KB = SCRIPT_FEE_PER_KB;
+  }
+
+  private get base(): string {
+    const net = this.network === bsv.Networks.mainnet ? "main" : "test";
+    return `https://api.whatsonchain.com/v1/bsv/${net}`;
+  }
+
+  /**
+   * ⚠ NO PREFLIGHT. There is nothing to verify — no API key, no session — so a
+   * probe can only invent failures, which is exactly what it did twice. The
+   * three operations below each report their own, at the moment the network is
+   * genuinely needed.
+   */
+  connect(): Promise<this> {
+    this.emit("connected", true);
+    return Promise.resolve(this);
+  }
+
+  isConnected(): boolean {
+    return true;
+  }
+
+  updateNetwork(network: bsv.Networks.Network): void {
+    this.network = network;
+    this.emit("networkChange", network);
+  }
+
+  getNetwork(): bsv.Networks.Network {
+    return this.network;
+  }
+
+  getFeePerKb(): Promise<number> {
+    return Promise.resolve(SCRIPT_FEE_PER_KB);
+  }
+
+  async listUnspent(address: AddressOption): Promise<UTXO[]> {
+    const addr = address.toString();
+    const res = await get(`${this.base}/address/${addr}/unspent`);
+    if (!res.ok) throw new Error(`listUnspent failed: ${res.status} ${res.statusText}`);
+    const rows = (await res.json()) as Array<{
+      height: number;
+      tx_pos: number;
+      tx_hash: string;
+      value: number;
+    }>;
+
+    const script = bsv.Script.fromAddress(addr).toHex();
+    return (
+      rows
+        // ⚠ NEVER SPEND A 1-SATOSHI OUTPUT. On this chain that is an ordinal
+        // — somebody's post, or a contract's own state output. `OrdiProvider`
+        // filters the same way and it is not optional: paying a fee out of an
+        // inscription destroys it.
+        .filter((u) => u.value > 1)
+        .map((u) => ({
+          txId: u.tx_hash,
+          outputIndex: u.tx_pos,
+          satoshis: u.value,
+          script,
+        }))
+    );
+  }
+
+  async getBalance(address?: AddressOption): Promise<{ confirmed: number; unconfirmed: number }> {
+    if (!address) return { confirmed: 0, unconfirmed: 0 };
+    // ⚠ SUMMED FROM THE SPENDABLE SET, not WhatsOnChain's balance endpoint.
+    // That one reports a 0-conf parent AND the children that already spent
+    // it, which printed 1,308,471 sats where 654,235 was real.
+    const utxos = await this.listUnspent(address);
+    return { confirmed: utxos.reduce((n, u) => n + u.satoshis, 0), unconfirmed: 0 };
+  }
+
+  async getTransaction(txHash: TxHash): Promise<TransactionResponse> {
+    const res = await get(`${this.base}/tx/${txHash}/hex`);
+    if (!res.ok) throw new Error(`getTransaction failed: ${res.status} ${res.statusText}`);
+    return new bsv.Transaction(await res.text()) as unknown as TransactionResponse;
+  }
+
+  async sendRawTransaction(rawTxHex: string): Promise<TxHash> {
+    const errors: string[] = [];
+
+    // Ordinals endpoint FIRST — see the note at the top of this file.
+    try {
+      const res = await fetch("https://ordinals.gorillapool.io/api/tx/bin", {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: Buffer.from(rawTxHex, "hex"),
+      });
+      const body = (await res.text()).trim().replace(/^"|"$/g, "");
+      if (res.ok && /^[a-f0-9]{64}$/i.test(body)) return body;
+      errors.push(`gorillapool: ${res.status} ${body.slice(0, 300)}`);
+    } catch (e) {
+      errors.push(`gorillapool: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    private get base(): string {
-        const net = this.network === bsv.Networks.mainnet ? 'main' : 'test'
-        return `https://api.whatsonchain.com/v1/bsv/${net}`
+    try {
+      const res = await fetch(`${this.base}/tx/raw`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txhex: rawTxHex }),
+      });
+      const body = (await res.text()).trim().replace(/^"|"$/g, "");
+      if (res.ok && /^[a-f0-9]{64}$/i.test(body)) return body;
+      errors.push(`whatsonchain: ${res.status} ${body.slice(0, 300)}`);
+    } catch (e) {
+      errors.push(`whatsonchain: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    /**
-     * ⚠ NO PREFLIGHT. There is nothing to verify — no API key, no session — so a
-     * probe can only invent failures, which is exactly what it did twice. The
-     * three operations below each report their own, at the moment the network is
-     * genuinely needed.
-     */
-    connect(): Promise<this> {
-        this.emit('connected', true)
-        return Promise.resolve(this)
-    }
-
-    isConnected(): boolean {
-        return true
-    }
-
-    updateNetwork(network: bsv.Networks.Network): void {
-        this.network = network
-        this.emit('networkChange', network)
-    }
-
-    getNetwork(): bsv.Networks.Network {
-        return this.network
-    }
-
-    getFeePerKb(): Promise<number> {
-        return Promise.resolve(SCRIPT_FEE_PER_KB)
-    }
-
-    async listUnspent(address: AddressOption): Promise<UTXO[]> {
-        const addr = address.toString()
-        const res = await get(`${this.base}/address/${addr}/unspent`)
-        if (!res.ok) throw new Error(`listUnspent failed: ${res.status} ${res.statusText}`)
-        const rows = (await res.json()) as Array<{
-            height: number
-            tx_pos: number
-            tx_hash: string
-            value: number
-        }>
-
-        const script = bsv.Script.fromAddress(addr).toHex()
-        return rows
-            // ⚠ NEVER SPEND A 1-SATOSHI OUTPUT. On this chain that is an ordinal
-            // — somebody's post, or a contract's own state output. `OrdiProvider`
-            // filters the same way and it is not optional: paying a fee out of an
-            // inscription destroys it.
-            .filter((u) => u.value > 1)
-            .map((u) => ({
-                txId: u.tx_hash,
-                outputIndex: u.tx_pos,
-                satoshis: u.value,
-                script,
-            }))
-    }
-
-    async getBalance(address?: AddressOption): Promise<{ confirmed: number; unconfirmed: number }> {
-        if (!address) return { confirmed: 0, unconfirmed: 0 }
-        // ⚠ SUMMED FROM THE SPENDABLE SET, not WhatsOnChain's balance endpoint.
-        // That one reports a 0-conf parent AND the children that already spent
-        // it, which printed 1,308,471 sats where 654,235 was real.
-        const utxos = await this.listUnspent(address)
-        return { confirmed: utxos.reduce((n, u) => n + u.satoshis, 0), unconfirmed: 0 }
-    }
-
-    async getTransaction(txHash: TxHash): Promise<TransactionResponse> {
-        const res = await get(`${this.base}/tx/${txHash}/hex`)
-        if (!res.ok) throw new Error(`getTransaction failed: ${res.status} ${res.statusText}`)
-        return new bsv.Transaction(await res.text()) as unknown as TransactionResponse
-    }
-
-    async sendRawTransaction(rawTxHex: string): Promise<TxHash> {
-        const errors: string[] = []
-
-        // Ordinals endpoint FIRST — see the note at the top of this file.
-        try {
-            const res = await fetch('https://ordinals.gorillapool.io/api/tx/bin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/octet-stream' },
-                body: Buffer.from(rawTxHex, 'hex'),
-            })
-            const body = (await res.text()).trim().replace(/^"|"$/g, '')
-            if (res.ok && /^[a-f0-9]{64}$/i.test(body)) return body
-            errors.push(`gorillapool: ${res.status} ${body.slice(0, 300)}`)
-        } catch (e) {
-            errors.push(`gorillapool: ${e instanceof Error ? e.message : String(e)}`)
-        }
-
-        try {
-            const res = await fetch(`${this.base}/tx/raw`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ txhex: rawTxHex }),
-            })
-            const body = (await res.text()).trim().replace(/^"|"$/g, '')
-            if (res.ok && /^[a-f0-9]{64}$/i.test(body)) return body
-            errors.push(`whatsonchain: ${res.status} ${body.slice(0, 300)}`)
-        } catch (e) {
-            errors.push(`whatsonchain: ${e instanceof Error ? e.message : String(e)}`)
-        }
-
-        throw new Error(`broadcast failed —\n  ${errors.join('\n  ')}`)
-    }
+    throw new Error(`broadcast failed —\n  ${errors.join("\n  ")}`);
+  }
 }
 
 /** The provider for a given network. */
 export function providerFor(network: bsv.Networks.Network): ScriptProvider {
-    return new ScriptProvider(network)
+  return new ScriptProvider(network);
 }

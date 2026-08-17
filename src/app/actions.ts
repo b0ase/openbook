@@ -7,15 +7,7 @@ import { db } from "@/lib/db";
 import { verifyFillPayment } from "@/lib/fill-payment";
 import { FORK_POINT_ID } from "@/lib/fork-point";
 import { tryConsumeFreeBootForIp } from "@/lib/free-boot-cap";
-import {
-  burnUnits,
-  creditUnits,
-  mintedBySymbol,
-  mintedUnits,
-  totalUnits,
-  transferUnits,
-  unitsHeld,
-} from "@/lib/holdings";
+import { creditUnits, mintedBySymbol, mintedUnits, transferUnits, unitsHeld } from "@/lib/holdings";
 import {
   attachPreviewToPost,
   firstLinkIn,
@@ -2192,7 +2184,6 @@ export async function getMintQuote(
   const wanted = [...new Set(symbols.map(canonicalTicker).filter(isValidTicker))].slice(0, 10);
   if (!wanted.length) return [];
 
-  const placeholders = wanted.map(() => "?").join(",");
   // ⚠ BOTH NUMBERS COME FROM THE MINTED COUNTER, and they have to agree: a
   // "supply" of 40 next to a price struck at 12 would be two different tokens on
   // one row. Issued supply IS the curve's position — see `getTickerSupply` for

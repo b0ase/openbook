@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Load `contracts/.env` into `process.env`.
@@ -15,24 +15,24 @@ import { join } from 'node:path'
  * the more explicit source is the one that survives.
  */
 export function loadEnv(): void {
-    const path = join(__dirname, '..', '.env')
-    if (!existsSync(path)) return
+  const path = join(__dirname, "..", ".env");
+  if (!existsSync(path)) return;
 
-    for (const line of readFileSync(path, 'utf8').split('\n')) {
-        const trimmed = line.trim()
-        if (!trimmed || trimmed.startsWith('#')) continue
-        const eq = trimmed.indexOf('=')
-        if (eq === -1) continue
-        const key = trimmed.slice(0, eq).trim()
-        // Only the FIRST `=` splits — a base58 WIF has none, but a future value
-        // might, and splitting on every one would silently truncate it.
-        let value = trimmed.slice(eq + 1).trim()
-        if (
-            (value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))
-        ) {
-            value = value.slice(1, -1)
-        }
-        if (key && process.env[key] === undefined) process.env[key] = value
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    // Only the FIRST `=` splits — a base58 WIF has none, but a future value
+    // might, and splitting on every one would silently truncate it.
+    let value = trimmed.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
     }
+    if (key && process.env[key] === undefined) process.env[key] = value;
+  }
 }
