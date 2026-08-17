@@ -81,3 +81,10 @@ contracts/node_modules/
 contracts/artifacts/
 # sCrypt build output — generated from the .ts source, never reviewed by hand.
 contracts/scrypt.index.json
+
+# Terminal captures dropped in the repo root while debugging. One (`a_file`) was
+# swept in by `git add -A` and committed, while that commit's message claimed it
+# had been removed — the message was written from intent rather than the diff.
+a_file
+mint.log
+deploy.log
