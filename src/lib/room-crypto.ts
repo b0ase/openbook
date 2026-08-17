@@ -94,7 +94,7 @@ export function sealForRoom(plaintext: string, recipientPubkeys: readonly string
   // A fresh key per post. Reuse across posts would make one compromise open
   // everything, which is the shared-room-key failure in miniature.
   const postKey = SymmetricKey.fromRandom();
-  const ct = Utils.toBase64(postKey.encrypt(plaintext, "array") as number[]);
+  const ct = Utils.toBase64(postKey.encrypt(plaintext) as number[]);
 
   const keys: Record<string, string> = {};
   const keyBytes = postKey.toArray();
