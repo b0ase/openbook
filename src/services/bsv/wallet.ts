@@ -6,6 +6,11 @@
  */
 
 import { type LockingScript, P2PKH, PrivateKey, SatoshisPerKilobyte, Transaction } from "@bsv/sdk";
+import {
+  installSpentOutpointStore,
+  loadSpentOutpoints,
+  recordSpentOutpoints,
+} from "@/lib/spent-outpoints";
 
 let _serverKey: PrivateKey | null = null;
 
@@ -136,6 +141,40 @@ const _reserved = new Set<string>();
 const _pendingChange: UTXO[] = []; // 0-conf change outputs from recent txs
 const _spent = new Set<string>(); // UTXOs consumed as inputs — blacklist for stale WoC data
 
+/**
+ * ⚠ THE BLACKLIST ABOVE IS IN MEMORY AND THE PLATFORM WALLET IS THE BUSIEST
+ * SERVER-SIDE SPENDER, so a restart used to hand it a UTXO whose spender was
+ * still in the mempool and ARC refused the result. Same failure the agent runtime
+ * hit on its first live run, in the other spender, and the durable fix built for
+ * that one never reached this file.
+ *
+ * ⚠ WHAT THIS COSTS WHEN IT GOES WRONG IS NOT AN ERROR MESSAGE. Free boosts and
+ * post anchoring are both paid from here, so a rejected broadcast is a boost the
+ * user was told they had and a post whose on-chain anchor silently did not happen
+ * — recoverable only because `anchor-sweep.ts` retries the second of those.
+ *
+ * Imported rather than injected: this module reads `BSV_SERVER_WIF` and is never
+ * bundled for a browser, so it can talk to the database directly. `client-boot.ts`
+ * cannot, which is why that one is handed a store instead.
+ *
+ * ⚠ AND IMPORTING THIS FILE IS WHAT INSTALLS THE STORE FOR THE OTHER SPENDER TOO.
+ * `installSpentOutpointStore()` used to be called only from `agent-tick.ts`, so
+ * durability depended on the agent runtime happening to be in the route's import
+ * graph — any server path that spent without pulling it in got the old bug back,
+ * silently and with nothing failing. `wallet.ts` is reached by `actions.ts` and
+ * every server surface that touches money, which makes it the honest place to
+ * hang it.
+ */
+installSpentOutpointStore();
+
+/** Hydrate the durable blacklist once per process, lazily. */
+let _spentHydrated = false;
+function hydrateSpent(address: string): void {
+  if (_spentHydrated || !address) return;
+  _spentHydrated = true;
+  for (const key of loadSpentOutpoints(address)) _spent.add(key);
+}
+
 function utxoKey(txHash: string, txPos: number): string {
   return `${txHash}:${txPos}`;
 }
@@ -168,6 +207,11 @@ export async function getUtxos(neededSats?: number, opts?: { strict?: boolean })
   // Not a read failure — health reports `addressConfigured` separately, and a
   // wallet with no key genuinely holds nothing.
   if (!address) return [];
+
+  // Anything this wallet spent before the current process started. Done here
+  // rather than at import because the address depends on env that a test or a
+  // misconfigured deploy may not have set yet.
+  hydrateSpent(address);
 
   // If we have pending change UTXOs with enough value, skip the WoC fetch
   // to avoid stale data and reduce API calls.
@@ -425,6 +469,9 @@ async function _buildAndBroadcastInner(
       for (const sk of spentKeys) {
         _spent.add(sk);
       }
+      // Survive the restart. Never throws — the broadcast already happened, and
+      // failing to write a note about it must not turn a spend into an error.
+      recordSpentOutpoints(getServerAddress() ?? "", [...spentKeys]);
       for (let i = _pendingChange.length - 1; i >= 0; i--) {
         const pendingKey = utxoKey(_pendingChange[i].tx_hash, _pendingChange[i].tx_pos);
         if (spentKeys.has(pendingKey)) {
@@ -476,9 +523,13 @@ async function _buildAndBroadcastInner(
           );
           if (txRes.ok) {
             const txData = (await txRes.json()) as { vin?: Array<{ txid: string; vout: number }> };
-            for (const input of txData.vin ?? []) {
-              _spent.add(utxoKey(input.txid, input.vout));
-            }
+            const competing = (txData.vin ?? []).map((input) => utxoKey(input.txid, input.vout));
+            for (const key of competing) _spent.add(key);
+            // ⚠ DURABLE TOO. These are outpoints a competing transaction has
+            // already taken, so forgetting them at the next restart walks
+            // straight back into the same collision — and this is the path that
+            // only runs because it happened once.
+            recordSpentOutpoints(getServerAddress() ?? "", competing);
           }
         } catch {
           /* best effort */

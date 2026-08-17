@@ -126,6 +126,7 @@ export async function clientSidePay(
     }
 
     recordBroadcast({
+      address: userAddress,
       spent: selection.selected,
       txid,
       changeIndex,

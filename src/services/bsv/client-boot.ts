@@ -93,27 +93,145 @@ export function acquireTxMutex(): Promise<() => void> {
  *  Persisted to localStorage so it survives page refreshes. */
 const SPENT_STORAGE_KEY = "openbook_spent_utxos";
 
-function loadSpentSet(): Set<string> {
+/**
+ * Outpoint → the address it was spent FROM.
+ *
+ * ⚠ IT USED TO BE A BARE `Set`, AND THAT MADE THE BLACKLIST ERASE ITSELF. The
+ * pruning rule in `fetchUtxos` is "WhatsOnChain no longer lists this outpoint, so
+ * its spender confirmed — stop blacklisting it". That inference is only sound for
+ * outpoints belonging to the address just fetched. A foreign outpoint is absent
+ * because it was never going to be listed, and dropping it un-blacklists a UTXO
+ * whose spender may still be in the mempool.
+ *
+ * In a browser it could not bite: one wallet, one address. On a server it does —
+ * this process spends from the platform wallet and from every configured agent's
+ * key, so whichever address was fetched most recently was clearing everyone
+ * else's protection.
+ *
+ * An entry whose address is unknown (a pre-existing localStorage row) is never
+ * pruned by an address fetch — the safe direction — and ages out via the size cap.
+ */
+export const UNKNOWN_ADDRESS = "";
+
+/**
+ * Decode the stored blacklist, in either shape it has ever had.
+ *
+ * ⚠ `["txid:0", ...]` IS THE OLD SHAPE AND MUST KEEP WORKING. A stored blacklist
+ * is precisely the thing that must not be dropped on upgrade: discarding it
+ * re-opens the double-spend it exists to prevent, for every wallet that happened
+ * to have an unconfirmed spend in flight when the new code shipped.
+ *
+ * Pure and exported so both shapes are pinned by a test rather than by reading —
+ * the same reason `isSpendableUtxo` stands alone.
+ */
+export function parseSpentStorage(raw: string | null): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!raw) return out;
+  let parsed: unknown;
   try {
-    const stored = localStorage.getItem(SPENT_STORAGE_KEY);
-    return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
+    parsed = JSON.parse(raw);
   } catch {
-    return new Set();
+    return out;
+  }
+  if (!Array.isArray(parsed)) return out;
+  for (const entry of parsed) {
+    if (typeof entry === "string") out.set(entry, UNKNOWN_ADDRESS);
+    else if (Array.isArray(entry) && typeof entry[0] === "string") {
+      out.set(entry[0], typeof entry[1] === "string" ? entry[1] : UNKNOWN_ADDRESS);
+    }
+  }
+  return out;
+}
+
+/**
+ * Drop blacklist entries for `address` that the chain no longer lists as unspent.
+ *
+ * The inference is "absent from this address's UTXO set ⇒ its spender confirmed,
+ * so it can never be offered again". Returns whether anything changed, so the
+ * caller only writes storage when it must.
+ *
+ * ⚠ ENTRIES FOR OTHER ADDRESSES ARE LEFT ALONE, AND THAT IS THE WHOLE POINT OF
+ * THIS FUNCTION EXISTING. A foreign outpoint is absent because it was never going
+ * to be in this response — pruning it un-blacklists a UTXO whose spender may
+ * still be in the mempool. Unscoped, one server process spending from the
+ * platform wallet and from agent keys had each of them clearing the others.
+ *
+ * ⚠ ENTRIES WITH NO KNOWN ADDRESS ARE ALSO LEFT ALONE. Keeping a stale one costs
+ * an unspendable UTXO until the size cap evicts it; dropping a live one costs a
+ * rejected broadcast. Those are not symmetric.
+ */
+export function pruneSpentForAddress(
+  spent: Map<string, string>,
+  address: string,
+  unspentKeys: Set<string>
+): boolean {
+  let changed = false;
+  for (const [key, keyAddress] of spent) {
+    if (keyAddress !== address || keyAddress === UNKNOWN_ADDRESS) continue;
+    if (!unspentKeys.has(key)) {
+      spent.delete(key);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function loadSpentSet(): Map<string, string> {
+  try {
+    return parseSpentStorage(localStorage.getItem(SPENT_STORAGE_KEY));
+  } catch {
+    // localStorage itself unavailable (server, or a blocked-storage browser).
+    return new Map();
   }
 }
 
-function saveSpentSet(spent: Set<string>): void {
+function saveSpentSet(spent: Map<string, string>): void {
   try {
     // Keep only the most recent entries to avoid unbounded growth
-    const arr = Array.from(spent);
-    const trimmed = arr.length > 500 ? arr.slice(-500) : arr;
+    const arr = Array.from(spent.entries());
+    const trimmed = arr.length > SPENT_CAP ? arr.slice(-SPENT_CAP) : arr;
     localStorage.setItem(SPENT_STORAGE_KEY, JSON.stringify(trimmed));
   } catch {
     /* localStorage unavailable — silent fail */
   }
 }
 
+const SPENT_CAP = 500;
+
 const _spent = loadSpentSet();
+
+/**
+ * The one way an outpoint becomes blacklisted.
+ *
+ * ⚠ FOUR SITES USED TO DO THIS BY HAND and they had already drifted: two of them
+ * (`clientSideBoot`, `consolidateUtxos`) wrote to localStorage but never to the
+ * durable server store, so a server-side boost recorded nothing that survived a
+ * restart — the exact bug the durable store was added to fix, still live in two
+ * of the four paths that needed it. Persisting in one place is what stops a fifth
+ * caller inheriting whichever copy it happened to be pasted from.
+ *
+ * Never throws: the broadcast has already happened by the time this runs, and
+ * failing to write a note about it must not turn a successful spend into an error.
+ */
+function markSpent(address: string, keys: Iterable<string>): void {
+  const added: string[] = [];
+  for (const k of keys) {
+    if (!_spent.has(k)) added.push(k);
+    _spent.set(k, address || UNKNOWN_ADDRESS);
+  }
+  while (_spent.size > SPENT_CAP) {
+    const first = _spent.keys().next().value;
+    if (first === undefined) break;
+    _spent.delete(first);
+  }
+  saveSpentSet(_spent);
+  if (!added.length || !address) return;
+  try {
+    _spentStore?.add(address, added);
+  } catch {
+    /* best effort — the in-memory set still protects this process */
+  }
+}
 
 /**
  * Durable backing for the spent set, supplied by the SERVER at runtime.
@@ -132,26 +250,47 @@ const _spent = loadSpentSet();
  * runtime failed on its first live run.
  */
 export interface SpentOutpointStore {
-  /** Every outpoint this server knows it has already spent. */
-  load(): string[];
+  /** Every outpoint this server knows it has already spent FROM `address`. */
+  load(address: string): string[];
   /** Record newly spent outpoints. Must not throw. */
-  add(keys: string[]): void;
+  add(address: string, keys: string[]): void;
 }
 
 let _spentStore: SpentOutpointStore | null = null;
-let _spentStoreLoaded = false;
+const _hydrated = new Set<string>();
 
 export function setSpentOutpointStore(store: SpentOutpointStore): void {
   _spentStore = store;
-  _spentStoreLoaded = false;
+  _hydrated.clear();
 }
 
-/** Merge the durable set in once per process, lazily — `_spent` is built at import. */
-function hydrateSpentFromStore(): void {
-  if (!_spentStore || _spentStoreLoaded) return;
-  _spentStoreLoaded = true;
+/**
+ * Whether a durable store has been registered.
+ *
+ * ⚠ EXISTS FOR A TEST, AND EARNS IT. Whether the store is installed is invisible
+ * from outside this module, and it was previously installed as a side effect of
+ * `agent-tick.ts` being imported — so the whole fix could be undone by an import
+ * change, with nothing failing anywhere. This is the one bit of state a test can
+ * assert on to catch that.
+ */
+export function hasSpentOutpointStore(): boolean {
+  return _spentStore !== null;
+}
+
+/**
+ * Merge the durable set for one address in, once per process.
+ *
+ * ⚠ PER ADDRESS, NOT ONCE OVERALL. A single `loaded` flag meant the first wallet
+ * to fetch UTXOs was the only one ever hydrated; every other agent on the box ran
+ * with an empty blacklist and no way to notice.
+ */
+function hydrateSpentFromStore(address: string): void {
+  if (!_spentStore || !address || _hydrated.has(address)) return;
+  _hydrated.add(address);
   try {
-    for (const key of _spentStore.load()) _spent.add(key);
+    for (const key of _spentStore.load(address)) {
+      if (!_spent.has(key)) _spent.set(key, address);
+    }
   } catch {
     /* A missing blacklist costs a rejected broadcast, never money. */
   }
@@ -231,8 +370,9 @@ export async function fetchUtxos(address: string, neededSats?: number): Promise<
   // No height filtering — at 100 sat/kb (GorillaPool's minimum), all txs confirm
   // in the next block. Filtering unconfirmed UTXOs actively harms UX by hiding
   // valid recently-received funds.
-  // Pull in anything this server spent before the current process started.
-  hydrateSpentFromStore();
+  // Pull in anything this server spent from this address before the current
+  // process started.
+  hydrateSpentFromStore(address);
   const pendingKeys = new Set(_pendingChange.map((u) => utxoKey(u.tx_hash, u.tx_pos)));
   const filtered = wocUtxos.filter((u) => {
     const key = utxoKey(u.tx_hash, u.tx_pos);
@@ -254,16 +394,19 @@ export async function fetchUtxos(address: string, neededSats?: number): Promise<
     return !pendingKeys.has(key) && !_spent.has(key);
   });
 
-  // Clean up spent set: if WoC no longer returns a spent UTXO, it's confirmed spent
+  // Clean up spent set: if WoC no longer returns a spent UTXO, it's confirmed spent.
+  //
+  // ⚠ ONLY FOR THIS ADDRESS. The inference is "absent from this address's UTXO
+  // set ⇒ its spender confirmed", which is true for outpoints belonging to this
+  // address and false for every other one — those are absent because they were
+  // never going to be here. Unscoped, this loop un-blacklisted the platform
+  // wallet's outpoints whenever an agent fetched, and vice versa, handing back a
+  // UTXO whose spender was still in the mempool. Entries with an unknown address
+  // (pre-upgrade localStorage rows) are left alone: keeping a stale blacklist
+  // entry costs one unspendable UTXO until the size cap evicts it, while dropping
+  // a live one costs a rejected broadcast.
   const wocKeys = new Set(wocUtxos.map((u) => utxoKey(u.tx_hash, u.tx_pos)));
-  let spentChanged = false;
-  for (const spentKey of _spent) {
-    if (!wocKeys.has(spentKey)) {
-      _spent.delete(spentKey);
-      spentChanged = true;
-    }
-  }
-  if (spentChanged) saveSpentSet(_spent);
+  if (pruneSpentForAddress(_spent, address, wocKeys)) saveSpentSet(_spent);
 
   // Merge pending change + filtered WoC, sort largest first
   const all: ClientUtxo[] = [..._pendingChange, ...filtered];
@@ -406,6 +549,8 @@ function selectUtxos(
  * duplication. See ROADMAP "Refactor clientSideBoot".
  */
 export function recordBroadcast(args: {
+  /** The address the inputs were spent FROM — see `markSpent`. */
+  address: string;
   spent: ClientUtxo[];
   txid: string;
   changeIndex: number | null;
@@ -413,14 +558,7 @@ export function recordBroadcast(args: {
   tx: unknown;
 }): void {
   const spentKeys = new Set(args.spent.map((u) => utxoKey(u.tx_hash, u.tx_pos)));
-  for (const sk of spentKeys) _spent.add(sk);
-  // Survive the restart. Failing to persist must not fail the broadcast that
-  // has already happened, so this never throws.
-  try {
-    _spentStore?.add([...spentKeys]);
-  } catch {
-    /* best effort */
-  }
+  markSpent(args.address, spentKeys);
 
   for (let i = _pendingChange.length - 1; i >= 0; i--) {
     const key = utxoKey(_pendingChange[i].tx_hash, _pendingChange[i].tx_pos);
@@ -435,13 +573,7 @@ export function recordBroadcast(args: {
       sourceTransaction: args.tx as ClientUtxo["sourceTransaction"],
     });
     while (_pendingChange.length > 50) _pendingChange.shift();
-    while (_spent.size > 500) {
-      const first = _spent.values().next().value;
-      if (first) _spent.delete(first);
-    }
   }
-
-  saveSpentSet(_spent);
 }
 
 // ── Main entry point ────────────────────────────────────────
@@ -712,9 +844,7 @@ async function _clientSideBootInner(
 
       // ── Track spent UTXOs (success-only blacklist) ───────────
       const spentKeys = new Set(selection.selected.map((u) => utxoKey(u.tx_hash, u.tx_pos)));
-      for (const sk of spentKeys) {
-        _spent.add(sk);
-      }
+      markSpent(userAddress, spentKeys);
       // Remove consumed UTXOs from pending change
       for (let i = _pendingChange.length - 1; i >= 0; i--) {
         const pendingKey = utxoKey(_pendingChange[i].tx_hash, _pendingChange[i].tx_pos);
@@ -736,14 +866,9 @@ async function _clientSideBootInner(
 
           // Cap queues to avoid unbounded growth
           while (_pendingChange.length > 50) _pendingChange.shift();
-          while (_spent.size > 500) {
-            const first = _spent.values().next().value;
-            if (first) _spent.delete(first);
-          }
         }
       }
 
-      saveSpentSet(_spent);
       return { status: "success", txid, rawTx: tx.toHex() };
     }
 
@@ -922,9 +1047,10 @@ export async function consolidateUtxos(
       }
 
       // Blacklist on success (or already-known) — tx is in the mempool
-      for (const utxo of spendable) {
-        _spent.add(utxoKey(utxo.tx_hash, utxo.tx_pos));
-      }
+      markSpent(
+        userAddress,
+        spendable.map((utxo) => utxoKey(utxo.tx_hash, utxo.tx_pos))
+      );
       // Remove any pending change that was consumed
       for (let i = _pendingChange.length - 1; i >= 0; i--) {
         const key = utxoKey(_pendingChange[i].tx_hash, _pendingChange[i].tx_pos);
@@ -943,12 +1069,7 @@ export async function consolidateUtxos(
 
       // Cap queues
       while (_pendingChange.length > 50) _pendingChange.shift();
-      while (_spent.size > 500) {
-        const first = _spent.values().next().value;
-        if (first) _spent.delete(first);
-      }
 
-      saveSpentSet(_spent);
       return { status: "success", txid };
     }
 

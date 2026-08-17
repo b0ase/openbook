@@ -211,6 +211,7 @@ export async function clientSidePost(
     }
 
     recordBroadcast({
+      address: userAddress,
       spent: selection.selected,
       txid,
       changeIndex,

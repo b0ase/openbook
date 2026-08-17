@@ -431,6 +431,33 @@ export function applySpentOutpointMigration(database: Db): void {
     )
   `);
   database.exec("CREATE INDEX IF NOT EXISTS idx_spent_outpoints_at ON spent_outpoints(spent_at)");
+
+  /**
+   * ⚠ THE ADDRESS IS NOT BOOKKEEPING — WITHOUT IT THE BLACKLIST ERASES ITSELF.
+   *
+   * Both consumers prune the same way: fetch one address's UTXO set, and drop
+   * any blacklisted outpoint the response no longer contains, on the reasoning
+   * that its spender must have confirmed. That reasoning holds for outpoints
+   * belonging to THAT address and is false for every other one — a foreign
+   * outpoint is absent because it was never going to be there.
+   *
+   * In a browser that never mattered: one tab, one wallet, one address. On a
+   * server it does. This process spends from the platform wallet AND from every
+   * configured agent's key, so an agent's post would clear the platform's
+   * blacklist, and the next free boost would offer an output already spent by a
+   * transaction still sitting in the mempool. Making the set durable without
+   * this column would have made that worse, not better: hydration would pull
+   * every address's outpoints into one process-global set for the next fetch to
+   * throw away.
+   *
+   * Nullable because rows written before this column existed cannot be
+   * attributed after the fact. They are treated as belonging to no address —
+   * see `loadSpentOutpoints` — and age out within three days.
+   */
+  addColumnIfMissing(database, "spent_outpoints", "address", "address TEXT");
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_spent_outpoints_address ON spent_outpoints(address)"
+  );
 }
 
 /**
