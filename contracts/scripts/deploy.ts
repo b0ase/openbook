@@ -1,6 +1,6 @@
 import { loadEnv } from './env'
 import { Addr, bsv, DefaultProvider, TestWallet, toByteString } from 'scrypt-ts'
-import { OrdiProvider } from 'scrypt-ord'
+import { providerFor } from './provider'
 import { PayToMint } from '../src/contracts/payToMint'
 
 /**
@@ -102,7 +102,7 @@ async function main() {
      * That is the worst shape of failure: something went out and the response
      * was lost.
      *
-     * `OrdiProvider` broadcasts through GorillaPool's 1Sat endpoint, which is
+     * `providerFor` broadcasts through GorillaPool's 1Sat endpoint, which is
      * the right choice here for the same reason `client-post.ts` already prefers
      * it: **an inscription that is mined but never indexed is, to every wallet
      * and marketplace, not an inscription.** Going through the ordinals endpoint
@@ -110,7 +110,9 @@ async function main() {
      * indexer is exactly what has to recognise this deploy for the test to mean
      * anything.
      */
-    const provider = new OrdiProvider(network)
+    // ⚠ AND IT CARRIES A REAL FEE RATE. The stock provider reports 1 sat/kB,
+    // which ARC refuses outright. See `provider.ts`.
+    const provider = providerFor(network)
     // The balance smell-test is a separate read-only call.
     const balanceProvider = new DefaultProvider({ network })
 

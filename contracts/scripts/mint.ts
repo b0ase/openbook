@@ -1,6 +1,7 @@
 import { loadEnv } from './env'
 import { Addr, bsv, ContractTransaction, DefaultProvider, TestWallet } from 'scrypt-ts'
-import { BSV20V2P2PKH, OrdiProvider } from 'scrypt-ord'
+import { BSV20V2P2PKH } from 'scrypt-ord'
+import { providerFor } from './provider'
 import { Utils } from 'scrypt-ts'
 import { PayToMint } from '../src/contracts/payToMint'
 
@@ -49,7 +50,7 @@ async function main() {
 
     PayToMint.loadArtifact()
     // Same ordinals-aware provider as the deploy — see the note there.
-    const signer = new TestWallet(key, new OrdiProvider(network))
+    const signer = new TestWallet(key, providerFor(network))
     const provider = signer.provider
     if (!provider) throw new Error('no provider — cannot read the deployed contract')
 
