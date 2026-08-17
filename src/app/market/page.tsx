@@ -18,10 +18,12 @@ import { listTickerBoards } from "../actions";
  *
  * ⚠ THINGS ARE NOW ACTUALLY FOR SALE HERE. Holders can list units and buyers can
  * fill those listings (`market.ts`), so each row carries TWO prices: the cheapest
- * second-hand unit on offer, and what minting a fresh one costs. The second is a
- * ceiling on the first — nobody rationally pays more second-hand than a new unit
- * costs — so the ask is normally the lower number, and a market page that showed
- * only the mint price would be hiding the market.
+ * second-hand unit on offer, and what minting a fresh one costs.
+ *
+ * The mint price is NOT a ceiling on what a holder may ask (owner, 2026-08-17) —
+ * it is the price of the last resort, the thing a buyer falls back to. An ask
+ * above it is a limit order waiting for the curve to rise past it. The buyer
+ * simply takes whichever is cheaper today, which is why both are shown.
  *
  * ⚠ NO PER-TICKER ADDRESSES YET. The owner asked for each token's public address
  * alongside its value. Tokens do not have addresses: HD derivation is designed in

@@ -11,11 +11,15 @@ import { titleCaseTicker } from "@/lib/ticker";
 /**
  * Offer units for sale, and take offers back.
  *
- * ⚠ THE MINT PRICE IS SHOWN AS A CEILING, NOT A SUGGESTION. Nobody rationally
- * pays more second-hand than a fresh unit costs, so an ask above it will simply
- * never fill — and a seller who cannot see that number is guessing. Selling
- * below it and above what you paid is the ordinary profit of having been early,
- * which is the entire reason a ticket is worth buying.
+ * ⚠ AN ASK ABOVE THE MINT PRICE IS A LIMIT ORDER, NOT A MISTAKE (owner,
+ * 2026-08-17). This file used to tell sellers "price above that and nobody will
+ * take it", which is wrong and was actively bad advice: the mint price RISES as
+ * the room fills, so an ask set above it today is filled the moment the curve
+ * passes it. *"I can list a ticket for $100 today, even though the platform
+ * price is $90. Eventually I'll sell my ticket for $100."*
+ *
+ * So the mint price is shown as INFORMATION — it is what a buyer pays if they
+ * ignore you today — not as a cap on what may be asked.
  *
  * Listing is free and moves nothing: it is a signed offer, and the units only
  * change hands when somebody pays. That is why the seller signs the exact terms
@@ -117,7 +121,7 @@ export function SellModal({
       />
       <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center px-6">
         <div
-          className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-2xl border border-amber-400/20 bg-[#0f0f0f]"
+          className="pointer-events-auto w-full max-w-md overflow-hidden rounded-2xl border border-amber-400/20 bg-[#0f0f0f]"
           role="dialog"
           aria-modal="true"
           aria-label="Sell units"
@@ -127,12 +131,13 @@ export function SellModal({
             <h2 className="text-[15px] font-semibold tracking-tight">
               Sell <span className="text-amber-400">${titleCaseTicker(symbol)}</span>
             </h2>
-            <p className="mt-1 text-[11px] text-zinc-500">
-              You hold {held}. A fresh unit costs{" "}
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+              You hold {held}. Minting a fresh unit costs{" "}
               <span className="font-mono tabular-nums text-amber-400">
                 {mintPriceSats(held).toLocaleString()}
               </span>{" "}
-              sats to mint — price above that and nobody will take it.
+              sats today. Ask below that and it can sell now; ask above it and it sells when the
+              room fills enough to push the mint price past you.
             </p>
 
             <div className="mt-3 flex gap-2">

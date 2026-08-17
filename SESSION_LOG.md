@@ -2,6 +2,46 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-17 (the door had a hole in the wall beside it)
+
+- **Category: security fix, feature, UX.** Owner tested a room and got in without a ticket. He was
+  right, and the cause was NOT the gate — the gate worked. Two things around it leaked.
+- **⚠ THE REAL LEAK: the FEED was printing every room's newest message.** `POST_SELECT` joins each
+  root's latest reply so an answer is visible on the screen you are watching, and the feed renders
+  it inline. That published every gated room's most recent line to everybody. Suppressed **in the
+  QUERY, not the render** — hiding it in the component leaves the text in the RSC payload, which is
+  a gate made of CSS. Suppressed for holders too: the feed cannot know who is looking, and a holder
+  is one tap from the room. The board's own token is not a room, so the main feed keeps previews.
+- **⚠ SECOND LEAK, MY OWN: `getThread` SENT the replies and `ThreadView` merely declined to paint
+  them.** Same class of bug, one layer up, and I had just written the comment criticising it. Now
+  the server returns the root alone to anybody without a ticket. Honest limit unchanged and
+  restated: `viewer` is unsigned, so this is an access rule for the app, not secrecy.
+- **Third: "Posts by $X" rendered OUTSIDE the gate** — every post a name had ever written, dumped
+  into its room. Removed entirely, which also fixes the owner's other complaint: it was the
+  *"clustering all the mentions together… incoherent bullshit"*. A room is a conversation; a
+  profile is a different surface.
+- **⚠ ECONOMICS CORRECTION (owner):** the mint price is **NOT a ceiling on what a holder may ask**.
+  A listing above it is a LIMIT ORDER that fills when the curve rises past it — *"I can list a
+  ticket for $100 today, even though the platform price is $90."* The mint price is the price of
+  the LAST RESORT, what a buyer falls back to. `SellModal` was giving the opposite advice ("price
+  above that and nobody will take it") and has been corrected; `RoomGate` and the market page too.
+- **The in-room strip became a POSITION card:** units held, what was paid, average per ticket,
+  what a new one costs, and a Sell button opening the listing sheet. New `getRoomPosition`.
+  - Cost basis needed data nothing recorded: `ticker_mentions.paid_sats`, written at mint time
+    from the same `mintChargeSats` the author funded. **Priced BEFORE the rows are inserted** — the
+    inserts raise supply, so pricing afterwards would record a notch above what was charged.
+  - **NULL is a real answer and the card says so.** Genesis units have no recorded cost; it reports
+    how many it cannot price rather than averaging over the ones it can.
+  - The mint price is labelled "new one costs", not a valuation — pricing a whole holding at the
+    curve would be a lie in the flattering direction.
+- **Cards now take the content column** (`max-w-sm` → full width in-thread; modals to `max-w-md`).
+- **⚠ I REPEATED A LOGGED MISTAKE:** put backticks inside a SQL template literal, which terminates
+  the string. It is already in the handoff notes as having cost a build once. Caught by tsc; the
+  guard now asserts no backtick survives inside `POST_SELECT`.
+- **Verified in a browser, not by reading the diff:** seeded a room owned by a stranger with a
+  marked reply, loaded it as a non-holder — gate card shows, composer hidden, root visible, and the
+  reply appears nowhere in the DOM. Fixture removed afterwards.
+
 ## 2026-08-17 (the pay-to-mint covenant — testnet)
 
 - **Category: contract (new workspace).** Owner was right to be suspicious: typing `$newticker`

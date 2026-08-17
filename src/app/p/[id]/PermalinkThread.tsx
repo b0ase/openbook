@@ -45,10 +45,10 @@ export function PermalinkThread({ post }: { post: Post }) {
   }, [post.id]);
 
   useEffect(() => {
-    void getThread(rootId)
+    void getThread(rootId, identity?.pubkey ?? null)
       .then(setThread)
       .catch(() => setThread([]));
-  }, [rootId]);
+  }, [rootId, identity?.pubkey]);
 
   useEffect(() => {
     void getRoomAccess(rootId, identity?.pubkey ?? null)

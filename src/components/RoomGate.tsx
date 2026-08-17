@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { RoomPosition as RoomPositionData } from "@/app/actions";
 import { getListings } from "@/app/actions";
 import { BuyConfirm } from "@/components/BuyConfirm";
 import { useIdentityContext } from "@/contexts/IdentityContext";
@@ -47,11 +48,17 @@ export function RoomGate({
   /**
    * The cheapest ticket somebody is already holding and willing to sell.
    *
-   * ⚠ THE OWNER ASKED FOR THIS ROUTE FIRST — *"or they can go to the market to
-   * buy a cheaper ticket on the market instead"* — and it is the honest one to
-   * lead with when it exists: the mint price is a CEILING, so an ask below it is
-   * strictly better for the buyer. Showing only the door would be the interface
-   * overcharging somebody on the platform's behalf.
+   * ⚠ THE MINT PRICE IS NOT A CEILING ON WHAT A HOLDER MAY ASK (owner,
+   * 2026-08-17), and an earlier version of this file had that wrong in a way
+   * that mattered. A holder can list ABOVE the current mint price — *"I can list
+   * a ticket for $100 today, even though the platform price is $90"* — and that
+   * is a LIMIT ORDER, not a mispricing. It fills when the curve rises past it,
+   * which it does as the room fills. Refusing to show such an ask, or telling a
+   * seller nobody will take it, was the interface arguing with the design.
+   *
+   * What the mint price actually is: the price of the LAST RESORT. Nobody has to
+   * pay more than it, because minting a fresh unit is always available — so a
+   * buyer picks whichever of the two is cheaper, and both are shown.
    */
   const [ask, setAsk] = useState<{ id: number; priceSats: number } | null>(null);
   useEffect(() => {
@@ -83,8 +90,12 @@ export function RoomGate({
   return (
     // Sits at the TOP of the thread, so no `min-h-full` centring — that was for
     // a card standing in for the whole conversation, and this one now leads it.
-    <div className="flex justify-center pt-1 pb-4">
-      <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-amber-400/20 bg-[#0f0f0f]">
+    // ⚠ FULL CONTENT WIDTH (owner, 2026-08-17). `max-w-sm` made a door narrower
+    // than the conversation behind it, which read as a dialog that had wandered
+    // into the page. It is not a dialog — it IS the page for somebody without a
+    // ticket — so it takes the same column the posts do.
+    <div className="pt-1 pb-4">
+      <div className="w-full overflow-hidden rounded-2xl border border-amber-400/20 bg-[#0f0f0f]">
         <div className="h-[3px] bg-amber-400" />
         <div className="px-5 py-5">
           <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Members only</p>
@@ -116,9 +127,11 @@ export function RoomGate({
             costs. It is yours to keep, and yours to sell.
           </p>
 
-          {/* ⚠ THE CHEAPER OPTION LEADS, when there is one. A buyer offered two
-              prices should be shown the lower one first; anything else is the
-              interface working for the house. */}
+          {/* ⚠ THE CHEAPER OPTION LEADS. A buyer offered two prices should be
+              shown the lower one first; anything else is the interface working
+              for the house. An ask ABOVE the mint price is still a real offer —
+              it just is not the one to lead with, because minting is cheaper
+              today. */}
           {ask && ask.priceSats < access.priceSats && (
             <button
               type="button"
@@ -173,44 +186,104 @@ export function RoomGate({
 }
 
 /**
- * The room's price, for people who are already in.
+ * Your position in a room you are already in.
  *
- * ⚠ A HOLDER STILL WANTS THE NUMBER (owner, 2026-08-17). The door tells a
- * stranger what entry costs; this tells a member what their seat is now worth,
- * because that is the same figure — nobody rationally pays more second-hand
- * than a fresh ticket costs, so the mint price is the ceiling on what they
- * could sell for. Without it a holder has to leave the room to find out whether
- * the thing they are sitting in got more valuable.
+ * ⚠ A HOLDER WANTS THE NUMBERS, NOT A PRICE TAG (owner, 2026-08-17). This was a
+ * one-line strip showing the entry price. What somebody sitting on a position
+ * actually needs is: how much of it they hold, what it cost them, what a fresh
+ * unit costs today, and a way out — *"offer them the chance to sell (list)
+ * their tokens on the market, how many, what price."*
  *
- * Sticky, deliberately: it is a live price, and a price that scrolls away is a
- * price you have to go looking for.
+ * ⚠ THE MINT PRICE IS SHOWN AS "REPLACEMENT COST", NOT AS A VALUATION. Pricing
+ * a whole holding at the current mint price would be a lie in the flattering
+ * direction: the curve is what the NEXT unit costs, and dumping a thousand units
+ * into the market would not clear anywhere near it. Cost, replacement cost and
+ * realised proceeds are three facts; a "your position is worth £X" is a
+ * projection, so it is not shown.
+ *
+ * ⚠ UNKNOWN COST IS REPORTED, NOT HIDDEN. Units minted before the price was
+ * recorded have no basis, and the card says how many rather than quietly
+ * averaging over the ones it can price.
+ *
+ * Sticky, because it is a live price and one that scrolls away has to be gone
+ * looking for.
  */
-export function RoomTicker({ access }: { access: RoomAccess }) {
+export function RoomPosition({
+  position,
+  onSell,
+}: {
+  position: RoomPositionData;
+  onSell: () => void;
+}) {
   const bsvPrice = useBsvPrice();
-  const symbol = access.symbol ?? "";
-  const usd = bsvPrice > 0 ? (access.priceSats / 1e8) * bsvPrice : null;
+  const usd = (sats: number) => (bsvPrice > 0 ? (sats / 1e8) * bsvPrice : null);
+  const fmtUsd = (v: number | null) =>
+    v === null ? "" : ` (≈ $${v < 0.01 ? v.toFixed(5) : v.toFixed(2)})`;
+  const unpriced = Math.max(0, position.units - position.pricedUnits);
+  const avg =
+    position.pricedUnits > 0 ? Math.round(position.spentSats / position.pricedUnits) : null;
 
   return (
-    <div className="sticky top-0 z-10 -mx-4 mb-1 border-b border-zinc-800/80 bg-black/85 px-4 py-1.5 backdrop-blur">
-      <div className="flex items-baseline gap-2 text-[11px]">
-        <span className="font-medium text-amber-400">${titleCaseTicker(symbol)}</span>
-        <span className="text-zinc-600">·</span>
-        <span className="text-zinc-500">
-          you hold <span className="font-mono tabular-nums text-zinc-300">{access.held}</span>
+    <div className="sticky top-0 z-10 -mx-4 mb-2 border-b border-zinc-800/80 bg-black/90 px-4 py-2 backdrop-blur">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[13px] font-medium text-amber-400">
+          ${titleCaseTicker(position.symbol)}
         </span>
-        <span className="ml-auto text-zinc-500">
-          entry{" "}
-          <span className="font-mono tabular-nums text-amber-400">
-            {access.priceSats.toLocaleString()}
-          </span>{" "}
-          sats
-          {usd !== null && (
-            <span className="ml-1 font-mono tabular-nums text-zinc-600">
-              (${usd < 0.01 ? usd.toFixed(5) : usd.toFixed(2)})
+        <span className="font-mono text-[13px] tabular-nums text-white">
+          {position.units.toLocaleString()}
+        </span>
+        <span className="text-[11px] text-zinc-500">
+          {position.units === 1 ? "ticket" : "tickets"}
+        </span>
+        <button
+          type="button"
+          onClick={onSell}
+          className="ml-auto rounded-full border border-zinc-700 px-3 py-0.5 text-[11px] text-zinc-300 transition-colors hover:border-amber-400/50 hover:text-amber-300"
+        >
+          Sell
+        </button>
+      </div>
+
+      <dl className="mt-1.5 grid grid-cols-3 gap-x-3 gap-y-1 text-[10px]">
+        <div>
+          <dt className="text-zinc-600">You paid</dt>
+          <dd className="font-mono tabular-nums text-zinc-300">
+            {position.spentSats.toLocaleString()}
+            <span className="text-zinc-600">{fmtUsd(usd(position.spentSats))}</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-zinc-600">Avg / ticket</dt>
+          <dd className="font-mono tabular-nums text-zinc-300">
+            {avg === null ? "—" : avg.toLocaleString()}
+          </dd>
+        </div>
+        <div>
+          {/* The honest label. It is what the NEXT one costs, which is the price
+              a buyer can always fall back to — not what this holding would
+              fetch if it were sold. */}
+          <dt className="text-zinc-600">New one costs</dt>
+          <dd className="font-mono tabular-nums text-amber-400">
+            {position.mintPriceSats.toLocaleString()}
+          </dd>
+        </div>
+      </dl>
+
+      {(unpriced > 0 || position.listedUnits > 0 || position.receivedSats > 0) && (
+        <p className="mt-1 text-[10px] text-zinc-600">
+          {unpriced > 0 && (
+            <span>
+              {unpriced.toLocaleString()} minted before prices were recorded — no cost known.{" "}
             </span>
           )}
-        </span>
-      </div>
+          {position.listedUnits > 0 && (
+            <span>{position.listedUnits.toLocaleString()} listed for sale. </span>
+          )}
+          {position.receivedSats > 0 && (
+            <span>{position.receivedSats.toLocaleString()} sats received from sales.</span>
+          )}
+        </p>
+      )}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { verifyFillPayment } from "@/lib/fill-payment";
 import { FORK_POINT_ID } from "@/lib/fork-point";
 import { tryConsumeFreeBootForIp } from "@/lib/free-boot-cap";
-import { creditUnits, transferUnits, unitsHeld } from "@/lib/holdings";
+import { creditUnits, totalUnits, transferUnits, unitsHeld } from "@/lib/holdings";
 import {
   attachPreviewToPost,
   firstLinkIn,
@@ -21,6 +21,7 @@ import {
   findOpenListing,
   MAX_LISTING_UNITS,
   openListings,
+  unitsCommitted,
   unitsListable,
 } from "@/lib/market";
 import { mintChargeSats, mintFloorSats } from "@/lib/mint-charge";
@@ -431,9 +432,20 @@ function recordTickerMentions(
 ): void {
   try {
     const pk = typeof pubkey === "string" ? pubkey : null;
+    /**
+     * ⚠ PRICED BEFORE THE ROWS EXIST, which is the only moment it is correct.
+     * `mintChargeSats` reads current supply, and the inserts below ADD to that
+     * supply — so computing it afterwards would price the units one notch above
+     * what the author was actually quoted and charged.
+     *
+     * This is the same number `payForPost` funded, from the same function, so a
+     * holder's cost basis is what they really paid rather than a reconstruction.
+     */
+    const chargedSats = mintChargeSats(content);
     const insert = db.prepare(
-      `INSERT OR IGNORE INTO ticker_mentions (symbol, post_id, pubkey, target_type, units)
-       VALUES (?, ?, ?, 'none', ?)`
+      `INSERT OR IGNORE INTO ticker_mentions
+         (symbol, post_id, pubkey, target_type, units, paid_sats)
+       VALUES (?, ?, ?, 'none', ?, ?)`
     );
 
     /**
@@ -460,7 +472,7 @@ function recordTickerMentions(
        * where a unit exists and belongs to nobody. See `holdings.ts`.
        */
       db.transaction(() => {
-        insert.run(buy.symbol, postId, pk, buy.units);
+        insert.run(buy.symbol, postId, pk, buy.units, chargedSats);
         creditUnits(buy.symbol, pk, buy.units);
       })();
       return;
@@ -469,8 +481,12 @@ function recordTickerMentions(
     const symbols = distinctTickers(content);
     if (!symbols.length) return;
     const all = db.transaction(() => {
+      // Per-word share of the post's charge: `mintChargeSats` is the SUM over
+      // the words named, so a post naming three splits three ways rather than
+      // recording the whole bill against each.
+      const each = symbols.length > 0 ? Math.round(chargedSats / symbols.length) : 0;
       for (const symbol of symbols) {
-        insert.run(symbol, postId, pk, 1);
+        insert.run(symbol, postId, pk, 1, each);
         creditUnits(symbol, pk, 1);
       }
     });
@@ -1822,7 +1838,25 @@ const POST_SELECT = `
       JOIN (SELECT root_id, MAX(id) AS id FROM posts WHERE parent_id IS NOT NULL GROUP BY root_id) m
         ON m.id = r.id
   ) lr
+    -- ⚠ NEVER FOR A ROOM. A named thread is gated — one unit of its token is the
+    -- ticket in (see room-access.ts) — and this join was printing its newest
+    -- message on the PUBLIC FEED, to everybody, holder or not. The door was
+    -- working and the timeline was reading the room out loud through the wall.
+    --
+    -- ⚠ SUPPRESSED IN THE QUERY, NOT IN THE RENDER, and that distinction is the
+    -- whole fix. Hiding it in the component would leave the text in the RSC
+    -- payload, where anyone can read it — a "gate" made of CSS.
+    --
+    -- Suppressed for HOLDERS too. The feed is a public surface and cannot know
+    -- who is looking; a holder sees the room by opening it. That costs a holder
+    -- one tap and costs a non-holder nothing they were entitled to.
+    --
+    -- The board's own token is not a room, so the main feed keeps its previews.
     ON lr.root_id = p.id
+   AND NOT EXISTS (
+     SELECT 1 FROM tickers t
+      WHERE t.root_id = p.id AND t.symbol <> '${ROOT_TICKER}'
+   )
   LEFT JOIN nyms lrn
     ON lrn.pubkey = lr.pubkey
   LEFT JOIN link_previews lp
@@ -2247,14 +2281,106 @@ export async function getCheapestAsks(symbols: string[]): Promise<Record<string,
   return out;
 }
 
+export interface RoomPosition {
+  symbol: string;
+  /** Units held right now. */
+  units: number;
+  /** What was paid for the units whose price IS recorded. */
+  spentSats: number;
+  /** Units with a recorded price. Below `units` where history is missing. */
+  pricedUnits: number;
+  /** Received from units already sold on the market. */
+  receivedSats: number;
+  /** What minting a fresh unit costs today — the last-resort price. */
+  mintPriceSats: number;
+  /** Units this holder currently has on offer. */
+  listedUnits: number;
+}
+
+/**
+ * A holder's position in one room: what they hold, what it cost, what it is
+ * worth if they had to replace it.
+ *
+ * ⚠ IT REPORTS WHAT IT DOES NOT KNOW. Units minted before the price was recorded
+ * have no cost, and `pricedUnits` says how many. Inventing a basis for them —
+ * by pricing them at today's curve, say — would put a fabricated profit in front
+ * of somebody, which is a worse failure than a gap they can see.
+ */
+export async function getRoomPosition(
+  symbol: string,
+  pubkey: string | null
+): Promise<RoomPosition | null> {
+  const canonical = canonicalTicker(symbol);
+  if (!isValidTicker(canonical) || !pubkey) return null;
+
+  const minted = db
+    .prepare(
+      `SELECT COALESCE(SUM(paid_sats), 0) AS spent,
+              COALESCE(SUM(CASE WHEN paid_sats IS NOT NULL THEN units ELSE 0 END), 0) AS priced
+         FROM ticker_mentions WHERE symbol = ? AND pubkey = ?`
+    )
+    .get(canonical, pubkey) as { spent: number; priced: number };
+
+  // Units bought on the market carry their price where the payment was actually
+  // verified, so the two sources are summed rather than one standing in for both.
+  const bought = db
+    .prepare(
+      `SELECT COALESCE(SUM(f.paid_sats), 0) AS spent, COALESCE(SUM(f.units), 0) AS units
+         FROM listing_fills f JOIN listings l ON l.id = f.listing_id
+        WHERE l.symbol = ? AND f.buyer_pubkey = ?`
+    )
+    .get(canonical, pubkey) as { spent: number; units: number };
+
+  const sold = db
+    .prepare(
+      `SELECT COALESCE(SUM(f.paid_sats), 0) AS received
+         FROM listing_fills f JOIN listings l ON l.id = f.listing_id
+        WHERE l.symbol = ? AND l.seller_pubkey = ?`
+    )
+    .get(canonical, pubkey) as { received: number };
+
+  return {
+    symbol: canonical,
+    units: unitsHeld(canonical, pubkey),
+    spentSats: minted.spent + bought.spent,
+    pricedUnits: minted.priced + bought.units,
+    receivedSats: sold.received,
+    mintPriceSats: mintPriceSats(totalUnits(canonical)),
+    listedUnits: unitsCommitted(canonical, pubkey),
+  };
+}
+
 export async function getPostById(id: number): Promise<Post | null> {
   if (!Number.isFinite(id) || id <= 0) return null;
   const row = db.prepare(`${POST_SELECT} WHERE p.id = ?`).get(Math.floor(id)) as Post | undefined;
   return row ?? null;
 }
 
-export async function getThread(rootId: number): Promise<Post[]> {
+export async function getThread(rootId: number, viewer?: string | null): Promise<Post[]> {
   if (!Number.isInteger(rootId) || rootId <= 0) return [];
+
+  /**
+   * ⚠ A ROOM'S MESSAGES ARE NOT SENT TO SOMEBODY WITHOUT A TICKET.
+   *
+   * `ThreadView` filters the replies out of its render for a locked reader —
+   * but filtering in the component leaves the text in the payload the browser
+   * already received, which is a gate made of CSS. The same mistake the feed's
+   * reply preview made, one layer up.
+   *
+   * The root is still returned: it is public, it is in the feed, and it is what
+   * somebody clicked to get here. What a ticket buys is the conversation.
+   *
+   * ⚠ THE HONEST LIMIT, unchanged (see room-access.ts): `viewer` arrives
+   * unsigned and holdings are public, so a determined caller can pass a
+   * holder's key. This is an access rule for the app, not secrecy — the posts
+   * are on chain and readable by anyone who indexes them. What it does mean is
+   * that the ordinary path no longer hands a room's contents to people who have
+   * not paid, which is a different and much lower bar than "cannot be defeated".
+   */
+  if (!mayEnter(rootId, typeof viewer === "string" && viewer ? viewer : null)) {
+    const root = db.prepare(`${POST_SELECT} WHERE p.id = ?`).get(rootId) as Post | undefined;
+    return root ? [root] : [];
+  }
   // ⚠ THE SECOND CLAUSE IS THE BRANCH POINTS, AND IT IS NOT OPTIONAL. Claiming a
   // ticker re-roots the claiming post onto its own thread, which by construction
   // removes it from THIS thread's `root_id` set — so without this the post that

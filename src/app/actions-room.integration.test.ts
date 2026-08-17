@@ -40,7 +40,7 @@ vi.mock("next/headers", () => ({
 
 import { db } from "@/lib/db";
 import { ROOT_TICKER } from "@/lib/ticker";
-import { createPost, getRoomAccess } from "./actions";
+import { createPost, getPosts, getRoomAccess, getThread } from "./actions";
 
 /** A fresh key per author — `createPost` rate-limits per pubkey. */
 function who() {
@@ -68,7 +68,8 @@ function lastId(): number {
 }
 
 beforeEach(() => {
-  db.exec("DELETE FROM ticker_mentions"); db.exec("DELETE FROM ticker_holdings");
+  db.exec("DELETE FROM ticker_mentions");
+  db.exec("DELETE FROM ticker_holdings");
   db.exec("DELETE FROM tickers");
   db.exec("DELETE FROM payouts");
   db.exec("DELETE FROM bootboard");
@@ -133,6 +134,64 @@ describe("the room gate", () => {
     await post(founder, `the board itself $${ROOT_TICKER}`);
     const rootId = lastId();
     expect((await post(who(), "the front door is open", rootId)).ok).toBe(true);
+  });
+
+  /**
+   * ⚠ THE LEAK THAT MADE THE DOOR POINTLESS. `POST_SELECT` joins each root's
+   * NEWEST REPLY onto it, and the feed prints that inline — so every room's
+   * latest message was being read out on the public timeline to everybody. The
+   * gate was working; the wall had a hole in it.
+   */
+  it("keeps a room's replies OFF the public feed", async () => {
+    const founder = who();
+    await post(founder, "starting $Occam");
+    const rootId = lastId();
+    await post(founder, "something only members should see", rootId);
+
+    const feed = await getPosts();
+    const room = feed.find((p) => p.id === rootId);
+    expect(room, "the room's root should still be on the feed").to.not.equal(undefined);
+    // The count is fine — it leaks nothing. The CONTENT is not.
+    expect(room?.latest_reply_content ?? null).toBeNull();
+    expect(JSON.stringify(feed)).not.toContain("only members should see");
+  });
+
+  it("does not SEND a room's messages to somebody without a ticket", async () => {
+    // ⚠ NOT THE SAME TEST AS "the UI hides them". Filtering in the component
+    // leaves the text in the payload the browser already has — a gate made of
+    // CSS. This asserts the server never sent it.
+    const founder = who();
+    await post(founder, "starting $Occam");
+    const rootId = lastId();
+    await post(founder, "members-only chatter");
+
+    const stranger = await getThread(rootId, who().pubkey);
+    expect(stranger).toHaveLength(1);
+    expect(stranger[0]?.id).toBe(rootId);
+    expect(JSON.stringify(stranger)).not.toContain("members-only chatter");
+
+    // A signed-out reader is treated the same way.
+    expect(await getThread(rootId, null)).toHaveLength(1);
+  });
+
+  it("sends the whole conversation to a holder", async () => {
+    const founder = who();
+    await post(founder, "starting $Occam");
+    const rootId = lastId();
+    await post(founder, "a message inside", rootId);
+    expect(await getThread(rootId, founder.pubkey)).toHaveLength(2);
+  });
+
+  it("still previews the newest reply on an UNNAMED thread", async () => {
+    // The suppression must be surgical. Ordinary conversation keeps the inline
+    // reply that exists so an answer is visible on the screen you are watching.
+    const author = who();
+    await post(author, "an ordinary thought");
+    const rootId = lastId();
+    await post(who(), "answering in the open", rootId);
+
+    const feed = await getPosts();
+    expect(feed.find((p) => p.id === rootId)?.latest_reply_content).toBe("answering in the open");
   });
 
   it("reports the door's price and whether the reader holds a ticket", async () => {

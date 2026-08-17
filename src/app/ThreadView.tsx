@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav } from "@/components/BottomNav";
-import { RoomGate, RoomTicker } from "@/components/RoomGate";
+import { RoomGate, RoomPosition } from "@/components/RoomGate";
+import { SellModal } from "@/components/SellModal";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { readCachedNym } from "@/lib/nym-cache";
 import type { RoomAccess } from "@/lib/room-access";
@@ -11,14 +12,15 @@ import { distinctTickers, isRootTicker, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
 import type { Post } from "@/types";
 import {
-  getPostsByNym,
   getRoomAccess,
+  getRoomPosition,
   getThread,
   getThreadShare,
   getThreadTicker,
   getTickerMeaningFor,
   getTickerPath,
   getTickerSupply,
+  type RoomPosition as RoomPositionData,
 } from "./actions";
 import { IdentityChip } from "./IdentityBar";
 import { PostContent } from "./PostContent";
@@ -36,6 +38,20 @@ import { BootButton } from "./PostList";
  * the feed with its OWN scroll container instead, so opening a thread cannot
  * disturb the feed's scroll position, and closing it restores nothing because
  * nothing was moved. THREADS.md's "root-feed unchanged" is literal here.
+ *
+ * ⚠ A ROOM IS A CONVERSATION, NOT A SEARCH RESULT (owner, 2026-08-17). This
+ * view used to append EVERY post the name had ever written — `getPostsByNym` —
+ * under a "Posts by $X" heading. It was added for a real reason (an agent that
+ * only ever replies inside other people's threads showed "No replies yet" on
+ * its own page and looked mute), but it was the wrong fix: it pulled unrelated
+ * messages from unrelated conversations into one page, which is what the owner
+ * called *"clustering all the mentions together… threads of incoherent
+ * bullshit"*.
+ *
+ * ⚠ IT WAS ALSO A HOLE IN THE DOOR. That block rendered OUTSIDE the room gate,
+ * so a non-holder opening a name's room saw everything that name had ever
+ * written. Both problems had one cause and one fix. "Everything $X said" is a
+ * PROFILE, a different surface, and not what a ticket buys.
  *
  * Replies target the ROOT, not the tapped post. The schema stores arbitrary
  * depth and the thread query handles it, but a flat render (the settled
@@ -85,17 +101,6 @@ export function ThreadView({
 }: ThreadViewProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [ticker, setTicker] = useState<string | null>(null);
-  /**
-   * Everything the holder of this name has posted, when the name is somebody's
-   * `$Nym`.
-   *
-   * ⚠ A NAME'S THREAD IS NOT ITS AUTHOR'S POSTS. `/$occam` opens the thread where
-   * that ticker was first written; everything $Occam actually says is a reply
-   * inside other people's threads. So an agent answering every question it was
-   * asked showed "No replies yet" on its own page, and looked mute. Somebody
-   * clicking a name wants the speaker, not the etymology.
-   */
-  const [authored, setAuthored] = useState<Post[]>([]);
   /** What this word has come to mean, written by its agent from actual usage. */
   const [meaning, setMeaning] = useState<string | null>(null);
   const [anchor, setAnchor] = useState<{ text: string; url: string | null } | null>(null);
@@ -116,12 +121,17 @@ export function ThreadView({
   const [access, setAccess] = useState<RoomAccess | null>(null);
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
+  /** This holder's position — only fetched once the door is open. */
+  const [position, setPosition] = useState<RoomPositionData | null>(null);
+  const [selling, setSelling] = useState(false);
 
   const refresh = useCallback(async () => {
-    const thread = await getThread(rootId);
+    // The viewer decides what comes back — a room sends its messages only to
+    // somebody holding a ticket. See getThread.
+    const thread = await getThread(rootId, identity?.pubkey ?? null);
     setPosts(thread);
     setLoading(false);
-  }, [rootId]);
+  }, [rootId, identity?.pubkey]);
 
   // Your stake in the thread you are reading. Recomputed alongside the poll (not
   // on its own timer) so the share can never describe a different revision of
@@ -166,7 +176,15 @@ export function ThreadView({
   // signing in as somebody who already holds one, has to open the door without
   // a reload.
   const refreshAccess = useCallback(async () => {
-    setAccess(await getRoomAccess(rootId, identity?.pubkey ?? null));
+    const next = await getRoomAccess(rootId, identity?.pubkey ?? null);
+    setAccess(next);
+    // The position is only meaningful to somebody who is IN — and asking for it
+    // at the door would be a query per non-holder for a card they never see.
+    setPosition(
+      next.symbol && next.held > 0 && identity?.pubkey
+        ? await getRoomPosition(next.symbol, identity.pubkey)
+        : null
+    );
   }, [rootId, identity?.pubkey]);
 
   useEffect(() => {
@@ -195,14 +213,7 @@ export function ThreadView({
               setAnchor(null);
             }
           });
-        void getPostsByNym(t)
-          .then((rows) => {
-            if (live) setAuthored(rows);
-          })
-          .catch(() => {
-            if (live) setAuthored([]);
-          });
-      } else if (live) setAuthored([]);
+      }
       // The ancestry, so the header reads $OpenBooks/$Test rather than a bare name
       // — a token's position in the tree is part of what it IS.
       setPath(t ? await getTickerPath(t) : []);
@@ -384,10 +395,8 @@ export function ThreadView({
                 {loading
                   ? "Loading…"
                   : replyCount === 0
-                    ? authored.length > 0
-                      ? `${authored.length} ${authored.length === 1 ? "post" : "posts"} by this name`
-                      : "No replies yet"
-                    : `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
+                    ? "Nothing said here yet"
+                    : `${replyCount} ${replyCount === 1 ? "message" : "messages"}`}
                 {/* Your stake in the thread you are looking at. Shown only when you
                   actually hold some: "0%" on every thread you have never posted
                   in would be noise on most of them, and would read as a loss
@@ -427,8 +436,8 @@ export function ThreadView({
             </p>
           )}
 
-          {/* Already in: the price of a seat, kept in view. See `RoomTicker`. */}
-          {access?.gated && access.held > 0 && <RoomTicker access={access} />}
+          {/* Already in: your position, kept in view. See `RoomPosition`. */}
+          {position && <RoomPosition position={position} onSell={() => setSelling(true)} />}
 
           {/* ⚠ THE DOOR COMES FIRST (owner, 2026-08-17). It sat under the root
             post, on the theory that a buyer should see what they are buying
@@ -558,23 +567,6 @@ export function ThreadView({
                 every question put to it showed "No replies yet" on its own page.
                 Only rendered when the ticker is a claimed nym; a topic ticker
                 returns nothing and this stays invisible. */}
-            {authored.length > 0 && (
-              <div className="mt-2 border-t border-zinc-900 pt-3">
-                <p className="px-4 pb-1 text-[10px] uppercase tracking-widest text-zinc-600">
-                  Posts by ${ticker ? titleCaseTicker(ticker) : ""}
-                </p>
-                {authored.map((post) => (
-                  <article key={`authored-${post.id}`} className="py-3 pl-4">
-                    <PostContent
-                      post={post}
-                      onOpenTicker={onOpenTicker}
-                      tickerSupply={tickerSupply}
-                    />
-                  </article>
-                ))}
-              </div>
-            )}
-
             {pending.map((op) => (
               <article key={op.id} className={`py-3.5 pl-4 ${op.failed ? "opacity-50" : ""}`}>
                 <div className="border-l border-zinc-800 pl-3">
@@ -642,6 +634,15 @@ export function ThreadView({
           PWA). As the last row of this column the bar cannot overlap anything,
           and the composer above it stays clear of the home indicator because the
           bar carries the safe-area padding. */}
+      {selling && position && (
+        <SellModal
+          symbol={position.symbol}
+          held={position.units}
+          onClose={() => setSelling(false)}
+          onChanged={refreshAccess}
+        />
+      )}
+
       <BottomNav />
     </div>
   );

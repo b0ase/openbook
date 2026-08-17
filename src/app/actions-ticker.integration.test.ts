@@ -102,6 +102,22 @@ async function post(content: string, parentId?: number) {
   return createPost(fd);
 }
 
+/**
+ * Read a thread AS A MEMBER.
+ *
+ * ⚠ `getThread` now gates a named thread: without a ticket it returns the root
+ * alone. These tests are about the ticker TREE, not the door, and the thread's
+ * founder holds a unit by having named the word — so reading as them is both
+ * legitimate and what any real reader of these threads would be. The door
+ * itself is tested in `actions-room.integration.test.ts`.
+ */
+async function threadAsMember(rootId: number) {
+  const row = db.prepare("SELECT pubkey FROM posts WHERE id = ?").get(rootId) as
+    | { pubkey: string | null }
+    | undefined;
+  return getThread(rootId, row?.pubkey ?? null);
+}
+
 const lastId = () => (db.prepare("SELECT MAX(id) as id FROM posts").get() as { id: number }).id;
 
 beforeEach(() => {
@@ -293,7 +309,7 @@ describe("branch points stay visible in the parent thread", () => {
     await post("branching into $Juliet from here", indiaRoot);
     const branchPost = lastId();
 
-    const parent = await getThread(indiaRoot);
+    const parent = await threadAsMember(indiaRoot);
     expect(parent.map((p) => p.id)).toContain(branchPost);
   });
 
@@ -305,12 +321,12 @@ describe("branch points stay visible in the parent thread", () => {
     await post("a reply inside the branch", branchPost);
     const deepReply = lastId();
 
-    const parent = await getThread(kiloRoot);
+    const parent = await threadAsMember(kiloRoot);
     expect(parent.map((p) => p.id)).toContain(branchPost);
     expect(parent.map((p) => p.id)).not.toContain(deepReply);
 
     // And the child thread stands on its own.
-    const child = await getThread(branchPost);
+    const child = await threadAsMember(branchPost);
     expect(child.map((p) => p.id)).toEqual([branchPost, deepReply]);
   });
 
@@ -319,7 +335,7 @@ describe("branch points stay visible in the parent thread", () => {
     const mikeRoot = lastId();
     await post("just a normal reply", mikeRoot);
 
-    const ids = (await getThread(mikeRoot)).map((p) => p.id);
+    const ids = (await threadAsMember(mikeRoot)).map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 });

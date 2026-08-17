@@ -71,7 +71,7 @@ export function BuyConfirm({
       />
       <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center px-6">
         <div
-          className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-2xl border border-amber-400/20 bg-[#0f0f0f] shadow-[0_8px_32px_rgba(0,0,0,0.6)]"
+          className="pointer-events-auto w-full max-w-md overflow-hidden rounded-2xl border border-amber-400/20 bg-[#0f0f0f] shadow-[0_8px_32px_rgba(0,0,0,0.6)]"
           role="dialog"
           aria-modal="true"
           aria-label="Confirm purchase"

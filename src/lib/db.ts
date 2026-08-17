@@ -533,6 +533,22 @@ export function applyTickerMentionMigration(database: Db): void {
     "units INTEGER NOT NULL DEFAULT 1 CHECK (units >= 1)"
   );
 
+  /**
+   * What this mint COST, in satoshis. NULL where it is not known.
+   *
+   * ⚠ NULL IS A REAL ANSWER HERE AND MUST STAY ONE. Every unit minted before
+   * this column existed — the whole genesis corpus — was acquired at a price
+   * nobody recorded. Backfilling a guess would put a fabricated cost basis in
+   * front of somebody looking at their own position, which is worse than an
+   * honest gap. The UI reports how many units it can price and how many it
+   * cannot.
+   *
+   * Only MINTS land here. A unit bought on the market carries its price in
+   * `listing_fills.paid_sats` instead, because that is where a real payment was
+   * verified — and a position's cost is the sum of both.
+   */
+  addColumnIfMissing(database, "ticker_mentions", "paid_sats", "paid_sats INTEGER");
+
   backfillTickerMentions(database);
 }
 
