@@ -1,6 +1,6 @@
 import { loadEnv } from './env'
 import { Addr, bsv, ContractTransaction, TestWallet } from 'scrypt-ts'
-import { BSV20V2P2PKH } from 'scrypt-ord'
+import { BSV20V2P2PKH, Ordinal } from 'scrypt-ord'
 import { providerFor } from './provider'
 import { Utils } from 'scrypt-ts'
 import { PayToMint } from '../src/contracts/payToMint'
@@ -58,8 +58,27 @@ async function main() {
     // parameters: the state (how much supply is left) only exists on chain, and
     // a locally-rebuilt instance would happily compute a price for a supply that
     // is no longer there.
-    const raw = await provider.getTransaction(txid)
-    const instance = PayToMint.fromTx(raw as unknown as bsv.Transaction, 0)
+    const raw = (await provider.getTransaction(txid)) as unknown as bsv.Transaction
+
+    /**
+     * ⚠ THE DEPLOYED SCRIPT IS NOT THE CONTRACT TEMPLATE, and `fromTx` says so
+     * bluntly: *"the raw script cannot match the ASM template of contract
+     * PayToMint"*. `deployToken()` PREPENDS the BSV-21 inscription — that is the
+     * whole reason the token is recognised — so the on-chain script is
+     * `<inscription envelope> ‖ <contract>`, and matching it against the bare
+     * template fails at the first byte.
+     *
+     * The envelope is a NOP script: unexecuted data the contract carries. So it
+     * is split off, handed to `fromTx` as such, and the contract underneath
+     * matches. Getting this wrong is not dangerous — it fails loudly before
+     * anything is signed — but it is exactly the kind of thing that reads as
+     * "the covenant is broken" when the covenant is fine.
+     */
+    const deployedScript = raw.outputs[0].script
+    const nopScript = bsv.Script.fromHex(
+        Ordinal.getInsciptionScript(deployedScript.toHex()) as string
+    )
+    const instance = PayToMint.fromTx(raw, 0, {}, nopScript)
     await instance.connect(signer)
 
     const minter = Addr(key.toAddress(network).toObject().hash as string)
