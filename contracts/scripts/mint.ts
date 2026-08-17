@@ -1,5 +1,5 @@
 import { loadEnv } from './env'
-import { Addr, bsv, ContractTransaction, TestWallet } from 'scrypt-ts'
+import { Addr, bsv, ContractTransaction, TestWallet, toByteString } from 'scrypt-ts'
 import { BSV20V2P2PKH, Ordinal } from 'scrypt-ord'
 import { providerFor } from './provider'
 import { Utils } from 'scrypt-ts'
@@ -95,6 +95,28 @@ async function main() {
             to: Addr
         ): Promise<ContractTransaction> => {
             const next = current.next()
+
+            /**
+             * ⚠ MIRROR `initId()`, OR NOTHING CAN BE BUILT.
+             *
+             * A BSV-21 token's id is its deploy outpoint, and the contract
+             * assigns it to ITSELF on first spend: `buildStateOutputFT` sees
+             * `isGenesis()` and calls `initId()`, taking the id from the outpoint
+             * being spent. So the on-chain continuation carries a real id even
+             * though the deployed state has an empty one.
+             *
+             * Off-chain, `setAmt` asks `getTokenId()`, which — with no id set —
+             * falls back to reading `this.utxo`. The continuation is not on chain
+             * yet, so it has no utxo, and it throws `_assertFromExist`. That was
+             * the failure.
+             *
+             * Setting it here is not a workaround: the continuation MUST carry
+             * exactly what the contract will compute, or the locking script we
+             * build differs from the one the covenant hashes and
+             * `hash256(outputs)` fails. It is set on `next` only — mutating
+             * `current` would change the state we just read off the chain.
+             */
+            next.id = toByteString(`${txid}_0`, true)
             next.supply = current.supply - amt
             next.setAmt(next.supply)
 
