@@ -849,6 +849,65 @@ copy and the pricing model have to agree.
 **Do not implement either pricing until this is settled.** Neither can ship before paid posting
 exists at all.
 
+## `/` for lineage; NO `#` serial (2026-08-17, delegated to me by the owner)
+
+The owner: *"# for serial or / for lineage I dont mind - you choose."* Taken on the merits, because
+TOKENS.md notes this hardens into consensus the moment it is written on-chain.
+
+**`/` for lineage — confirmed, and it was already consensus.** `formatTickerPath`, `tickerHref`,
+`leaderboardHref` and `parseTickerPath` all use it, so `$Memeplex/$Words` is in live URLs and in
+every shared link. Changing it would break addresses people already hold. Nothing about `/` is
+wrong, so this is a ratification, not a choice made under pressure.
+
+**`#` is REJECTED as a serial separator, for a concrete reason rather than taste: `#` is the URL
+fragment delimiter.** `/$words#42` never reaches the server — the fragment is client-only and is
+not sent in the request. Making it work would mean `%23`-encoding it everywhere, and **this
+codebase has already been bitten by exactly that class of bug**: `parseTickerPath` used to test
+`startsWith("$")` on the RAW segment, so `%24memeplex` was dropped before it was ever decoded and
+every reader of an encoded path went silently empty. Choosing a separator that *requires* encoding
+would be volunteering for that bug permanently.
+
+**And no serial notation is needed at all, which is the more important half.** Two identifiers for
+one thing is the "two places deriving one fact" trap at the protocol level:
+
+- **Units of a `$Ticker` are FUNGIBLE.** BSV-21 carries an `amt`, not a numbered series. A holder
+  has *N units*, not units #7 and #12 — the market, the room gate and the split all treat them as
+  interchangeable, and nothing in the design distinguishes one from another.
+- **A post-token already has an identity: its origin outpoint `<txid>_<vout>`.** That is settled,
+  it is what the indexer assigns, and it is what `posts.vout` stores. A `$Post#3` notation would be
+  a second name for something already named by the chain.
+
+**What this means for the parser: nothing changes, and that is the point.** `TICKER_PATTERN` allows
+only `[A-Za-z][A-Za-z0-9]{0,15}` in the body, so `$Words#42` ALREADY parses as `$WORDS` followed by
+the plain text `#42`. `#` stays an ordinary character in a post.
+
+**If a human-readable serial is ever genuinely needed** (it is not today), the character to reach
+for is one that survives a URL unencoded — `.` or `:` — never `#`. Record the reason here rather
+than rediscovering it.
+
+## Ordinary posting is PAID — no free tier (2026-08-17, owner: *"ordinary posting is paid"*)
+
+**Closes a question this project has carried since paid posting was designed:** does every post cost
+the author, or only one that mints a `$Ticker`? Every post. There is no free tier for posts that
+name nothing.
+
+**This confirms what production already does rather than changing it** — `PAID_POSTING` has been on
+since 2026-08-16 and `createPost` refuses an unfunded post. The value of settling it is that it
+stops being re-asked: ROADMAP.md carried it as an open question, and every new verb (like,
+subscribe, share, tag) was blocked behind re-deciding it.
+
+**The rule this gives future work:** a new action's default is PAID. What remains open per verb is
+the SPLIT — who receives the money and whether the action mints anybody a unit — not whether it
+costs anything. That is a much smaller question and it does not block building the surface.
+
+**Consequences to keep honest in the UI**, unchanged and now permanent:
+- Posting is not free and the copy must never imply it is (CLAUDE.md carries this warning already,
+  because a stale line there is read aloud to users by the agent).
+- Every money failure is refused BEFORE broadcast, so a refusal never charges the author, and the
+  message says nothing was spent.
+- A funded wallet is a precondition for participating at all. That is a real onboarding cost and it
+  was accepted deliberately (see *What paid posting costs* in TOKENS.md), not overlooked.
+
 ## A named thread is a ROOM; a unit is the TICKET (2026-08-17, owner)
 
 **What a token confers was the open question, and this closes it.** The owner's verdict on the

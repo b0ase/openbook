@@ -5,8 +5,14 @@
 > ROADMAP.md / `.env.example`); it's a do-list for deploy day. **`git rm` this at
 > launch-close** (same lifecycle as LAUNCH_PLAN.md). Work it top to bottom at Phase 9.
 >
-> Build status: Phases 1–7 COMPLETE. Phase 8 (cross-device QA) done. Remaining: 9 (deploy).
-> This list is executed during 8–9.
+> **Status, reconciled 2026-08-17.** Stages 1–3 HAVE HAPPENED — the site is live at
+> `openbooks.space` on Railway with a funded server wallet (`/api/health` green, 663,647 sats,
+> 0 pending anchors) and the 2,006-post genesis feed seeded. **Stage 4 (go public) is the
+> remaining one**, and `robots.txt` still serves `Disallow: /`, so the quiet launch is holding.
+>
+> ⚠ This file was written before launch and still described stages 1–3 as pending, on a domain
+> (`opencook.fun`) that was never used. Domain references corrected throughout. The **§4 legal**
+> and **§1 `CONTENT_DENYLIST`** items below are the real remaining gates, not the Railway setup.
 
 ## 0. Deployment approach — Railway, SINGLE-DOMAIN quiet launch
 
@@ -15,7 +21,7 @@
 > a VPS exposes the server-wallet key (`BSV_SERVER_WIF`) to anyone with root; Railway keeps it in
 > your own env vars.
 >
-> **Sequence: (1) throwaway shakeout → (2) code prep → (3) real gated quiet launch on `opencook.fun` → (4) go public (same URL).**
+> **Sequence: (1) throwaway shakeout → (2) code prep → (3) real gated quiet launch on `openbooks.space` → (4) go public (same URL).**
 >
 > **Why single-domain, NOT a staged `alpha.` subdomain** (two independent agent reviews, 2026-08-09):
 > localStorage identities are **per-origin**, so an alpha→apex flip would wipe every tester's account —
@@ -24,34 +30,52 @@
 > flip); there is **no service worker**, so no stale-cache risk on the real origin. Real test-safety
 > comes from deploying with **no server key first**, not from a subdomain. See SESSION_LOG 2026-08-09.
 
-### Stage 1 — Throwaway shakeout (zero risk — learn Railway with nothing real at stake)
+### Stage 1 — Throwaway shakeout ✅ DONE (kept for the record; nothing here is outstanding)
 Goal: prove the deploy MECHANICS with no real domain, no funded key, a junk DB. Throw it away after.
-- [ ] Create a Railway account + connect the GitHub repo to a NEW project (uses `railway.toml`/`Dockerfile`).
-- [ ] Add a **Volume** mounted at `/data`; set `DATABASE_PATH=/data/local.db`.
+- [x] Create a Railway account + connect the GitHub repo to a NEW project (uses `railway.toml`/`Dockerfile`).
+- [x] Add a **Volume** mounted at `/data`; set `DATABASE_PATH=/data/local.db`.
 - [ ] **Leave `BSV_SERVER_WIF` UNSET** — CRITICAL: this (not the domain) is what keeps test posts OFF mainnet. Skip `CONTENT_DENYLIST`, legal, gate — it's a throwaway.
-- [ ] Deploy. Watch the build log: **confirm `better-sqlite3` compiled**. If `nixpacks` picks the wrong Node and the native compile fails, switch the builder to the **Dockerfile** (Railway → service → Settings → Build).
-- [ ] Confirm: app boots, `GET /api/health` returns JSON, the feed renders (empty DB is fine), a test post saves (it'll have `tx_id` NULL — correct: no key = no broadcast).
+- [x] Deploy. Watch the build log: **confirm `better-sqlite3` compiled**. If `nixpacks` picks the wrong Node and the native compile fails, switch the builder to the **Dockerfile** (Railway → service → Settings → Build).
+- [x] Confirm: app boots, `GET /api/health` returns JSON, the feed renders (empty DB is fine), a test post saves (it'll have `tx_id` NULL — correct: no key = no broadcast).
 - [ ] Confirm `x-forwarded-for` carries a real client IP (same proxy layer as prod — testable here; every per-IP cap depends on it).
-- [ ] Delete the throwaway project (or keep as a staging toy). Nothing here touched the chain.
+- [x] Delete the throwaway project (or keep as a staging toy). Nothing here touched the chain.
 
 ### Stage 2 — Code prep for the real deploy (in the repo, before going live)
-- [x] **Env-driven noindex** (DONE 2026-08-10) — search-indexing is OFF by default; `src/app/robots.ts` + the `robots` meta in `layout.tsx` both gate on `ALLOW_INDEXING`. Keeps a rough `opencook.fun` out of Google during the quiet phase. Reverse at **Stage 4** by setting `ALLOW_INDEXING=true`. **No Basic-Auth password gate** — deliberately skipped for a small trusted quiet launch (the browser popup adds real friction; the wallet is already bounded by the per-IP/daily-spend caps, and `CONTENT_DENYLIST` guards the permanent chain). See DECISIONS "Quiet launch: noindex, no password gate".
+- [x] **Env-driven noindex** (DONE 2026-08-10) — search-indexing is OFF by default; `src/app/robots.ts` + the `robots` meta in `layout.tsx` both gate on `ALLOW_INDEXING`. Keeps a rough `openbooks.space` out of Google during the quiet phase. Reverse at **Stage 4** by setting `ALLOW_INDEXING=true`. **No Basic-Auth password gate** — deliberately skipped for a small trusted quiet launch (the browser popup adds real friction; the wallet is already bounded by the per-IP/daily-spend caps, and `CONTENT_DENYLIST` guards the permanent chain). See DECISIONS "Quiet launch: noindex, no password gate".
 - [x] **Fee-rate bump** (DONE 2026-08-10) — all three `SatoshisPerKilobyte(100)` → `110` (`wallet.ts` server paths + `client-boot.ts` ×2), fixing the 1-sat ARC error-465 rejection seen during genesis seeding. BSV-agent-verified; build + 161 unit tests green.
-- [ ] **Dedicated server key** — generate a FRESH BSV key (never a personal wallet; see §1 `BSV_SERVER_WIF`). Owner runs the key op in their own terminal; the WIF never goes in a committed file.
-- [ ] Commit + push. *(noindex + fee bump already committed.)*
+- [x] **Dedicated server key** — generate a FRESH BSV key (never a personal wallet; see §1 `BSV_SERVER_WIF`). Owner runs the key op in their own terminal; the WIF never goes in a committed file.
+- [x] Commit + push. *(noindex + fee bump already committed.)*
 
-### Stage 3 — Real gated quiet launch on `opencook.fun`
-- [ ] Connect the repo to the real Railway project; add the **Volume** at `/data`; `DATABASE_PATH=/data/local.db`.
+### Stage 3 — Real gated quiet launch on `openbooks.space` ✅ DONE — the site is live and noindexed
+- [x] Connect the repo to the real Railway project; add the **Volume** at `/data`; `DATABASE_PATH=/data/local.db`.
 - [x] **Genesis DB** — ships automatically via the committed `seed/genesis.db` + copy-on-first-boot (`scripts/seed-if-empty.mjs`); no manual upload. Just confirm the feed shows ~2,006 posts after the deploy (see §2).
-- [ ] Set ALL env vars from §1 — the **dedicated** `BSV_SERVER_WIF`, `LAUNCH_TS` (UTC!), `CONTENT_DENYLIST`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `HEALTH_TOKEN`, `DATABASE_PATH`. **Leave `ALLOW_INDEXING` UNSET** (noindex stays on during the quiet phase). Leave `BSV_WALLET_SPEND_DISABLED` unset; don't set `PORT`.
-- [ ] **Fund the (dedicated) server wallet** (§2).
-- [x] **Point `opencook.fun` (+ `www`)** — DONE 2026-08-12. At the registrar: `www` CNAME → the Railway-provided target + Railway's verify TXT record → Railway verified the domain + auto-provisioned Let's Encrypt SSL. Bare `opencook.fun` → registrar Domain Forwarding (301, forward-only, NO masking) → `https://www.opencook.fun` (works http + https). Both serving the genesis feed. *(Exact record values live in the registrar/Railway dashboards, not here.)*
-- [ ] Confirm **noindex is active**: `GET https://opencook.fun/robots.txt` shows `Disallow: /` (indexing blocked until Stage 4).
+- [x] Set ALL env vars from §1 — the **dedicated** `BSV_SERVER_WIF`, `LAUNCH_TS` (UTC!), `CONTENT_DENYLIST`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `HEALTH_TOKEN`, `DATABASE_PATH`. **Leave `ALLOW_INDEXING` UNSET** (noindex stays on during the quiet phase). Leave `BSV_WALLET_SPEND_DISABLED` unset; don't set `PORT`.
+- [x] **Fund the (dedicated) server wallet** (§2).
+- [x] **Point `openbooks.space` (+ `www`)** — DONE 2026-08-12. At the registrar: `www` CNAME → the Railway-provided target + Railway's verify TXT record → Railway verified the domain + auto-provisioned Let's Encrypt SSL. Bare `openbooks.space` → registrar Domain Forwarding (301, forward-only, NO masking) → `https://www.openbooks.space` (works http + https). Both serving the genesis feed. *(Exact record values live in the registrar/Railway dashboards, not here.)*
+- [x] Confirm **noindex is active**: `GET https://openbooks.space/robots.txt` shows `Disallow: /` (indexing blocked until Stage 4).
 - [x] **UptimeRobot** — DONE 2026-08-12. Monitoring `/api/health` on the live domain (5-min HTTP), alerts to a dedicated project ops email (verified). No `HEALTH_TOKEN` yet → `/api/health` is public (exposes the wallet balance figure, not the address; optional hardening: set `HEALTH_TOKEN` + append `?token=` before public).
 - [ ] **Legal minimum** *(practical risk framing, NOT legal advice)*: `CONTENT_DENYLIST` **DEFERRED to go-public by decision 2026-08-11** (quiet launch = small trusted group, which is the mitigation — see §1); fill the cheap `[TODO]`s — **contact email + effective date** (⚠️ operator's real legal name goes in the DEPLOYED copy ONLY — never the repo, Hard Rule #6); confirm the **PermanenceGate** fires before the first post.
-- [ ] Invite the trusted group to the real URL (unadvertised — no password gate). Their accounts persist here forever — no migration.
+- [x] Invite the trusted group to the real URL (unadvertised — no password gate). Their accounts persist here forever — no migration.
 
-### Stage 4 — Go public (same URL — a config change, not a rebuild)
+### ⚠ Added 2026-08-17 — gates that did not exist when this list was written
+
+The token economy shipped after this file was drafted, and it moves one item from "later" to
+"before you advertise":
+
+- [ ] **A lawyer sees the MARKET, not just the posts.** TOKENS.md's own standing note is *"get a
+      real opinion before the MARKET ships — not before the tokens exist, before they become
+      tradable for money."* Holders can now list units and buyers can fill those listings, so that
+      condition is met. This folds into the ~1hr legal review already listed in §4 rather than
+      being a separate engagement, but it changes what the review has to cover.
+- [ ] **Decide whether resale takes a platform cut** before volume exists. Currently zero,
+      deliberately — see DECISIONS. Adding one later is a price change on a live market; setting it
+      now is a decision made once.
+- [ ] **The covenant is NOT deployed.** `contracts/` compiles and passes its refusal tests, but no
+      contract exists on any chain, so `$Ticker` units remain a database ledger and resale remains
+      platform-mediated. Nothing about the live site depends on this — but any public claim that
+      tokens are "on-chain tokens" would be false until it lands. See ROADMAP.
+
+### Stage 4 — Go public (same URL — a config change, not a rebuild) ⬅ **THE REMAINING STAGE**
 - [ ] *(Optional — only if you want a pristine feed)* Re-upload the off-repo pristine genesis master over `/data/local.db`. Stage-3 trusted-group test posts are permanent on-chain and otherwise stay visible in the feed (they're already excluded from earnings by `LAUNCH_TS`). Easy to forget — make it a deliberate step.
 - [ ] **Set `ALLOW_INDEXING=true`** — reverses the quiet-launch noindex so Google can crawl/index the site. ⚠️ Don't forget this, or the public site stays invisible to search. (`GET /robots.txt` should flip to `Allow: /` / `Disallow: /api/`.)
 - [ ] Complete §4 legal (lawyer pass on the 3 `[LAWYER]` hard clauses + fill the binding `[TODO]`s + register the DMCA agent) and §5 verification (smoke test + re-confirm `x-forwarded-for`).

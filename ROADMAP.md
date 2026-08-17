@@ -1,8 +1,11 @@
 # Roadmap
 
 > Where this is, what's next, what's parked. **AI agents: update this file when you finish or start
-> something.** Rewritten 2026-08-14 — the previous version predated the token model entirely and
-> would have given a fresh reader a materially wrong picture.
+> something.** Rewritten 2026-08-14, and reconciled against reality on **2026-08-17** — the token
+> economy shipped across seven commits that day and this file was not touched once, so it still
+> described the inscription milestone as "next" (it passed), listed thread URLs and boost-board
+> unfurls as open (both done), and quoted a post price that was wrong by two orders of magnitude.
+> A roadmap that lies is worse than no roadmap: the next session plans from it.
 >
 > **Read order for a new session:** CLAUDE.md → this file → DECISIONS.md → TOKENS.md →
 > SESSION_LOG.md (last entry).
@@ -10,66 +13,101 @@
 ## Where this is now
 
 **$OpenBooks is LIVE at `openbooks.space`** (Railway, valid certs, `www` too), serving a 2,006-post
-genesis feed that auto-seeds a fresh volume. 393 unit + 170 integration tests; lint, tsc and a
-zero-warning production build all green.
+genesis feed that auto-seeds a fresh volume. **841 unit + 322 integration tests**, plus 10 contract
+tests in `contracts/`; lint, tsc and a zero-warning production build all green.
 
-**The board works.** Posting, signing, on-chain anchoring, boosts, the boost board, earnings,
-threads, `$Ticker` claiming, `$Nym` names, media uploads, search, the `/tickers` index, and a wallet
-panel showing what you hold.
+**Still a quiet launch.** `robots.txt` serves `Disallow: /` — verified 2026-08-17. Nothing is
+indexed until `ALLOW_INDEXING=true`.
 
-**Two things are true that a reader needs to know up front:**
+**The board works.** Posting, signing, on-chain inscription, boosts, the boost board, earnings,
+threads, permalinks, `$Ticker` claiming, `$Nym` names, media uploads (images, video, PDF), search,
+the `/tickers` index, and a wallet showing what you hold.
 
-1. **We INSCRIBE — this went live and both statements below were reversed on 2026-08-16.** Every
-   post is written to a **1-satoshi spendable output** at the author's address inside a 1Sat ordinal
-   envelope, so a post **is** an on-chain object its author can own and transfer, identified by its
-   **origin outpoint `<txid>_<vout>`**. Verified against a live post, not inferred: every post in
-   the feed now carries a `vout`. The older `OP_FALSE OP_RETURN` anchor was an *unspendable* audit
-   trail — the 2,006 genesis records are still exactly that and stay readable.
+**Three things a reader needs up front:**
+
+1. **We INSCRIBE.** Every post is written to a **1-satoshi spendable output** at the author's
+   address inside a 1Sat ordinal envelope, so a post **is** an on-chain object its author can own
+   and transfer, identified by its **origin outpoint `<txid>_<vout>`**. Verified against a live
+   post and a public indexer, not inferred. The older `OP_FALSE OP_RETURN` anchor was an
+   *unspendable* audit trail — the 2,006 genesis records are still exactly that and stay readable.
+
 2. **Posting costs the author money.** `PAID_POSTING` is **ON in production**. A post spends about
-   **113 sats (~$0.0017)**: 1 sat inscribed, 12 sats to the platform address, ~100 sats fee. A
-   funded wallet is now a precondition for posting — a fresh unfunded account is refused with
-   "No funds yet — add some to post" *before* anything is broadcast, so nothing is spent on a
-   refusal. The economic decisions in TOKENS.md are no longer gated on this changing; it changed.
+   **113 sats — roughly $0.000013 at $11.62/BSV**: 1 sat inscribed, 12 sats to the platform, ~100
+   sats fee. ⚠ This file previously said `~$0.0017`, which was wrong by ~130×; sats are the durable
+   figure and any dollar number is a snapshot. A funded wallet is a precondition — an unfunded
+   account is refused *before* anything is broadcast, so nothing is spent on a refusal.
 
-## The next milestone: paid posting + inscription
+3. **The token economy shipped on 2026-08-17, and it is a DATABASE LEDGER, not chain state.** This
+   is the single most important thing to understand before planning anything:
+   - Naming a `$Ticker` mints units, and the mint is **charged on a rising curve**
+     (`mint-charge.ts`) — the curve is what an author actually pays, not a display.
+   - `/buy N $Ticker` buys many units at once, each priced up the curve (quadratic).
+   - **A named thread is a ROOM**; one unit is the ticket in. Writing is gated
+     cryptographically; reading is a product boundary, and `room-access.ts` says so rather than
+     claiming secrecy — the posts are on chain and readable by anyone who indexes them.
+   - Holders can **list units** and buyers can **fill** those listings. Money moves peer to peer;
+     the platform never holds it. **But a unit is a row in `ticker_holdings`**, so applying the
+     transfer is something the platform is trusted to do. That is a real assumption and must not
+     be described as trustless.
+   - **The mint price is NOT a ceiling on what a holder may ask.** An ask above it is a limit
+     order that fills when the curve rises past it. The mint price is the price of the last resort.
 
-**These ship together or not at all.** You cannot afford to inscribe for free (the operator funds
-every anchor today, under a daily spend ceiling), and you cannot sell what was never inscribed.
+## The next milestone: make the tokens real on chain
 
-Concretely: a post's data moves onto a **1-satoshi spendable output** at the author's address, so
-ownership becomes "whoever can spend that satoshi", and the token's identity becomes its **origin
-outpoint `<txid>_<vout>`** — not the SQLite id, not a content hash. See DECISIONS.md.
+**The previous milestone — paid posting + inscription — PASSED on 2026-08-16** (post 2080, tx
+`af3436bc…`, confirmed at height 962564, `origin.outpoint` assigned by GorillaPool's indexer).
 
-**Server side is BUILT and flag-gated** (`PAID_POSTING`, default off):
-`inscription.ts` (1-sat ordinal envelope), `post-economics.ts` (flat cost-plus),
-`client-post.ts` (browser builds + funds + broadcasts), `paid-post.ts` (server verifies), and
-`createPost` storing the outpoint (`posts.vout`) instead of paying to anchor.
+The gap now is the one in point 3 above: **typing `$newticker` mints nothing on the blockchain.**
+The post is a real ordinal and the payment is real sats, but the units are database rows. Closing
+that is what removes the trust assumption from resale and turns the room gate into something the
+chain enforces.
 
-- [x] ⚠ **Broadcast ONE inscription and confirm a public indexer shows it.** **PASSED 2026-08-16.**
-      Post 2080, tx `af3436bc34fdde906a47cfcea867c4c8a2b0f496d637653528a3a03885ded506`. GorillaPool's
-      public indexer (`ordinals.gorillapool.io/api/inscriptions/txid/<txid>`) returns vout 0 as
-      1 sat owned by the author with **`origin.outpoint` assigned**, `data.insc.file`
-      (564 bytes, `application/json`) and the decoded `data.insc.json` — recognition, not just shape.
-      `types: ["json"]`, `spend: ""`. **CONFIRMED IN A BLOCK** — re-checked at height `962564`,
-      idx 18: still 1 sat, still owned by the author, origin outpoint intact, still unspent. So this
-      is not 0-conf mempool optimism; a public indexer holds a confirmed, ownable, transferable
-      post. The `api.1sat.app` host 404s on `/tx`, `/txos/txid` and `/inscriptions/txid`
-      — use the GorillaPool host above, it is the one that answers.
-- [x] **Compose box wired** — asks `getPostingMode()`, builds + broadcasts, sends `raw_tx`, and
-      reports money failures honestly ("nothing was spent") rather than "failed to post".
+**BUILT, not deployed** — `contracts/`, an isolated workspace (own `package.json`, own
+`node_modules`, excluded from the app's tsconfig; nothing in `src/` may import it):
 
-**Waiting behind this gate, in order:**
+- [x] **`PayToMint extends BSV20V2`** — POW-20's structure with OrdLock's predicate, which is the
+      construction TOKENS.md specced. Supply lives in a contract UTXO; a mint must produce the
+      continuation, the units to the minter and the payment to the treasury, bound by
+      `hash256(outputs) == ctx.hashOutputs`.
+- [x] **Compiles to Bitcoin script; 10 tests pass**, six of them refusals (underpaying by ONE
+      satoshi, redirecting the payment, taking more than paid for, dropping the continuation,
+      minting zero, minting past supply). The price is asserted equal to the app's own
+      `mintCostForRange` across the range.
+- [ ] ⚠ **Deploy a THROWAWAY symbol and confirm an indexer sees deploy + mint + transfer.** Same
+      discipline that gated paid posting. **Blocked on funding** — the owner has no testnet coins;
+      either a faucet (witnessonchain / scrypt.io) or a mainnet deploy at ~200 sats. The scripts
+      refuse a mainnet key today; relaxing that must be a deliberate act, not an accident.
+      ⚠ A covenant bug is not a thrown error — it locks a token's unissued supply forever.
+- [ ] **Then the migration.** `ticker_holdings` demotes from ledger to an INDEX of chain state,
+      resale becomes an OrdLock swap (deleting the trust assumption), the room gate reads an
+      indexer rather than a `SELECT`.
+
+## In progress — the market
+
+- [ ] **Sweeping.** Bulk-fill listings up to a price ceiling in one transaction, so an ask set
+      above today's mint price fills automatically when the curve rises past it. Needs
+      `fillListing` to walk several listings in one payment. **Agreed as the next build.**
+- [ ] **Limit / market order UI** in the sell sheet. Only a plain list-at-price form exists.
+- [ ] **A platform cut on resale.** Deliberately zero for now — the mint is where revenue is
+      taken, and a second toll before anyone has traded would be pricing a market that does not
+      exist. Revisit once there is volume.
+
+## Still waiting on a decision
 
 - [ ] **Tagging.** The `(from_post, ticker, target)` edge table is BUILT (`ticker_mentions`,
-      `target_type ∈ {none, post, ticker}`). **Nothing writes a targeted row yet — deliberately.**
-      Free tags would put `$COOL` on everything within a day and the units could never be recalled.
+      `target_type ∈ {none, post, ticker}`). **Nothing writes a targeted row yet.** The original
+      objection — free tags would put `$COOL` on everything — has expired now that tags cost real
+      sats. What is unsettled is the SPLIT: does tagging mint the tagger a unit, and does the
+      tagged post's author get anything?
 - [ ] **The payment split.** Top 100 holders, with an amount floor (~10 sats — a UTXO below its own
-      spending cost is worth less than nothing). `ticker_mentions` already holds everything needed;
-      the split is two queries.
+      spending cost is worth less than nothing). The data is all there; the split is two queries.
+      ⚠ Note the standing caveat in TOKENS.md: cash distributions to transferable holders are the
+      part a lawyer needs to see.
 - [ ] **Citation/quote-minting.** The quoter holds the new unit.
-- [ ] **The market.** OrdLock listings, no custody — every satoshi leaves in the transaction it
-      arrived in.
-- [ ] **Does ordinary posting become paid, or only minting a ticker?** Carried question, still open.
+- [x] **Does ordinary posting stay paid, or only minting a ticker?** **SETTLED 2026-08-17, owner:
+      *"ordinary posting is paid"*.** No free tier for posts that name nothing. This confirms what
+      production already does rather than changing it — the value is that it is no longer an open
+      question every new verb has to re-ask. See DECISIONS.md.
 
 ## Blocked on the owner (I cannot do these)
 
@@ -87,7 +125,12 @@ outpoint `<txid>_<vout>`** — not the SQLite id, not a content hash. See DECISI
 
 Full reasoning in TOKENS.md; these are the live questions, not a summary of settled ones.
 
-- [ ] **Separator:** `/` for lineage vs `#` for serial. Hardens into consensus once written on-chain.
+- [x] **Separator: `/` for lineage, and NO `#` serial.** **SETTLED 2026-08-17** — owner delegated
+      the choice. `/` was already consensus (it is in every live URL). `#` is rejected on a concrete
+      ground: it is the URL fragment delimiter, so `/$words#42` never reaches the server, and this
+      codebase has already been bitten by the encoded-path version of that bug. No serial notation
+      is needed anyway — units are fungible (`amt`), and a post-token is already identified by its
+      origin outpoint. See DECISIONS.md.
 - [ ] **Is a bought post unit #1, or the ISSUER POSITION?** (Leaning: genesis IS the issuer position
       and is not for sale.)
 - [ ] **Does a sold post carry its `$Ticker` name with it?** Schema says yes today.
@@ -105,8 +148,10 @@ he asks for here; the board is where the asks now arrive):
       standard envelope for them. ⚠ Decide FIRST whether each verb is a *paid on-chain record* or a
       database row. Under `PAID_POSTING` a like that inscribes costs the liker ~113 sats, which is
       a very different product from a free like — and "every like is a paid transaction" is a
-      decision about what the board IS, not an implementation detail. See the `$genius` note below:
-      the same question decides both.
+      decision about what the board IS, not an implementation detail. ⚠ **Half of this is now
+      settled**: ordinary posting is paid (owner, 2026-08-17), so the default for a new verb is
+      PAID unless there is a reason it should not be. What is still open per verb is the split, not
+      whether it costs.
 - [ ] **Tagging a post into a ticker's thread** — "if a user thinks a post needs a tag, they can
       tag it (e.g. `$genius`) and that adds that post to the `$genius` thread". ⚠ **This was
       deliberately blocked, and the reason it was blocked has now expired.** The `ticker_mentions`
@@ -121,7 +166,8 @@ he asks for here; the board is where the asks now arrive):
 **Boost board presentation** (owner-requested 2026-08-16 — the board is the paid slot, so it is
 the one surface where a bare URL costs somebody money):
 
-- [ ] **Unfurl OG cards on the boost board.** A boosted link currently renders as raw text —
+- [x] **Unfurl OG cards on the boost board.** **DONE 2026-08-16** (`0b3c0fe`) — wired into the
+      existing preview pipeline. A boosted link currently renders as raw text —
       `bitcoinchat.online` is sitting in the paid slot right now with no title, description or
       image, while the SAME link two rows below it in the feed unfurls properly. The feed already
       has all of this: `link-preview.ts`, `link-preview-store.ts` and `LinkPreviewCard`. This is
@@ -170,8 +216,10 @@ the one surface where a bare URL costs somebody money):
 
 **Product:**
 
-- [ ] **Thread URLs.** Opening a thread doesn't change the URL, so it is not shareable or
-      back-button-able. Affects the feed and the wallet equally — fix both paths at once.
+- [x] **Thread URLs.** **DONE 2026-08-17.** Every open goes through `Feed.openThread()`, which
+      pushes `/p/<rootId>`; `popstate` reads it back, so Back closes and Forward reopens. Ticker
+      threads keep their `/$ticker` address. Every post also has a permalink (`/p/<id>`) with a
+      visible copy-link button and an OG card carrying the post's own words.
 - [ ] **Daily posting limits (5 free/day) + QR funding at the limit.** Spam defence today is a
       10/min per-pubkey and 200/day per-IP rate limit only.
 - [ ] **Near-instant payment UI (SSE + optimistic updates).** Recipient sees earnings in ~300ms
@@ -231,3 +279,5 @@ Compressed. Per-session detail is in SESSION_LOG.md; the reasoning is in DECISIO
 | **Genesis** | 1,908 backdated posts anchored on-chain (~40 batched txs); 2,006-post launch DB seeds a fresh volume on boot |
 | **Threading** | `parent_id` (lineage) + `root_id` (membership), thread overlay, replies target the root |
 | **Tokens** | Per-token holder leaderboard (`/leaderboard/$a/$b`), `$Ticker` registry (first-claim-wins, PRIMARY KEY), ticker tree with parent lineage, reserved names, `$Nym` usernames, search + `/tickers` index, media uploads, `ticker_mentions` edge table, wallet holdings |
+| **Token economy** *(2026-08-17)* | The mint curve is CHARGED (`mint-charge.ts`, tolerance band for the stale-quote race); `/buy N $Ticker` bulk purchase; rooms (a named thread gated on holding one unit); ownership split out into `ticker_holdings`; a secondary market (`listings` + `listing_fills`, sign-exact-terms, peer-to-peer payment); per-post permalinks + OG cards; `paid_sats` cost basis |
+| **Contract** *(2026-08-17)* | `contracts/` — `PayToMint extends BSV20V2`, POW-20 structure + OrdLock predicate. Compiles to Bitcoin script; 10 tests, six of them refusals; price asserted equal to the app's curve. **Not deployed.** |
