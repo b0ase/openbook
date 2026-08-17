@@ -1,0 +1,51 @@
+b0ase@b0ases-Mac-mini contracts %     at PayToMint._assertFromE
+xist (/Volumes/2026/OpenBook/openc
+>     at PayToMint._assertFromExist (/Volumes/2026/OpenBook/ope
+ncook/contracts/node_modules/scrypt-ts/dist/smart-contract/cont
+ra
+>     at PayToMint._assertFromExist (/Volumes/2026/OpenBook/ope
+ncook/contracts/node_modules/scrypt-ts/dist/smart-contract/cont
+ract.js:923:19)
+>     at PayToMint.get utxo [as utxo] (/Volumes/2026/OpenBook/o
+pe
+>     at PayToMint.get utxo [as utxo] (/Volumes/2026/OpenBook/o
+pencook/contracts/node_modules/scr    at PayToMint.get utxo [as
+ utxo] (/Volumes/2026/OpenBook/opencook/contracts/node_modules/
+scr    at PayToMint.get utxo [as upt-ts/dist/smart-contract/con
+tract.js:1544:14)
+>     at PayToMint.getTokenId (/Volumes/2026/OpenBook/opencook/
+co
+>     at PayToMint.getTokenId (/Volumes/2026/OpenBook/opencook/
+contracts/node_modules/scrypt-ord/dist/contracts/bsv20V2.js:71:
+32
+>     at PayToMint.getTokenId (/Volumes/2026/OpenBook/opencook/
+contracts/node_modules/scrypt-ord/dist/contracts/bsv20V2.js:71:
+32)
+>     at PayToMint.setAmt (/Volumes/2026/OpenBook/opencook/cont
+ra
+>     at PayToMint.setAmt (/Volumes/2026/OpenBook/opencook/cont
+racts/node_modules/scrypt-ord/dist/contracts/bsv20V2.js:88:25)
+>     at /Volumes/2026/OpenBook/opencook/contracts/scripts/mint
+.t
+>     at /Volumes/2026/OpenBook/opencook/contracts/scripts/mint
+.ts:99:18
+>     at PayToMint.<anonymous> (/Volumes/2026/OpenBook/opencook
+/c
+>     at PayToMint.<anonymous> (/Volumes/2026/OpenBook/opencook
+/contracts/node_modules/scrypt-ts/dist/smart-contract/contract.
+js
+>     at PayToMint.<anonymous> (/Volumes/2026/OpenBook/opencook
+/contracts/node_modules/scrypt-ts/dist/smart-contract/contract.
+js:1117:63)
+zsh: bad pattern: (/Volumes/2026/OpenBook/openc\n    at PayToMint._assertFromExist (/Volumes/2026/OpenBook/opencook/contracts/node_modules/scrypt-ts/dist/smart-contract/contra\n    at PayToMint._assertFromExist (/Volumes/2026/OpenBook/opencook/contracts/node_modules/scrypt-ts/dist/smart-contract/contract.js:923:19)\n    at PayToMint.get utxo [as utxo] (/Volumes/2026/OpenBook/ope\n    at PayToMint.get utxo [as utxo] (/Volumes/2026/OpenBook/opencook/contracts/node_modules/scr    at PayToMint.get utxo [as utxo] (/Volumes/2026/OpenBook/opencook/contracts/node_modules/scr    at PayToMint.get utxo [as upt-ts/dist/smart-contract/contract.js:1544:14)\n    at PayToMint.getTokenId (/Volumes/2026/OpenBook/opencook/co\n    at PayToMint.getTokenId (/Volumes/2026/OpenBook/opencook/contracts/node_modules/scrypt-ord/dist/contracts/bsv20V2.js:71:32\n    at PayToMint.getTokenId (/Volumes/2026/OpenBook/opencook/contracts/node_modules/scrypt-ord/dist/contracts/bsv20V2.js:71:32)\n    at PayToMint.setAmt (/Volumes/2026/OpenBook/opencook/contra\n    at PayToMint.setAmt (/Volumes/2026/OpenBook/opencook/contracts/node_modules/scrypt-ord/dist/contracts/bsv20V2.js:88:25)\n    at /Volumes/2026/OpenBook/opencook/contracts/scripts/mint.t\n    at /Volumes/2026/OpenBook/opencook/contracts/scripts/mint.ts:99:18\n    at PayToMint.
+b0ase@b0ases-Mac-mini contracts %     at Generator.next (<anony
+mous>)
+zsh: parse error near `)'
+b0ase@b0ases-Mac-mini contracts %     at fulfilled (/Volumes/20
+26/OpenBook/opencook/contracts/nod
+>     at fulfilled (/Volumes/2026/OpenBook/opencook/contracts/n
+ode_modules/scrypt-ts/dist/smart-contract/contract.js:28:58)
+>     at processTicksAndRejections (node:internal/process/task_
+qu
+>     at processTicksAndRejections (node:internal/process/task_
+queues:103:5)npm run mint -- 5a3232d9b39b29db2fce36b514681f3ed7f6266007

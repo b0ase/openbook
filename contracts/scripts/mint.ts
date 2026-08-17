@@ -116,12 +116,26 @@ async function main() {
              * `hash256(outputs)` fails. It is set on `next` only — mutating
              * `current` would change the state we just read off the chain.
              */
-            next.id = toByteString(`${txid}_0`, true)
+            const tokenId = toByteString(`${txid}_0`, true)
+            next.id = tokenId
             next.supply = current.supply - amt
             next.setAmt(next.supply)
 
+            /**
+             * ⚠ THE RECEIVER NEEDS THE REAL ID TOO, and `current.id` is NOT it.
+             * The deployed contract's `id` prop is still the genesis empty
+             * string — the contract fills it in during execution — so passing
+             * `current.id` here left the receiver with no id, and `setAmt` fell
+             * through to reading a `utxo` that does not exist yet. Same failure
+             * as the continuation, one line later.
+             *
+             * The ordering in `payToMint.ts` is what makes `tokenId` correct:
+             * `buildStateOutputFT` runs FIRST and calls `initId()`, so by the
+             * time the contract builds the transfer output its `this.id` is the
+             * deploy outpoint. Ours has to match it exactly or the hash does not.
+             */
             const received = new BSV20V2P2PKH(
-                current.id,
+                tokenId,
                 current.sym,
                 current.max,
                 current.dec,
