@@ -41,13 +41,27 @@ const MAX_SUPPLY = 21_000_000n
 const BASE_PRICE = 113n
 
 /**
- * ⚠ A TEST KEY MUST BE NEARLY EMPTY, and this is the guard that catches the
- * worst plausible mistake: pasting the platform's own `BSV_SERVER_WIF` in here.
- * That wallet held 663,647 sats when this was written. A deploy needs a few
- * hundred — so a balance above this ceiling means the key is not what the
- * operator thinks it is, and the script stops rather than spending from it.
+ * A smell test on the funding wallet — and an honest note about what it is NOT.
+ *
+ * ⚠ I ORIGINALLY SET THIS AT 50,000 SATS AND CLAIMED IT WOULD CATCH SOMEBODY
+ * PASTING THE PLATFORM'S `BSV_SERVER_WIF`. It would not, and the number was
+ * wrong twice over. 50,000 sats is about half a US cent; the owner funded this
+ * key with 654,236 sats, which is **7.6 cents** — an entirely sensible amount
+ * that my ceiling would have refused. And the platform's whole operating wallet
+ * holds 663,647 sats, i.e. almost exactly the same, so **no balance threshold
+ * can tell the two apart.** I had mis-sized what "a lot" means on this chain.
+ *
+ * What actually protects the funds is structural, not this number:
+ *   - a deploy spends the FEE plus one satoshi. The balance is never at risk,
+ *     whatever it is — the rest comes back as change.
+ *   - the address and balance are PRINTED before anything is broadcast, so a
+ *     wrong key is visible to the person about to spend from it.
+ *   - `--mainnet` has to be typed.
+ *
+ * So this stays only as a backstop against an absurd wallet — six figures of
+ * pence — and is deliberately generous. It is a smell test, not a proof.
  */
-const MAX_TEST_BALANCE_SATS = 50_000
+const MAX_TEST_BALANCE_SATS = 10_000_000
 
 loadEnv()
 
@@ -87,15 +101,20 @@ async function main() {
         const total = balance.confirmed + balance.unconfirmed
         if (total > MAX_TEST_BALANCE_SATS) {
             throw new Error(
-                `Refusing to deploy from a wallet holding ${total} sats. A test key should be ` +
-                    `nearly empty (ceiling ${MAX_TEST_BALANCE_SATS}). If this is the platform's ` +
-                    'server wallet, it must never be used here — generate a fresh key.'
+                `Refusing to deploy from a wallet holding ${total.toLocaleString()} sats — well ` +
+                    `beyond what a test needs (ceiling ${MAX_TEST_BALANCE_SATS.toLocaleString()}). ` +
+                    'Check this is the key you meant; generate a fresh one if not.'
             )
         }
         if (total === 0) {
             throw new Error(`No funds at ${address}. Send it ~2000 sats and try again.`)
         }
-        console.log(`⚠ MAINNET. Deploying $${symbol} from ${address} (${total} sats available).`)
+        // ⚠ THE ADDRESS IS THE REAL GUARD. Printed immediately before the spend,
+        // in the one place somebody about to broadcast will read it.
+        console.log('⚠ MAINNET — real money, and a deploy cannot be undone.')
+        console.log(`  symbol   $${symbol}`)
+        console.log(`  from     ${address}`)
+        console.log(`  balance  ${total.toLocaleString()} sats`)
         console.log('  Use a DISPOSABLE symbol — this is a test, and the supply is unrecoverable')
         console.log('  if the covenant is wrong.')
         console.log('')
