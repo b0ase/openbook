@@ -17,9 +17,14 @@ import { PayToMint } from '../src/contracts/payToMint'
  * confirmed a real inscription.
  *
  * Usage:
- *   npx scrypt-cli genprivkey        # writes .env, prints an address to fund
- *   # fund that address from a BSV testnet faucet
- *   npx ts-node scripts/deploy-testnet.ts $THROWAWAY
+ *   npm run genkey                   # writes .env, prints an address to fund
+ *   # fund that address from a BSV testnet faucet (links printed by genkey)
+ *   npm run deploy:testnet -- \$THROWAWAY
+ *
+ * ⚠ `npx scrypt-cli genprivkey` was the instruction here and NO SUCH COMMAND
+ * EXISTS — scrypt-cli 0.2.3 has project/compile/deploy/verify/system/init/
+ * version only. `scripts/genkey.ts` is ours, so it cannot go stale against
+ * somebody else's CLI.
  */
 
 /**
@@ -50,8 +55,8 @@ async function main() {
     const wif = process.env.PRIVATE_KEY
     if (!wif) {
         throw new Error(
-            'PRIVATE_KEY is not set. Run `npx scrypt-cli genprivkey` — it writes a ' +
-                'TESTNET key to .env (gitignored) and prints an address to fund from a faucet.'
+            'PRIVATE_KEY is not set. Run `npm run genkey` — it writes a TESTNET key to ' +
+                '.env (gitignored) and prints an address to fund from a faucet.'
         )
     }
 

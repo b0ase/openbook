@@ -24,7 +24,7 @@ async function main() {
     if (!txid) throw new Error('usage: ts-node scripts/mint-testnet.ts <deploy-txid> <amount>')
 
     const wif = process.env.PRIVATE_KEY
-    if (!wif) throw new Error('PRIVATE_KEY is not set — see scripts/deploy-testnet.ts')
+    if (!wif) throw new Error('PRIVATE_KEY is not set. Run: npm run genkey')
     const key = bsv.PrivateKey.fromWIF(wif)
     if (key.network.name !== 'testnet') {
         throw new Error('PRIVATE_KEY is not a testnet key. This script is testnet only.')

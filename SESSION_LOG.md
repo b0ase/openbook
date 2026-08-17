@@ -2,6 +2,36 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-17 (docs reconciled; a command I invented)
+
+- **⚠ I TOLD THE OWNER TO RUN A COMMAND THAT DOES NOT EXIST.** `npx scrypt-cli genprivkey` — written
+  from memory, never checked. scrypt-cli 0.2.3 has project/compile/deploy/verify/system/init/version
+  and nothing else. He hit the error. **Never hand over a command that has not been run.**
+  - Fix: `contracts/scripts/genkey.ts` is ours now, so the instruction cannot go stale against
+    somebody else's CLI. Generates a TESTNET key → `.env` (gitignored, mode 600), prints the
+    ADDRESS ONLY and faucet links. Refuses to overwrite an existing `.env` — running it twice would
+    orphan whatever the old key holds, including a deployed contract.
+  - Second environment trap: **`ts-node` the BINARY is not executable on this `noowners` volume**
+    (same failure as `ts-patch`'s postinstall). All three scripts now run
+    `node -r ts-node/register`, which is how `.mocharc.json` already loaded TypeScript here.
+  - Ran it: testnet address `mj6cp6mAzD1Az6Bcf18L8ZPyvMLvzTSnjX`, awaiting faucet funding.
+- **Docs reconciled (`9bf2f04`).** ROADMAP still called paid posting "the next milestone" (passed),
+  listed thread URLs + boost-board unfurls as open (done), quoted the post price wrong by ~130×, and
+  said nothing about the token economy. LAUNCH_CHECKLIST described stages 1–3 as pending on a domain
+  (`opencook.fun`) never used; 12 items ticked, legal ones untouched, and a new gate added — a
+  lawyer now needs to see the MARKET, since TOKENS.md's own trigger ("tradable for money") is met.
+- **Two owner decisions recorded in DECISIONS.md:**
+  - **Ordinary posting is PAID** — no free tier. Confirms production; stops every new verb
+    re-asking it. A new action's default is PAID; what stays open per verb is the split.
+  - **`/` for lineage, NO `#` serial** (delegated to me). `/` was already consensus in live URLs.
+    `#` rejected on a concrete ground: it is the URL fragment delimiter, so `/$words#42` never
+    reaches the server — and this codebase has already been bitten by the encoded-path version of
+    that bug. No serial is needed anyway: units are fungible, and a post-token is identified by its
+    origin outpoint.
+- **Told the owner plainly what I cannot do:** deploying the covenant needs his funded key, and the
+  chain-state migration needs a verified deploy first — building it against a token that does not
+  exist would replace a working ledger with reads against nothing.
+
 ## 2026-08-17 (locked out of your own room; the door showed the room)
 
 Two bugs the owner found by testing from both sides.
@@ -105,7 +135,8 @@ Two bugs the owner found by testing from both sides.
   script.
 - **NOT DONE — needs the owner:** no testnet deploy has run. `deploy-testnet.ts` and
   `mint-testnet.ts` are written and typecheck, but both need a funded testnet key
-  (`npx scrypt-cli genprivkey` → fund from a faucet). Both refuse to run against a mainnet key.
+  (`npm run genkey` → fund from a faucet). Both refuse to run against a mainnet key. ⚠ This line
+  originally said `npx scrypt-cli genprivkey`, which DOES NOT EXIST — see the 2026-08-17 entry.
 - **Still to decide before any of this ships:** the app is unchanged and still uses the ledger. If
   the covenant lands, `ticker_holdings` demotes from ledger to index of chain state, resale becomes
   an OrdLock swap (removing the trust assumption in `market.ts`), and the room gate needs an
