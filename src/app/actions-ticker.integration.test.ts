@@ -37,6 +37,7 @@ vi.mock("next/headers", () => ({
 
 import { db } from "@/lib/db";
 import { creditUnits } from "@/lib/holdings";
+import { enterRoom, roomTickerFor } from "@/lib/room-access";
 import { isRootTicker, ROOT_TICKER } from "@/lib/ticker";
 import {
   claimNym,
@@ -99,6 +100,24 @@ async function post(content: string, parentId?: number) {
     key.sign(Array.from(new TextEncoder().encode(content))).toDER("hex") as string
   );
   if (parentId !== undefined) fd.set("parent_id", String(parentId));
+  /**
+   * ⚠ WALK THROUGH THE DOOR FIRST, because entry burns a ticket and holding one
+   * is no longer access (owner, 2026-08-17: "tickets are BURNED on entry,
+   * period"). These tests are about the ticker TREE, not the gate — but a reply
+   * into a claimed thread now needs a membership, and a founder replying in their
+   * own room has to spend one like anybody else. This is the fixture doing what a
+   * real user does by tapping "Burn a ticket and come in"; the gate itself is
+   * tested properly in room-access and actions-room.
+   */
+  if (parentId !== undefined) {
+    const rootId = (
+      db.prepare("SELECT COALESCE(root_id, id) AS r FROM posts WHERE id = ?").get(parentId) as
+        | { r: number }
+        | undefined
+    )?.r;
+    const symbol = rootId ? roomTickerFor(rootId) : null;
+    if (symbol) enterRoom(symbol, pubkey, { burnTxid: "fixture", paidSats: 0 });
+  }
   return createPost(fd);
 }
 

@@ -19,14 +19,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "./db";
 import { creditUnits } from "./holdings";
 import { MINT_BASE_SATS } from "./mint-price";
-import {
-  admitFounder,
-  enterRoom,
-  heldUnits,
-  mayEnter,
-  roomAccess,
-  roomTickerFor,
-} from "./room-access";
+import { enterRoom, heldUnits, mayEnter, roomAccess, roomTickerFor } from "./room-access";
 import { ROOT_TICKER } from "./ticker";
 
 const HOLDER = "pk_holder";
@@ -167,13 +160,16 @@ describe("mayEnter", () => {
     expect(mayEnter(rootId, HOLDER)).toBe(true);
   });
 
-  it("lets a FOUNDER in without them having burned anything", () => {
-    // ⚠ The one exception, and it cannot be sold on: membership from founding is
-    // not attached to a unit, so the unit the founder keeps is ordinary stock and
-    // its buyer still has to burn it. See admitFounder.
+  it("KEEPS THE FOUNDER OUT until they burn one too — no exemption", () => {
+    // ⚠ THERE WAS AN EXEMPTION HERE FOR ABOUT AN HOUR, and the owner removed it:
+    // "tickets are BURNED on entry, period." Founding mints them a unit and admits
+    // them to nothing. One rule: every membership cost one destroyed ticket.
     const rootId = room("OCCAM", { units: 1 });
-    admitFounder("OCCAM", HOLDER, 113);
     expect(heldUnits("OCCAM", HOLDER)).toBe(1);
+    expect(mayEnter(rootId, HOLDER)).toBe(false);
+
+    expect(enterRoom("OCCAM", HOLDER, { burnTxid: "t1", paidSats: 113 }).ok).toBe(true);
+    expect(heldUnits("OCCAM", HOLDER)).toBe(0);
     expect(mayEnter(rootId, HOLDER)).toBe(true);
   });
 

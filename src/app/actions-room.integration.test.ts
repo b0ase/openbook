@@ -72,6 +72,21 @@ async function post(me: Who, content: string, parentId?: number) {
   return createPost(fd);
 }
 
+/**
+ * Burn a ticket and walk in — what a real user does by tapping the door.
+ *
+ * ⚠ NEEDED EVEN BY A FOUNDER, since the owner removed the founder exemption
+ * (2026-08-17: "tickets are BURNED on entry, period"). Claiming a word mints a
+ * unit and admits you to nothing.
+ */
+async function enter(me: Who, symbol: string) {
+  const fd = new FormData();
+  fd.set("symbol", symbol);
+  fd.set("pubkey", me.pubkey);
+  fd.set("signature", signAs(me, enterRoomMessage(symbol)));
+  return enterRoomAction(fd);
+}
+
 function lastId(): number {
   return (db.prepare("SELECT MAX(id) as id FROM posts").get() as { id: number }).id;
 }
@@ -103,15 +118,17 @@ describe("the room gate", () => {
     expect(db.prepare("SELECT COUNT(*) n FROM posts").get()).toEqual({ n: 1 });
   });
 
-  it("lets the founder speak — founding a room admits its founder", async () => {
-    // ⚠ THE REASON CHANGED WITH BURNING, even though the assertion did not.
-    // It used to pass because claiming minted them a unit and holding was access.
-    // Holding is no longer access, so this now passes because `admitFounder`
-    // records the claim itself as their entry — otherwise naming a word would
-    // build a room its own author could not speak in.
+  it("keeps the FOUNDER out of their own room until they burn one", async () => {
+    // ⚠ NO FOUNDER EXEMPTION. There was one for about an hour and the owner
+    // removed it: "tickets are BURNED on entry, period." Claiming mints a unit
+    // and admits you to nothing — one rule, no exceptions, every membership cost
+    // exactly one destroyed ticket.
     const founder = who();
     await post(founder, "starting $Occam");
     const rootId = lastId();
+
+    expect((await post(founder, "my own room", rootId)).ok).toBe(false);
+    expect(await enter(founder, "OCCAM")).toEqual({ ok: true, alreadyMember: false });
     expect((await post(founder, "my own room", rootId)).ok).toBe(true);
   });
 
@@ -235,12 +252,16 @@ describe("the room gate", () => {
     const founder = who();
     await post(founder, "starting $Occam");
     const rootId = lastId();
+    await enter(founder, "OCCAM");
     await post(founder, "a message inside", rootId);
 
     const address = PublicKey.fromString(founder.pubkey).toAddress().toString();
     // No pubkey — exactly what the client has when the key is encrypted.
     expect(await getThread(rootId, null, address)).toHaveLength(2);
-    expect((await getRoomAccess(rootId, null, address)).held).toBe(1);
+    // ⚠ `entered`, not `held`. Their ticket was burned at the door, so the
+    // balance is zero — which is exactly the state that used to lock a member out.
+    expect((await getRoomAccess(rootId, null, address)).entered).toBe(true);
+    expect((await getRoomAccess(rootId, null, address)).held).toBe(0);
   });
 
   it("does not let an unknown address in", async () => {
@@ -255,10 +276,11 @@ describe("the room gate", () => {
     expect(await getThread(rootId, null, strangerAddress)).toHaveLength(1);
   });
 
-  it("sends the whole conversation to a holder", async () => {
+  it("sends the whole conversation to a MEMBER", async () => {
     const founder = who();
     await post(founder, "starting $Occam");
     const rootId = lastId();
+    await enter(founder, "OCCAM");
     await post(founder, "a message inside", rootId);
     expect(await getThread(rootId, founder.pubkey)).toHaveLength(2);
   });

@@ -38,6 +38,7 @@ vi.mock("next/headers", () => ({
 
 import { db } from "@/lib/db";
 import { creditUnits } from "@/lib/holdings";
+import { enterRoom, roomTickerFor } from "@/lib/room-access";
 import {
   createPost,
   getHoldings,
@@ -62,6 +63,22 @@ function author(name: string) {
         key.sign(Array.from(new TextEncoder().encode(content))).toDER("hex") as string
       );
       if (parentId !== undefined) fd.set("parent_id", String(parentId));
+      /**
+       * ⚠ WALK THROUGH THE DOOR FIRST. Entry burns a ticket and holding one is no
+       * longer access (owner, 2026-08-17: "tickets are BURNED on entry, period"),
+       * so a reply into a claimed thread needs a membership — including for the
+       * founder, who has no exemption. These tests are about HOLDINGS, not the
+       * gate; this is the fixture doing what a real user does at the door.
+       */
+      if (parentId !== undefined) {
+        const rootId = (
+          db.prepare("SELECT COALESCE(root_id, id) AS r FROM posts WHERE id = ?").get(parentId) as
+            | { r: number }
+            | undefined
+        )?.r;
+        const symbol = rootId ? roomTickerFor(rootId) : null;
+        if (symbol) enterRoom(symbol, pubkey, { burnTxid: "fixture", paidSats: 0 });
+      }
       const res = await createPost(fd);
       if (!res.ok) throw new Error(`post rejected: ${JSON.stringify(res)}`);
       return res;

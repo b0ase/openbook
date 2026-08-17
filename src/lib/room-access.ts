@@ -181,37 +181,19 @@ export function enterRoom(
 }
 
 /**
- * Admit the founder of a room — the one entry that burns nothing.
+ * ⚠ THERE IS NO FOUNDER EXEMPTION, AND THERE WAS ONE FOR ABOUT AN HOUR.
  *
- * ⚠ WHY THE FOUNDER IS AN EXCEPTION, having first been built as an ordinary burn
- * and then reverted. Burning the founding unit is more uniform and it was wrong,
- * for a reason that only showed up downstream: a founder whose single unit was
- * destroyed at their own door held nothing, so they vanished from their own
- * wallet, their room reported zero holders, and every "supply" counter on the site
- * — index, leaderboard, feed percentage — quietly changed meaning at the same
- * time. Ten tests failed, each of them correct about something different.
+ * `admitFounder` used to live here: claiming a word admitted its claimant without
+ * burning anything, because burning the founding unit made its owner vanish from
+ * their own wallet and left their room reporting zero holders.
  *
- * ⚠ AND IT DOES NOT REOPEN THE HOLE BURNING WAS FOR. The exploit was one unit
- * admitting many people in sequence: buy, enter, sell on, repeat. A founder's
- * membership does not come from a unit at all — it comes from having created the
- * room — so it is not a thing that can be sold to the next person. The unit they
- * keep is ordinary tradeable stock, and whoever buys it still has to burn it to
- * get in. Every entry after the first is still one destroyed ticket.
+ * The owner removed it (2026-08-17): *"tickets are BURNED on entry, period."* He
+ * is right, and the objection I built the exemption around was a WALLET bug wearing
+ * an economics costume — a wallet that lists only what you HOLD cannot show a
+ * membership you paid for, which is a defect in the wallet, not a reason to hand
+ * somebody a free seat. It is fixed as a wallet bug (see `getHoldings`).
  *
- * What the founder paid is the mint charge for claiming the word. That is the
- * price of the room existing, and it buys the seat.
+ * So founding a room now mints its founder a unit and admits them to nothing. They
+ * burn one at their own door like everybody else. **One rule, no exceptions**:
+ * every membership in `room_entries` cost exactly one destroyed ticket.
  */
-export function admitFounder(
-  symbol: string,
-  pubkey: string,
-  paidSats: number,
-  database: Db = defaultDb
-): void {
-  if (!pubkey || isRootTicker(symbol)) return;
-  database
-    .prepare(
-      `INSERT OR IGNORE INTO room_entries (symbol, pubkey, entry_kind, burn_txid, paid_sats)
-       VALUES (?, ?, 'founder', NULL, ?)`
-    )
-    .run(symbol, pubkey, Math.max(0, Math.floor(paidSats)));
-}

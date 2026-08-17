@@ -447,18 +447,16 @@ export function applyRoomEntryMigration(database: Db): void {
     CREATE TABLE IF NOT EXISTS room_entries (
       symbol     TEXT NOT NULL,
       pubkey     TEXT NOT NULL,
-      -- HOW this membership was acquired — recorded rather than inferred.
+      -- HOW this membership was acquired. There is now exactly one way, and the
+      -- column is kept only so a future exception cannot be introduced silently.
       --
-      -- 'burn' is the rule; the other two are the honest exceptions, and they are
-      -- NAMED because a nullable burn_txid was already carrying three different
-      -- meanings at once (no burn happened / a burn happened but the anchor
-      -- failed / this member founded the room). A column that means three things
-      -- is a column somebody will read as one of them.
-      --
-      --   'burn'          a ticket was destroyed at the door. The rule.
-      --   'founder'       claimed the word, which is what created the room.
-      --                   No burn -- see admitFounder in room-access.ts.
-      --   'grandfathered' held a ticket while hold-to-enter was briefly live.
+      -- ⚠ IT ONCE HELD 'founder' AND 'grandfathered' TOO, AND THE OWNER REMOVED
+      -- BOTH (2026-08-17): *"tickets are BURNED on entry, period."* The
+      -- grandfather clause was protecting holders who did not exist — this board
+      -- has one real user — and the founder exemption existed because burning the
+      -- founding unit made its owner vanish from their own wallet, which is a
+      -- WALLET bug and was fixed as one rather than paid for with an exception to
+      -- the rule.
       entry_kind TEXT NOT NULL DEFAULT 'burn',
       -- Present for 'burn' once the anchor lands; NULL for the other kinds, and
       -- NULL for a burn whose anchor never landed.
@@ -478,28 +476,23 @@ export function applyRoomEntryMigration(database: Db): void {
   database.exec("CREATE INDEX IF NOT EXISTS idx_room_entries_pubkey ON room_entries(pubkey)");
 
   /**
-   * ⚠ GRANDFATHER EVERY EXISTING HOLDER, AND DO NOT BURN THEIR UNITS.
+   * ⚠ NO BACKFILL, AND THAT IS A REVERSAL. This migration briefly granted
+   * membership to every existing holder, on the reasoning that they had bought
+   * under hold-to-enter and their property should not be taken to tidy up a
+   * schema.
    *
-   * Hold-to-enter was live for a few hours, and anybody who acquired a ticket
-   * under it was told holding was what access meant. Destroying their unit now to
-   * satisfy a rule that did not exist when they bought it would be taking
-   * somebody's property to tidy up a schema. So they keep the unit AND get
-   * membership; only entrants from here on burn.
+   * The owner removed it (2026-08-17): *"tickets are BURNED on entry, period.
+   * I'm the only real user so we can apply the rule."* He is right, and the
+   * clause was protecting a population of one — himself — from a rule he was
+   * asking for. Nobody is admitted here. Everybody, including him, burns a ticket
+   * at the door.
    *
-   * `burn_txid` is NULL for exactly these rows, which is the honest record: no
-   * burn happened, so there is no transaction to point at. That is also why the
-   * column is nullable — see the note above about what makes the rest of the
-   * table checkable.
-   *
-   * Idempotent (`INSERT OR IGNORE` on the primary key), so a re-run cannot
-   * re-admit somebody who has since been removed, and cannot duplicate a member.
+   * ⚠ THE CONSEQUENCE, STATED SO IT IS NOT A SURPRISE: on the deploy that ships
+   * this, existing holders are OUTSIDE the rooms they hold tickets for, until
+   * they spend one. Their units are untouched, so entry is one tap — but it is
+   * not automatic, and it cannot be, because an automatic burn would destroy a
+   * unit to buy a membership nobody asked for.
    */
-  database.exec(`
-    INSERT OR IGNORE INTO room_entries (symbol, pubkey, entry_kind, burn_txid, paid_sats)
-    SELECT h.symbol, h.pubkey, 'grandfathered', NULL, NULL
-      FROM ticker_holdings h
-     WHERE h.units > 0 AND h.pubkey <> ''
-  `);
 }
 
 export function applySpentOutpointMigration(database: Db): void {

@@ -42,7 +42,7 @@ import {
 } from "@/lib/post-economics";
 import { MAX_POST_CHARS } from "@/lib/post-length";
 import { rateLimit } from "@/lib/rate-limit";
-import { admitFounder, enterRoom, mayEnter, type RoomAccess, roomAccess } from "@/lib/room-access";
+import { enterRoom, mayEnter, type RoomAccess, roomAccess } from "@/lib/room-access";
 import { enterRoomMessage } from "@/lib/room-entry-message";
 import { parseSendCommand, type SendRecipient } from "@/lib/send-command";
 import {
@@ -394,13 +394,6 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   // said. See TOKENS.md "a tag is a MENTION WITH A TARGET".
   recordTickerMentions(postId, content.trim(), pubkey);
 
-  // ⚠ THIRD, AND THE ORDER IS THE WHOLE REASON IT IS A SEPARATE STEP. Founding a
-  // room has to admit its founder, and admission BURNS a unit — which only exists
-  // after `recordTickerMentions` has credited it. Doing this inside
-  // `registerTickers` (where the claim happens) burned nothing, silently, because
-  // the ticket had not been minted yet.
-  admitFounders(postId, pubkey);
-
   // ⚠ AFTER the mention pass, which SKIPS a send entirely — so nothing has been
   // minted and the units about to move are ones the sender already held.
   const sendOutcome = executeSend(content.trim(), pubkey);
@@ -536,43 +529,6 @@ function executeSend(content: string, pubkey: FormDataEntryValue | null): SendOu
   const moved = db.transaction(() => transferUnits(cmd.symbol, from, to, cmd.units))();
   if (!moved) return { ok: false, reason: "insufficient_units" };
   return { ok: true, units: cmd.units, symbol: cmd.symbol };
-}
-
-/**
- * Admit the founder to every room this post created.
- *
- * ⚠ WITHOUT THIS, NOBODY CAN SPEAK IN A ROOM THEY JUST FOUNDED. Entry burns a
- * ticket and a claim mints one, so the claimant ends up holding a ticket, having
- * never entered, locked out of their own room. Not hypothetical: it broke six
- * ordinary "start a thread, then reply in it" tests the moment the gate moved from
- * balance to membership.
- *
- * ⚠ AND IT DOES NOT BURN THE FOUNDING UNIT — see `admitFounder` in
- * `room-access.ts` for why that was built, reverted, and why the exception does
- * not reopen the hole burning exists to close.
- *
- * ⚠ CLAIMS ONLY, NEVER MENTIONS. `tickers.post_id = ?` is true only of a claim
- * that LANDED, which is the distinction that matters: merely mentioning an
- * existing ticker also mints a unit, and admitting on that would hand out
- * membership of an expensive room to anybody who typed its name in passing.
- *
- * Best-effort — a post that publishes must not fail because a door did not open.
- */
-function admitFounders(postId: number, pubkey: FormDataEntryValue | null): void {
-  const pk = typeof pubkey === "string" ? pubkey : null;
-  if (!pk) return;
-  try {
-    const claimed = db
-      .prepare("SELECT symbol FROM tickers WHERE post_id = ? AND pubkey = ?")
-      .all(postId, pk) as Array<{ symbol: string }>;
-    for (const { symbol } of claimed) {
-      // The board's own thread is not a room, so there is no door to pass.
-      if (isRootTicker(symbol)) continue;
-      admitFounder(symbol, pk, mintPriceSats(mintedUnits(symbol)));
-    }
-  } catch (e) {
-    console.error(`OpenBook: founder admission failed for post ${postId}`, e);
-  }
 }
 
 function recordTickerMentions(
@@ -1895,12 +1851,24 @@ export async function getHoldings(pubkey: string): Promise<Holding[]> {
          JOIN tickers t ON t.symbol = h.symbol
         WHERE h.symbol IN (
                 SELECT symbol FROM ticker_holdings WHERE pubkey = ? AND units > 0
+                UNION
+                -- ⚠ ROOMS YOU ARE IN, EVEN THOUGH YOU HOLD NOTHING. Entry burns
+                -- the ticket, so a member's balance is zero by construction — and
+                -- a wallet that lists only holdings made a room DISAPPEAR from its
+                -- own founder's wallet the moment they walked through the door.
+                --
+                -- That defect is the entire reason a founder exemption existed for
+                -- about an hour: burning the founding unit looked like it broke the
+                -- economics when it only ever broke this query. The owner removed
+                -- the exemption ("tickets are BURNED on entry, period") and this is
+                -- where the actual bug gets fixed.
+                SELECT symbol FROM room_entries WHERE pubkey = ?
               )
         GROUP BY h.symbol
         ORDER BY mine DESC, total DESC
         LIMIT 50`
     )
-    .all(pubkey, pubkey) as {
+    .all(pubkey, pubkey, pubkey) as {
     symbol: string;
     mine: number;
     total: number;

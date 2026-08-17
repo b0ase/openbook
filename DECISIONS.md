@@ -983,20 +983,33 @@ on chain, permanent, publicly verifiable and names the room it bought — so mem
 we are trusted about, it is a chain fact we index. That is strictly better than the holdings model,
 which required trusting our balance arithmetic.
 
-**⚠ ONE EXCEPTION: THE FOUNDER IS ADMITTED WITHOUT BURNING.** Naming a word creates the room, and a
-founder who burned their only unit would be locked out of it — so `admitFounder` records the claim
-itself as their entry. This was first built as an ordinary burn, for uniformity, and reverted
-because of what it did downstream rather than to the rule: the founder held nothing, so they
-disappeared from their own wallet, their room reported zero holders, and **every "supply" counter on
-the site changed meaning at once.** Ten tests failed, each correct about something different.
+**⚠ NO EXCEPTIONS. NONE. (owner, 2026-08-17, same day — superseding what this entry said hours
+earlier.)** I shipped two: existing holders were grandfathered in, and founders were admitted
+without burning. The owner struck both out: *"I think tickets are BURNED on entry, period. Sorry.
+I'm the only real user so we can apply the rule."*
 
-It does not reopen the hole. The exploit was one unit admitting many people in sequence; a
-founder's membership is not attached to a unit at all, so it cannot be sold to the next person. The
-unit they keep is ordinary tradeable stock and its buyer still has to burn it. **Every entry after
-the first is still one destroyed ticket.**
+He is right on both, and the reasoning I had used was weaker than it looked:
 
-`room_entries.entry_kind` records which of the three it was — `'burn'`, `'founder'`,
-`'grandfathered'` — rather than leaving a nullable `burn_txid` to mean three things at once.
+- **Grandfathering** was written to avoid taking property from holders who had bought under
+  hold-to-enter. That population is *one person* — him — and he was asking for the rule. The clause
+  protected a hypothetical user against the actual user's wishes.
+- **The founder exemption** was justified by real downstream breakage: burning the founding unit
+  made its owner vanish from their own wallet and left their room reporting zero holders. But that
+  is **a wallet bug wearing an economics costume.** A wallet that lists only what you HOLD cannot
+  show a membership you *spent* — the fix belongs in `getHoldings` (which now unions in
+  `room_entries`), not in a permanent hole in the rule. Every other counter I had already moved to
+  the minted number; this was the last one and I stopped one step short.
+
+So: **every membership in `room_entries` cost exactly one destroyed ticket.** Founding a room mints
+its founder a unit and admits them to nothing; they burn one at their own door like anybody else.
+
+**Consequence, accepted deliberately:** on the deploy that ships this, existing holders are OUTSIDE
+the rooms they hold tickets for until they spend one. Units are untouched, so entry is one tap — but
+it is not automatic, and it must not be, since an automatic burn destroys a unit to buy a membership
+nobody asked for.
+
+`room_entries.entry_kind` is kept, now with one legal value (`'burn'`), so that a future exception
+cannot be slipped in without showing up in the schema.
 
 **Two counters, and every display had to pick one deliberately.** Burning is the first operation
 that separates *issued* from *held*, and the sweep through the call sites landed on:
@@ -1026,6 +1039,10 @@ trustless before an indexer verifies burns.
 - **The resale market survives, and sharpens.** It becomes a market in *unused* tickets — a holder
   who has not entered may sell; a member who has entered holds nothing and has nothing to list. The
   ceiling rule is unaffected: an ask above the mint price is still a limit order.
+- **The wallet shows rooms you are IN, not only tokens you hold.** `getHoldings` unions
+  `room_entries` into its symbol set, because a member's balance is zero by construction and a
+  holdings-only wallet made a room disappear from its own founder's wallet the moment they walked
+  through the door. This is the fix that made the founder exemption unnecessary.
 - **The in-room card cannot show holdings**, because a member's balance is zero by construction. It
   shows what entry cost them against what entry costs now — which is what the owner asked the card
   to say in the first place ("telling the holders what the current listed entry price is").
