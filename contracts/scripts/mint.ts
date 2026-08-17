@@ -1,5 +1,5 @@
 import { loadEnv } from './env'
-import { Addr, bsv, ContractTransaction, DefaultProvider, TestWallet } from 'scrypt-ts'
+import { Addr, bsv, ContractTransaction, TestWallet } from 'scrypt-ts'
 import { BSV20V2P2PKH } from 'scrypt-ord'
 import { providerFor } from './provider'
 import { Utils } from 'scrypt-ts'

@@ -1,5 +1,5 @@
 import { loadEnv } from './env'
-import { Addr, bsv, DefaultProvider, TestWallet, toByteString } from 'scrypt-ts'
+import { Addr, bsv, TestWallet, toByteString } from 'scrypt-ts'
 import { providerFor } from './provider'
 import { PayToMint } from '../src/contracts/payToMint'
 
@@ -113,8 +113,6 @@ async function main() {
     // ⚠ AND IT CARRIES A REAL FEE RATE. The stock provider reports 1 sat/kB,
     // which ARC refuses outright. See `provider.ts`.
     const provider = providerFor(network)
-    // The balance smell-test is a separate read-only call.
-    const balanceProvider = new DefaultProvider({ network })
 
     if (isMainnet) {
         /**
@@ -132,13 +130,7 @@ async function main() {
          */
         let total: number | null = null
         try {
-            // `unspentValue` is what the caller needs covered; asking for the
-            // deploy amount plus headroom returns the set the builder would use.
-            const utxos = await provider.listUnspent(key.toAddress(network), {
-                unspentValue: 1,
-                estimateSize: 1000,
-                feePerKb: 500,
-            })
+            const utxos = await provider.listUnspent(key.toAddress(network))
             total = utxos.reduce((n, u) => n + u.satoshis, 0)
         } catch {
             console.log('⚠ Could not read the wallet (rate-limited?) — skipping the balance check.')
