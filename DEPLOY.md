@@ -96,6 +96,74 @@ can capture a torn state.
 
 ---
 
+## The BSV-21 indexer (external dependency — recorded 2026-08-17)
+
+**Nothing in this repo depended on an indexer until the pay-to-mint covenant went live.** Now
+one word typed on the board is one token on chain, and *a BSV-21 token's state is not enforced
+by miners — it is whatever an indexer says it is.* So the indexer is not a nice-to-have
+alongside the money path; past the migration it **is** the money path, and it belongs in the
+deployment reference rather than in someone's memory.
+
+We run our own. It lives in a different repository and was undocumented here — recorded now so
+the next session does not have to ask.
+
+| | |
+|---|---|
+| What | `bsv21-overlay`, a Go BSV-21 indexer — `github.com/b-open-io/bsv21-overlay` |
+| Host | Hetzner, `ssh hetzner`, user `deployer` |
+| Process | **pm2**, `bsv21-overlay` — *not* a container, so `docker ps` shows nothing |
+| Listens | `127.0.0.1:3055`, nginx-exposed at `https://api.b0ase.com/bsv21/` |
+| Read | `GET /bsv21/api/1sat/bsv21/<txid>_<vout>` |
+| Submit | `POST /bsv21/submit` |
+| Admin | `~/src/bsv21-heroku/config.run` on the box — ⚠ **not** `server.run` |
+| Operator | the owner. Same box as bit-sign's self-hosted Supabase. |
+
+Full runbook — failure modes, the watchdog, the CLI — lives with the project that built it:
+`bit-sign/docs/RUNBOOK-bsv21-overlay.md`. Do not fork that document; link to it.
+
+**Verified reachable from the public internet on 2026-08-17** (`503 {"message":"Topic not
+available"}` on a read — which is the service answering, see below). So Railway can read it.
+
+### ⚠ IT INDEXES ONLY WHITELISTED TOKENS, AND THAT IS AN UNSOLVED PROBLEM FOR US
+
+Every token must be added by hand on the box before the overlay will touch it:
+
+```bash
+./config.run whitelist-add -token <txid>_<vout>
+```
+
+Anything else returns **503 `Topic not available`**. That gate is deliberate and correct for
+the overlay — it is what makes a public `/submit` endpoint safe and keeps disk bounded.
+
+It is also **directly at odds with how this board works.** $OpenBooks mints one token per word,
+from the browser, at the moment somebody types it. There is no HTTP admin route on that
+service, so a mint originating in the app cannot whitelist itself, and a token the overlay has
+never heard of is indistinguishable from a token with no holders.
+
+Three ways out, none of them chosen yet — two of them mean changing the overlay's source:
+
+1. an authenticated admin endpoint on the overlay, called by the app at mint time;
+2. a narrow SSH-triggered hook the app can fire;
+3. pre-whitelisting, if the token ids can be known ahead of the mint.
+
+**Settle this before designing the holdings migration.** The migration demotes
+`ticker_holdings` from a ledger to an index of chain state, and a room gate that reads an
+indexer which has never been told about the room is a door that is locked for everyone.
+
+### ⚠ AN EMPTY ANSWER AND A CORRECT ANSWER LOOK IDENTICAL
+
+The failure this indexer is most likely to hand us is not an error. It is a room whose holders
+all quietly vanish because the overlay was pointed at before it had the data. bit-sign's
+`token-register.ts` carries the same warning at the top for the same reason. When we do switch,
+the order is: whitelist the token → submit the deploy → **confirm the read answers with real
+data** → only then point the app at it.
+
+Related trap, worth knowing before we write a client: the overlay's route shape is **not**
+GorillaPool's. `/api/1sat/bsv21/<id>` here; `/api/bsv20/id/<id>/holders` there. They are not
+drop-in substitutes for one another, whatever an env var suggests.
+
+---
+
 ## The DNS cutover, and what it cost to get wrong (done 2026-08-14)
 
 `openbooks.space` and `www.openbooks.space` are served **directly by Railway**. Vercel is out of
