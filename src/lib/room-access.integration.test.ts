@@ -9,6 +9,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "./db";
+import { creditUnits } from "./holdings";
 import { MINT_BASE_SATS } from "./mint-price";
 import { heldUnits, mayEnter, roomAccess, roomTickerFor } from "./room-access";
 import { ROOT_TICKER } from "./ticker";
@@ -34,12 +35,16 @@ function room(symbol: string | null, opts: { units?: number; holder?: string } =
       `INSERT INTO ticker_mentions (symbol, post_id, pubkey, target_type, units)
        VALUES (?, ?, ?, 'none', ?)`
     ).run(symbol, rootId, opts.holder ?? HOLDER, opts.units ?? 1);
+    // The ownership ledger is what the door reads — see the note in the
+    // mint-charge suite on why the harness has to write both.
+    creditUnits(symbol, opts.holder ?? HOLDER, opts.units ?? 1);
   }
   return rootId;
 }
 
 beforeEach(() => {
   db.exec("DELETE FROM ticker_mentions");
+  db.exec("DELETE FROM ticker_holdings");
   db.exec("DELETE FROM tickers");
   db.exec("DELETE FROM posts");
 });

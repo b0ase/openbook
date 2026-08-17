@@ -56,9 +56,10 @@ export const MINT_SLACK_UNITS = 5;
 /**
  * Current supply of each symbol — one indexed GROUP BY, not a query per word.
  *
- * Counts `ticker_mentions` rows, which is the same table `getTickerSupply` and
- * the market page count. Supply IS the number of units ever minted, so the
- * counter that prices a mint has to be the counter that records one.
+ * Reads the OWNERSHIP LEDGER, the same table `getTickerSupply` and the market
+ * page read. Supply is what exists, so the counter that prices a mint has to be
+ * the counter that records one — and after a sale only the ledger knows who
+ * holds what. See `holdings.ts`.
  */
 export function mintSupplies(symbols: readonly string[], database: Db = defaultDb) {
   const supply = new Map<string, number>();
@@ -67,7 +68,10 @@ export function mintSupplies(symbols: readonly string[], database: Db = defaultD
   const placeholders = wanted.map(() => "?").join(",");
   const rows = database
     .prepare(
-      `SELECT symbol, SUM(units) AS n FROM ticker_mentions
+      // ⚠ HOLDINGS, NOT MENTIONS. Supply is what EXISTS, and after a sale the
+      // two tables agree on the total but only one of them is the ledger. See
+      // `holdings.ts`.
+      `SELECT symbol, COALESCE(SUM(units), 0) AS n FROM ticker_holdings
         WHERE symbol IN (${placeholders}) GROUP BY symbol`
     )
     .all(...wanted) as Array<{ symbol: string; n: number }>;

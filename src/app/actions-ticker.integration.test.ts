@@ -36,6 +36,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { creditUnits } from "@/lib/holdings";
 import { isRootTicker, ROOT_TICKER } from "@/lib/ticker";
 import {
   claimNym,
@@ -104,6 +105,9 @@ async function post(content: string, parentId?: number) {
 const lastId = () => (db.prepare("SELECT MAX(id) as id FROM posts").get() as { id: number }).id;
 
 beforeEach(() => {
+  // The ownership ledger accumulates across tests exactly like the tables
+  // beside it — a mint credits it, so it has to be reset with them.
+  db.exec("DELETE FROM ticker_holdings");
   db.exec("DELETE FROM reserved_tickers");
   db.exec("DELETE FROM nyms");
   db.exec("DELETE FROM tickers");
@@ -851,6 +855,10 @@ describe("ticker mentions — the (from_post, ticker, target) edge", () => {
     );
     db.transaction(() => {
       for (let i = 0; i < 620; i++) mention.run(insert.run(`$BULK ${i}`).lastInsertRowid as number);
+      // ⚠ THE LEDGER TOO. Supply is ownership now (`holdings.ts`), and the app
+      // writes both in one transaction — a harness that wrote only the mention
+      // would be asserting against a state `createPost` can never produce.
+      creditUnits("BULK", "pk_bulk", 620);
     })();
 
     expect((await getTickerSupply(["BULK"])).BULK).toBe(620);
@@ -884,6 +892,8 @@ describe("ticker mentions — the (from_post, ticker, target) edge", () => {
       `INSERT INTO ticker_mentions (symbol, post_id, pubkey, target_type, target_symbol)
        VALUES ('PRETENTIOUS', ?, 'pk_tagger', 'ticker', 'MEMEPLEX')`
     ).run(from);
+    creditUnits("PROFOUND", "pk_tagger", 1);
+    creditUnits("PRETENTIOUS", "pk_tagger", 1);
 
     expect(await getTickerSupply(["PROFOUND", "PRETENTIOUS"])).toEqual({
       PROFOUND: 1,
@@ -926,9 +936,11 @@ describe("ticker mentions — the (from_post, ticker, target) edge", () => {
       `INSERT OR IGNORE INTO ticker_mentions (symbol, post_id, target_type, target_post_id)
        VALUES ('COOL', ?, 'post', ?)`
     );
-    tag.run(from, a);
-    tag.run(from, b);
-    tag.run(from, a); // duplicate of the first — must not add a second unit
+    // `changes` is what says whether the row was NEW — an IGNORE'd duplicate
+    // must not credit a second unit any more than it inserts a second row.
+    for (const target of [a, b, a]) {
+      if (tag.run(from, target).changes > 0) creditUnits("COOL", "", 1);
+    }
 
     // Two units: the same name pointed at two different posts is two separate
     // acts, while re-tagging the same post is one.

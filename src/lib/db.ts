@@ -573,6 +573,105 @@ export function backfillTickerMentions(database: Db): void {
   run();
 }
 
+/**
+ * The ownership ledger, and the market that moves it.
+ *
+ * ⚠ WHY OWNERSHIP LEFT `ticker_mentions`. That table was doing two jobs at
+ * once: recording that a post NAMED a word, and recording who HOLDS the units
+ * that naming minted. The first is history and must never change — it is what
+ * usage, corpus size and the word's own definition are drawn from. The second
+ * moves the moment units can be sold. Selling a unit by deleting or reassigning
+ * a mention row would have rewritten the record of who said what, on a board
+ * whose entire premise is that the record is permanent.
+ *
+ * So mentions stay exactly as they are (`units` there means "this naming minted
+ * N units", forever) and `ticker_holdings` says who owns them NOW. Supply is
+ * identical either way — a transfer moves units between holders and never
+ * changes the total — which is worth asserting in a test rather than assuming.
+ *
+ * `pubkey` is NOT NULL with `''` for unattributed units. Genesis posts carry no
+ * key, so their units belong to nobody; a NULL would be uncomparable in a
+ * PRIMARY KEY (SQLite treats NULLs as distinct) and would let the same unowned
+ * pile accumulate duplicate rows.
+ */
+export function applyHoldingsMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ticker_holdings (
+      symbol  TEXT NOT NULL,
+      pubkey  TEXT NOT NULL DEFAULT '',
+      units   INTEGER NOT NULL CHECK (units >= 0),
+      PRIMARY KEY (symbol, pubkey)
+    )
+  `);
+  database.exec("CREATE INDEX IF NOT EXISTS idx_holdings_pubkey ON ticker_holdings(pubkey)");
+
+  /**
+   * An OFFER to sell units. Not an on-chain event and deliberately free to
+   * make: a listing moves nothing until somebody fills it, and charging for the
+   * right to offer would thin the order book for no gain. What bounds it is
+   * that a seller must actually hold what they list — checked at list time and
+   * again at fill time, because holdings move in between.
+   */
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS listings (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      symbol         TEXT NOT NULL,
+      seller_pubkey  TEXT NOT NULL,
+      -- Where a buyer pays. Recorded at list time and never re-derived: the
+      -- address a fill is verified against must be the one the seller signed
+      -- for, not one looked up later.
+      seller_address TEXT NOT NULL,
+      units          INTEGER NOT NULL CHECK (units >= 1),
+      price_sats     INTEGER NOT NULL CHECK (price_sats >= 1),
+      units_sold     INTEGER NOT NULL DEFAULT 0,
+      cancelled_at   TEXT,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_listings_open ON listings(symbol, cancelled_at, price_sats)"
+  );
+  database.exec("CREATE INDEX IF NOT EXISTS idx_listings_seller ON listings(seller_pubkey)");
+
+  /**
+   * A filled purchase. `tx_id` is UNIQUE — that is the replay guard, and it is
+   * the same shape `posts.tx_id` uses against a paid post being submitted
+   * twice: one broadcast buys one thing.
+   */
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS listing_fills (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      listing_id   INTEGER NOT NULL REFERENCES listings(id),
+      buyer_pubkey TEXT NOT NULL,
+      units        INTEGER NOT NULL CHECK (units >= 1),
+      paid_sats    INTEGER NOT NULL,
+      tx_id        TEXT NOT NULL UNIQUE,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  database.exec("CREATE INDEX IF NOT EXISTS idx_fills_listing ON listing_fills(listing_id)");
+
+  backfillHoldings(database);
+}
+
+/**
+ * Seed the ledger from the mentions that minted every existing unit.
+ *
+ * ⚠ GUARDED ON THE LEDGER BEING EMPTY, like `backfillTickerMentions`. Re-running
+ * it after a single sale would undo that sale by recomputing ownership from
+ * history — and history, correctly, does not know about sales.
+ */
+export function backfillHoldings(database: Db): void {
+  const existing = database.prepare("SELECT 1 FROM ticker_holdings LIMIT 1").get();
+  if (existing) return;
+  database.exec(`
+    INSERT INTO ticker_holdings (symbol, pubkey, units)
+    SELECT symbol, COALESCE(pubkey, ''), SUM(units)
+      FROM ticker_mentions
+     GROUP BY symbol, COALESCE(pubkey, '')
+  `);
+}
+
 export function applyTickerMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS tickers (
@@ -820,6 +919,8 @@ try {
   // The mention edge — must come AFTER posts + tickers exist, since it
   // references posts(id) and backfills from post content.
   applyTickerMentionMigration(db);
+  // Ownership + the market. AFTER mentions, which it seeds itself from.
+  applyHoldingsMigration(db);
   applyAgentReplyMigration(db);
   applySpentOutpointMigration(db);
   applyTickerMeaningMigration(db);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getListings } from "@/app/actions";
 import { BuyConfirm } from "@/components/BuyConfirm";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useBsvPrice } from "@/hooks/useBsvPrice";
@@ -27,11 +28,14 @@ import { titleCaseTicker } from "@/lib/ticker";
 export function RoomGate({
   access,
   onBuy,
+  onBuyListing,
   onClose,
 }: {
   access: RoomAccess;
-  /** Runs the purchase — the host owns posting, as it does for every other buy. */
+  /** Mints a NEW ticket — the host owns posting, as it does for every other buy. */
   onBuy: (text: string) => void;
+  /** Buys an EXISTING ticket from a holder, at their price. */
+  onBuyListing: (listingId: number) => void;
   onClose: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -39,6 +43,29 @@ export function RoomGate({
   const bsvPrice = useBsvPrice();
   const symbol = access.symbol ?? "";
   const usd = bsvPrice > 0 ? (access.priceSats / 1e8) * bsvPrice : null;
+
+  /**
+   * The cheapest ticket somebody is already holding and willing to sell.
+   *
+   * ⚠ THE OWNER ASKED FOR THIS ROUTE FIRST — *"or they can go to the market to
+   * buy a cheaper ticket on the market instead"* — and it is the honest one to
+   * lead with when it exists: the mint price is a CEILING, so an ask below it is
+   * strictly better for the buyer. Showing only the door would be the interface
+   * overcharging somebody on the platform's behalf.
+   */
+  const [ask, setAsk] = useState<{ id: number; priceSats: number } | null>(null);
+  useEffect(() => {
+    if (!symbol) return;
+    let live = true;
+    void getListings(symbol)
+      .then((rows) => {
+        if (live) setAsk(rows[0] ? { id: rows[0].id, priceSats: rows[0].priceSats } : null);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [symbol]);
 
   if (confirming) {
     return (
@@ -54,7 +81,9 @@ export function RoomGate({
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center px-6 py-16">
+    // Sits at the TOP of the thread, so no `min-h-full` centring — that was for
+    // a card standing in for the whole conversation, and this one now leads it.
+    <div className="flex justify-center pt-1 pb-4">
       <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-amber-400/20 bg-[#0f0f0f]">
         <div className="h-[3px] bg-amber-400" />
         <div className="px-5 py-5">
@@ -87,6 +116,22 @@ export function RoomGate({
             costs. It is yours to keep, and yours to sell.
           </p>
 
+          {/* ⚠ THE CHEAPER OPTION LEADS, when there is one. A buyer offered two
+              prices should be shown the lower one first; anything else is the
+              interface working for the house. */}
+          {ask && ask.priceSats < access.priceSats && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!requireIdentity()) return;
+                onBuyListing(ask.id);
+              }}
+              className="mt-4 w-full rounded-lg bg-amber-500 py-2.5 text-[13px] font-medium text-black transition-colors hover:bg-amber-400"
+            >
+              Buy from a holder — {ask.priceSats.toLocaleString()} sats
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => {
@@ -95,16 +140,18 @@ export function RoomGate({
               if (!requireIdentity()) return;
               setConfirming(true);
             }}
-            className="mt-4 w-full rounded-lg bg-amber-500 py-2.5 text-[13px] font-medium text-black transition-colors hover:bg-amber-400"
+            className={`mt-3 w-full rounded-lg py-2.5 text-[13px] font-medium transition-colors ${
+              ask && ask.priceSats < access.priceSats
+                ? "border border-zinc-700 text-zinc-300 hover:border-zinc-500"
+                : "bg-amber-500 text-black hover:bg-amber-400"
+            }`}
           >
-            Buy a ticket
+            {ask && ask.priceSats < access.priceSats
+              ? `Mint a new one — ${access.priceSats.toLocaleString()} sats`
+              : "Buy a ticket"}
           </button>
 
-          {/* ⚠ HONEST ABOUT THE SECOND ROUTE. The owner's design has a buyer
-              choose between the door and a cheaper resale — so the market is
-              linked from here. Resale is not built yet and the line says so;
-              sending somebody to a page that cannot sell them anything, without
-              warning, would be worse than not linking it. */}
+          {/* Who already holds it — the roster a resale comes out of. */}
           <a
             href={`/leaderboard/$${symbol.toLowerCase()}`}
             className="mt-3 block text-center text-[12px] text-zinc-500 underline underline-offset-2 transition-colors hover:text-zinc-300"
@@ -120,6 +167,49 @@ export function RoomGate({
             Not now
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The room's price, for people who are already in.
+ *
+ * ⚠ A HOLDER STILL WANTS THE NUMBER (owner, 2026-08-17). The door tells a
+ * stranger what entry costs; this tells a member what their seat is now worth,
+ * because that is the same figure — nobody rationally pays more second-hand
+ * than a fresh ticket costs, so the mint price is the ceiling on what they
+ * could sell for. Without it a holder has to leave the room to find out whether
+ * the thing they are sitting in got more valuable.
+ *
+ * Sticky, deliberately: it is a live price, and a price that scrolls away is a
+ * price you have to go looking for.
+ */
+export function RoomTicker({ access }: { access: RoomAccess }) {
+  const bsvPrice = useBsvPrice();
+  const symbol = access.symbol ?? "";
+  const usd = bsvPrice > 0 ? (access.priceSats / 1e8) * bsvPrice : null;
+
+  return (
+    <div className="sticky top-0 z-10 -mx-4 mb-1 border-b border-zinc-800/80 bg-black/85 px-4 py-1.5 backdrop-blur">
+      <div className="flex items-baseline gap-2 text-[11px]">
+        <span className="font-medium text-amber-400">${titleCaseTicker(symbol)}</span>
+        <span className="text-zinc-600">·</span>
+        <span className="text-zinc-500">
+          you hold <span className="font-mono tabular-nums text-zinc-300">{access.held}</span>
+        </span>
+        <span className="ml-auto text-zinc-500">
+          entry{" "}
+          <span className="font-mono tabular-nums text-amber-400">
+            {access.priceSats.toLocaleString()}
+          </span>{" "}
+          sats
+          {usd !== null && (
+            <span className="ml-1 font-mono tabular-nums text-zinc-600">
+              (${usd < 0.01 ? usd.toFixed(5) : usd.toFixed(2)})
+            </span>
+          )}
+        </span>
       </div>
     </div>
   );

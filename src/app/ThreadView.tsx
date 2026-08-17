@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav } from "@/components/BottomNav";
-import { RoomGate } from "@/components/RoomGate";
+import { RoomGate, RoomTicker } from "@/components/RoomGate";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { readCachedNym } from "@/lib/nym-cache";
 import type { RoomAccess } from "@/lib/room-access";
@@ -427,6 +427,63 @@ export function ThreadView({
             </p>
           )}
 
+          {/* Already in: the price of a seat, kept in view. See `RoomTicker`. */}
+          {access?.gated && access.held > 0 && <RoomTicker access={access} />}
+
+          {/* ⚠ THE DOOR COMES FIRST (owner, 2026-08-17). It sat under the root
+            post, on the theory that a buyer should see what they are buying
+            into — but a paywall below the fold reads as a footnote, and the
+            reader has to scroll past the one post they CAN see to find out
+            why there is nothing after it. The root post stays visible
+            underneath: it is already public in the feed, and it is what they
+            tapped to get here. A holder never sees this at all. */}
+          {locked && access && (
+            <RoomGate
+              access={access}
+              onClose={onClose}
+              onBuy={async (text) => {
+                if (!identity || buying) return;
+                setBuying(true);
+                setBuyError(null);
+                const { executeBuy } = await import("@/services/bsv/buy-units");
+                const res = await executeBuy({ identity, sign, text });
+                setBuying(false);
+                if (!res.ok) {
+                  setBuyError(res.message);
+                  return;
+                }
+                // The door opens by re-reading holdings, not by assuming — the
+                // server decides who holds what.
+                await refreshAccess();
+                await refresh();
+              }}
+              onBuyListing={async (listingId) => {
+                if (!identity || buying) return;
+                setBuying(true);
+                setBuyError(null);
+                const { buyListing } = await import("@/services/bsv/buy-listing");
+                const res = await buyListing({ identity, sign, listingId, units: 1 });
+                setBuying(false);
+                if (!res.ok) {
+                  // ⚠ THE MESSAGE COMES FROM THE BUYER'S SIDE, unchanged. A
+                  // market purchase pays BEFORE the transfer can be confirmed,
+                  // so some of these failures happen with the money already
+                  // gone — `buyListing` knows which, and rewording it here
+                  // would be how somebody gets told their funds are safe when
+                  // they are not.
+                  setBuyError(res.message);
+                  return;
+                }
+                await refreshAccess();
+                await refresh();
+              }}
+            />
+          )}
+          {buying && (
+            <p className="py-6 text-center text-[13px] text-zinc-500">Buying your ticket…</p>
+          )}
+          {buyError && <p className="py-3 text-center text-[13px] text-red-400">{buyError}</p>}
+
           <div className="divide-y divide-zinc-800/60">
             {visiblePosts.map((post) => {
               const isRoot = post.parent_id === null;
@@ -517,36 +574,6 @@ export function ThreadView({
                 ))}
               </div>
             )}
-
-            {/* ⚠ THE DOOR, WHERE THE CONVERSATION WOULD HAVE BEEN. Placed after
-                the root post so a buyer can see what they are buying into, and
-                in place of the replies, which are what a ticket buys. */}
-            {locked && access && (
-              <RoomGate
-                access={access}
-                onClose={onClose}
-                onBuy={async (text) => {
-                  if (!identity || buying) return;
-                  setBuying(true);
-                  setBuyError(null);
-                  const { executeBuy } = await import("@/services/bsv/buy-units");
-                  const res = await executeBuy({ identity, sign, text });
-                  setBuying(false);
-                  if (!res.ok) {
-                    setBuyError(res.message);
-                    return;
-                  }
-                  // The door opens by re-reading holdings, not by assuming — the
-                  // server decides who holds what.
-                  await refreshAccess();
-                  await refresh();
-                }}
-              />
-            )}
-            {buying && (
-              <p className="py-6 text-center text-[13px] text-zinc-500">Buying your ticket…</p>
-            )}
-            {buyError && <p className="py-3 text-center text-[13px] text-red-400">{buyError}</p>}
 
             {pending.map((op) => (
               <article key={op.id} className={`py-3.5 pl-4 ${op.failed ? "opacity-50" : ""}`}>

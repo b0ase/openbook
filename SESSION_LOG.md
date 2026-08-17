@@ -2,6 +2,44 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-17 (rooms, and a market to get into them)
+
+- **Category: feature (money path), schema, feature.** Owner: *"build it all"* — the room gate and
+  resale, after `/buy`.
+- **`/buy N $Ticker`.** Many units at once, each priced up the curve. Quadratic, so a bulk buyer's
+  average is ~half the price they leave behind — they raise the ceiling and can then resell below it
+  and above their own cost. Confirm sheet shows the total, the average and the new entry price; the
+  figure comes from the same server function that funds the transaction.
+  - **SCHEMA:** `ticker_mentions.units`. The unique `(post_id, symbol)` index means a thousand-unit
+    buy cannot be a thousand rows. Every "units" query became `SUM(units)`; the "how many posts"
+    ones stayed `COUNT`. `COALESCE` on the one ungrouped aggregate — `SUM` over no rows is NULL
+    where `COUNT` was 0, which stopped unwritten names 404ing until the tests caught it.
+  - No new server action: a buy is a post whose content is the canonical command, re-parsed
+    server-side, so it inherits every existing check.
+- **ROOMS.** A thread claimed under a ticker needs one unit to enter. Writing is enforced
+  cryptographically in `createPost` (the pubkey is signature-verified); reading is a product
+  boundary, and `room-access.ts` says so rather than implying secrecy — posts are on chain and
+  publicly readable regardless. Root ticker and unnamed threads are never gated.
+  - The door card sits at the TOP of the thread (owner), with the root post visible under it.
+    Holders instead get a sticky price bar — their seat's value is the same number.
+  - Consequence: founding a child token inside another's room is now a members-only act.
+- **OWNERSHIP MOVED OUT OF `ticker_mentions` into `ticker_holdings`.** Mentions are history and must
+  not change; holdings move on a sale. Supply is invariant under a transfer and that is asserted,
+  not assumed.
+- **RESALE.** `listings` + `listing_fills`. Sellers sign exact terms; buyers pay the seller peer to
+  peer and the server moves the ledger against verified bytes. Availability checked at list time
+  (book honesty) AND fill time (buyer protection). Txid derived not accepted; payment check is a
+  floor; `tx_id` UNIQUE is the replay guard. 19 adversarial integration tests.
+  - **⚠ A market purchase pays BEFORE the transfer can be confirmed.** `buyListing` returns
+    `spent: true|false` so the UI never says "nothing was spent" after real money left.
+  - Market page now shows the ask beside the mint price; the room door leads with the cheaper of
+    the two; the wallet gained a Sell sheet with withdraw.
+- **Ruled out:** a platform cut on resale (the mint is where revenue is taken); an on-chain OrdLock
+  swap (units are ledger rows, not ordinals — TOKENS.md has the research).
+- **Test-harness note:** the ticker suite's replies are signed by the thread founder, and harnesses
+  that insert mentions directly now credit the ledger too — a granted holding is a mentions row, so
+  granting inflated the very supply figures those tests assert on.
+
 ## 2026-08-17 (the curve became the charge; permalink cards)
 
 - **Category: feature (money path), feature, docs.** Flipped posting onto the mint curve — the

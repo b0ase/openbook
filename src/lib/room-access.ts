@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { db as defaultDb } from "./db";
+import { totalUnits, unitsHeld } from "./holdings";
 import { mintPriceSats } from "./mint-price";
 import { isRootTicker } from "./ticker";
 
@@ -64,28 +65,14 @@ export function roomTickerFor(rootId: number, database: Db = defaultDb): string 
 }
 
 /**
- * How many units of a symbol a key holds.
+ * How many units of a symbol a key holds — from the OWNERSHIP LEDGER.
  *
- * `SUM(units)` — a bought position is one row worth many, so counting rows would
- * turn a thousand-ticket holder into a one-ticket holder at the door.
+ * A thin re-export so the door reads holdings the same way the market and the
+ * wallet do. Somebody who SOLD their last ticket is out; somebody who bought one
+ * second-hand is in. Counting mention rows would get both backwards.
  */
 export function heldUnits(symbol: string, pubkey: string | null, database: Db = defaultDb): number {
-  if (!pubkey) return 0;
-  const row = database
-    .prepare(
-      `SELECT COALESCE(SUM(units), 0) AS n FROM ticker_mentions
-        WHERE symbol = ? AND pubkey = ?`
-    )
-    .get(symbol, pubkey) as { n: number };
-  return row?.n ?? 0;
-}
-
-/** Current supply, for pricing the next ticket. */
-function supplyOf(symbol: string, database: Db): number {
-  const row = database
-    .prepare("SELECT COALESCE(SUM(units), 0) AS n FROM ticker_mentions WHERE symbol = ?")
-    .get(symbol) as { n: number };
-  return row?.n ?? 0;
+  return unitsHeld(symbol, pubkey, database);
 }
 
 /** Whether this key may take part in this thread, and what the door costs. */
@@ -97,7 +84,7 @@ export function roomAccess(
   const symbol = roomTickerFor(rootId, database);
   if (!symbol) return { symbol: null, gated: false, held: 0, priceSats: 0 };
   const held = heldUnits(symbol, pubkey, database);
-  return { symbol, gated: true, held, priceSats: mintPriceSats(supplyOf(symbol, database)) };
+  return { symbol, gated: true, held, priceSats: mintPriceSats(totalUnits(symbol, database)) };
 }
 
 /** Whether a key may post into this thread. `true` for anything that is not a room. */

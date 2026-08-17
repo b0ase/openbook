@@ -8,6 +8,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "./db";
+import { creditUnits } from "./holdings";
 import { MINT_SLACK_UNITS, mintChargeSats, mintFloorSats, mintSupplies } from "./mint-charge";
 import { MINT_BASE_SATS } from "./mint-price";
 
@@ -29,11 +30,17 @@ function mint(symbol: string, n: number) {
   for (let i = 0; i < n; i++) {
     const id = newPost.run(`minting $${symbol}`).lastInsertRowid as number;
     insert.run(symbol, id, "pk_test");
+    // ⚠ THE LEDGER TOO, because a mint is two facts: this post named the word
+    // (history) and somebody now owns the unit (ownership). `recordTickerMentions`
+    // writes both in one transaction — a harness that wrote only the first would
+    // be testing a state the app can never be in.
+    creditUnits(symbol, "pk_test", 1);
   }
 }
 
 beforeEach(() => {
   db.exec("DELETE FROM ticker_mentions");
+  db.exec("DELETE FROM ticker_holdings");
   db.exec("DELETE FROM posts");
 });
 

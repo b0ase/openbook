@@ -16,12 +16,12 @@ import { listTickerBoards } from "../actions";
  * under another name, while the Threads tab listed only your own. The directory
  * moved to `/chat`, where a list of conversations belongs.
  *
- * ⚠ NOTHING IS FOR SALE HERE, AND THE PAGE SAYS SO. TOKENS.md settles that a post
- * is sellable and that names can change hands, but no listing, offer or trade
- * mechanism is built. So this shows OWNERSHIP rather than pretending to a market:
- * every token, how many units exist, and how many distinct people hold one. That
- * is the honest interim and it is what a real market grows out of — you cannot
- * sell what nobody can see you hold.
+ * ⚠ THINGS ARE NOW ACTUALLY FOR SALE HERE. Holders can list units and buyers can
+ * fill those listings (`market.ts`), so each row carries TWO prices: the cheapest
+ * second-hand unit on offer, and what minting a fresh one costs. The second is a
+ * ceiling on the first — nobody rationally pays more second-hand than a new unit
+ * costs — so the ask is normally the lower number, and a market page that showed
+ * only the mint price would be hiding the market.
  *
  * ⚠ NO PER-TICKER ADDRESSES YET. The owner asked for each token's public address
  * alongside its value. Tokens do not have addresses: HD derivation is designed in
@@ -67,13 +67,12 @@ export default async function MarketPage() {
               The price of the next unit, how many exist, and how many people hold one. A unit is
               minted for each post that names it, and the price rises with supply — so an early unit
               is worth what it now costs to mint a fresh one.{" "}
-              {/* ⚠ WHAT IS AND IS NOT TRUE YET, ON THE PAGE THAT PRICES THINGS.
-                  The curve is now what an author is actually billed
-                  (`mint-charge.ts`), so these prices are real. Resale is not
-                  built, and saying so is the difference between a market page
-                  and a promise. */}
+              {/* Both prices are real: the curve is what an author is billed
+                  (`mint-charge.ts`) and the ask is a live offer somebody has
+                  signed for. */}
               <span className="text-zinc-600">
-                Prices are what a post is charged today. Reselling a unit isn't built yet.
+                Green is the cheapest unit somebody is selling; amber is what minting a new one
+                costs.
               </span>
             </p>
 
@@ -103,9 +102,24 @@ export default async function MarketPage() {
                           nobody rationally pays more second-hand than it costs to
                           mint a fresh one. A market page without prices on it is
                           just a list of names. */}
-                      <span className="text-amber-500/80">
-                        {mintPriceSats(b.total).toLocaleString()} sats
-                      </span>
+                      {/* ⚠ TWO PRICES WHEN THERE ARE TWO. The mint price is
+                          what a NEW unit costs and it is a ceiling; the ask is
+                          what an existing one costs and it is normally lower.
+                          Showing only the mint price on a page called Market
+                          would hide the market. */}
+                      {b.ask !== null && b.ask < mintPriceSats(b.total) ? (
+                        <>
+                          <span className="text-emerald-400">{b.ask.toLocaleString()} sats</span>
+                          <span className="text-zinc-700"> · mint </span>
+                          <span className="text-amber-500/60">
+                            {mintPriceSats(b.total).toLocaleString()}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-amber-500/80">
+                          {mintPriceSats(b.total).toLocaleString()} sats
+                        </span>
+                      )}
                       <span className="text-zinc-700"> · </span>
                       {b.total} {b.total === 1 ? "unit" : "units"}
                       <span className="text-zinc-700"> · </span>

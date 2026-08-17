@@ -4,8 +4,10 @@ import { headers } from "next/headers";
 import { parseBuyCommand } from "@/lib/buy-command";
 import { screenContent } from "@/lib/content-filter";
 import { db } from "@/lib/db";
+import { verifyFillPayment } from "@/lib/fill-payment";
 import { FORK_POINT_ID } from "@/lib/fork-point";
 import { tryConsumeFreeBootForIp } from "@/lib/free-boot-cap";
+import { creditUnits, transferUnits, unitsHeld } from "@/lib/holdings";
 import {
   attachPreviewToPost,
   firstLinkIn,
@@ -13,6 +15,14 @@ import {
   savePreview,
   urlHash,
 } from "@/lib/link-preview-store";
+import { cancelListingMessage, fillMessage, listMessage } from "@/lib/listing-message";
+import {
+  cheapestAsks,
+  findOpenListing,
+  MAX_LISTING_UNITS,
+  openListings,
+  unitsListable,
+} from "@/lib/market";
 import { mintChargeSats, mintFloorSats } from "@/lib/mint-charge";
 import { mintPriceSats } from "@/lib/mint-price";
 import { verifyPaidPost } from "@/lib/paid-post";
@@ -441,14 +451,28 @@ function recordTickerMentions(
      */
     const buy = parseBuyCommand(content);
     if (buy) {
-      insert.run(buy.symbol, postId, pk, buy.units);
+      /**
+       * ⚠ TWO WRITES, ONE TRANSACTION, AND THEY MEAN DIFFERENT THINGS. The
+       * mention is history — this post named this word and minted N units of it,
+       * permanently. The holding is ownership, which moves the first time
+       * somebody sells. Writing only one of them either loses the record of who
+       * said what or loses who owns what; writing them apart leaves a window
+       * where a unit exists and belongs to nobody. See `holdings.ts`.
+       */
+      db.transaction(() => {
+        insert.run(buy.symbol, postId, pk, buy.units);
+        creditUnits(buy.symbol, pk, buy.units);
+      })();
       return;
     }
 
     const symbols = distinctTickers(content);
     if (!symbols.length) return;
     const all = db.transaction(() => {
-      for (const symbol of symbols) insert.run(symbol, postId, pk, 1);
+      for (const symbol of symbols) {
+        insert.run(symbol, postId, pk, 1);
+        creditUnits(symbol, pk, 1);
+      }
     });
     all();
   } catch (e) {
@@ -1293,11 +1317,9 @@ export async function getTickerSupply(symbols: string[]): Promise<Record<string,
   const placeholders = wanted.map(() => "?").join(",");
   const rows = db
     .prepare(
-      // SUM(units), not COUNT(*) — see `ticker_mentions.units`. A bought
-      // position is one row carrying many units, so counting rows would show a
-      // thousand-unit holder as one.
-      `SELECT symbol, SUM(units) AS n
-         FROM ticker_mentions
+      // The ownership ledger, not the mention history — see `holdings.ts`.
+      `SELECT symbol, COALESCE(SUM(units), 0) AS n
+         FROM ticker_holdings
         WHERE symbol IN (${placeholders})
         GROUP BY symbol`
     )
@@ -1394,10 +1416,18 @@ export interface TickerBoardSummary {
   symbol: string;
   /** Ancestry, root-first — the same path a thread header renders. */
   path: string[];
-  /** Units in circulation: posts that named it. */
+  /** Units in circulation. */
   total: number;
   /** Distinct owners. Lower than `total` whenever somebody holds more than one. */
   holders: number;
+  /**
+   * Cheapest second-hand unit on offer, or null when nobody is selling.
+   *
+   * Beside the mint price this is the whole market in two numbers: the mint
+   * price is what a new unit costs, this is what an existing one costs, and the
+   * second is normally the lower of the two.
+   */
+  ask: number | null;
 }
 
 /**
@@ -1421,13 +1451,13 @@ export async function listTickerBoards(limit = 100): Promise<TickerBoardSummary[
   const capped = Math.min(Math.max(1, limit), 200);
   const rows = db
     .prepare(
-      // `total` SUMS units (a purchase is one row worth many); `holders`
-      // still counts distinct people, which rows are the right unit for.
+      // Ownership, from the ledger. `holders` counts people who still hold
+      // something — a seller who sold out is no longer a holder, which is the
+      // whole difference between this and counting mentions.
       `SELECT symbol,
-              SUM(units) AS total,
-              COUNT(DISTINCT CASE WHEN pubkey IS NOT NULL AND pubkey <> '' THEN pubkey END)
-                AS holders
-         FROM ticker_mentions
+              COALESCE(SUM(units), 0) AS total,
+              COUNT(DISTINCT CASE WHEN pubkey <> '' AND units > 0 THEN pubkey END) AS holders
+         FROM ticker_holdings
         GROUP BY symbol
         ORDER BY total DESC, symbol ASC
         LIMIT ?`
@@ -1456,6 +1486,9 @@ export async function listTickerBoards(limit = 100): Promise<TickerBoardSummary[
     return path;
   };
 
+  // One query for every ask on the page, rather than one per row.
+  const asks = cheapestAsks(rows.map((r) => r.symbol));
+
   const boards = rows
     .filter((r) => !isRootTicker(r.symbol))
     .map((r) => ({
@@ -1463,6 +1496,7 @@ export async function listTickerBoards(limit = 100): Promise<TickerBoardSummary[
       path: pathFor(r.symbol),
       total: r.total,
       holders: r.holders,
+      ask: asks.get(r.symbol) ?? null,
     }));
 
   const rootRow = rows.find((r) => isRootTicker(r.symbol));
@@ -1472,6 +1506,7 @@ export async function listTickerBoards(limit = 100): Promise<TickerBoardSummary[
       path: [ROOT_TICKER],
       total: rootRow?.total ?? 0,
       holders: rootRow?.holders ?? 0,
+      ask: asks.get(ROOT_TICKER) ?? null,
     },
     ...boards,
   ];
@@ -1493,10 +1528,8 @@ export async function getTickerLeaderboard(
       // check below silently stopped firing and every unwritten name rendered
       // an empty leaderboard instead of 404ing.
       `SELECT COALESCE(SUM(units), 0) AS total,
-              COALESCE(
-                SUM(CASE WHEN pubkey IS NOT NULL AND pubkey <> '' THEN units ELSE 0 END), 0
-              ) AS attributed
-         FROM ticker_mentions WHERE symbol = ?`
+              COALESCE(SUM(CASE WHEN pubkey <> '' THEN units ELSE 0 END), 0) AS attributed
+         FROM ticker_holdings WHERE symbol = ?`
     )
     .get(canonical) as { total: number; attributed: number | null };
   // A name nobody has ever written is not an empty leaderboard, it is not a
@@ -1514,12 +1547,11 @@ export async function getTickerLeaderboard(
   const capped = Math.min(Math.max(1, limit), 100);
   const rows = db
     .prepare(
-      `SELECT m.pubkey AS pubkey, SUM(m.units) AS units, n.symbol AS nym
-         FROM ticker_mentions m
-         LEFT JOIN nyms n ON n.pubkey = m.pubkey
-        WHERE m.symbol = ? AND m.pubkey IS NOT NULL AND m.pubkey <> ''
-        GROUP BY m.pubkey
-        ORDER BY units DESC, m.pubkey ASC
+      `SELECT h.pubkey AS pubkey, h.units AS units, n.symbol AS nym
+         FROM ticker_holdings h
+         LEFT JOIN nyms n ON n.pubkey = h.pubkey
+        WHERE h.symbol = ? AND h.pubkey <> '' AND h.units > 0
+        ORDER BY units DESC, h.pubkey ASC
         LIMIT ?`
     )
     .all(canonical, capped) as { pubkey: string; units: number; nym: string | null }[];
@@ -1609,15 +1641,17 @@ export async function getHoldings(pubkey: string): Promise<Holding[]> {
   // internally correct and they measured different things.
   const namedRows = db
     .prepare(
-      `SELECT m.symbol AS symbol,
-              SUM(CASE WHEN m.pubkey = ? THEN m.units ELSE 0 END) AS mine,
-              SUM(m.units) AS total,
+      `SELECT h.symbol AS symbol,
+              SUM(CASE WHEN h.pubkey = ? THEN h.units ELSE 0 END) AS mine,
+              SUM(h.units) AS total,
               t.root_id AS root_id,
               (SELECT p.tx_id FROM posts p WHERE p.id = t.root_id) AS tx_id
-         FROM ticker_mentions m
-         JOIN tickers t ON t.symbol = m.symbol
-        WHERE m.symbol IN (SELECT DISTINCT symbol FROM ticker_mentions WHERE pubkey = ?)
-        GROUP BY m.symbol
+         FROM ticker_holdings h
+         JOIN tickers t ON t.symbol = h.symbol
+        WHERE h.symbol IN (
+                SELECT symbol FROM ticker_holdings WHERE pubkey = ? AND units > 0
+              )
+        GROUP BY h.symbol
         ORDER BY mine DESC, total DESC
         LIMIT 50`
     )
@@ -1930,7 +1964,7 @@ export async function getMintQuote(
   const placeholders = wanted.map(() => "?").join(",");
   const rows = db
     .prepare(
-      `SELECT symbol, SUM(units) AS n FROM ticker_mentions
+      `SELECT symbol, COALESCE(SUM(units), 0) AS n FROM ticker_holdings
         WHERE symbol IN (${placeholders}) GROUP BY symbol`
     )
     .all(...wanted) as Array<{ symbol: string; n: number }>;
@@ -1965,6 +1999,252 @@ export async function getRoomAccess(rootId: number, pubkey: string | null): Prom
     return { symbol: null, gated: false, held: 0, priceSats: 0 };
   }
   return roomAccess(rootId, typeof pubkey === "string" && pubkey ? pubkey : null);
+}
+
+/**
+ * Verify an ECDSA signature over a canonical message.
+ *
+ * ⚠ EVERY MARKET ACTION IS AUTHORISED THIS WAY, because each one moves somebody
+ * else's property: listing promises units, cancelling withdraws a promise a
+ * buyer may be acting on, and a fill claims a payment. The message names every
+ * term it authorises (see `listing-message.ts`), so a captured signature cannot
+ * be reused for different terms.
+ */
+async function signedBy(pubkey: string, signature: string, message: string): Promise<boolean> {
+  try {
+    const { PublicKey, Signature } = await getBsvSdk();
+    return PublicKey.fromString(pubkey).verify(
+      Array.from(new TextEncoder().encode(message)),
+      Signature.fromDER(signature, "hex")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export type ListResult =
+  | { ok: true; id: number }
+  | {
+      ok: false;
+      reason: "invalid_signature" | "invalid_terms" | "not_enough_units" | "rate_limited";
+    };
+
+/**
+ * Offer units for sale.
+ *
+ * Free, and deliberately: a listing moves nothing until somebody fills it, and
+ * charging for the right to offer would thin the book for no gain. What bounds
+ * it is that the seller must actually hold what they list — and the check
+ * subtracts what they have ALREADY offered, or the same ten units could be sold
+ * four times over.
+ */
+export async function listUnits(formData: FormData): Promise<ListResult> {
+  const symbol = canonicalTicker(String(formData.get("symbol") ?? ""));
+  const units = Number(formData.get("units"));
+  const priceSats = Number(formData.get("price_sats"));
+  const pubkey = String(formData.get("pubkey") ?? "");
+  const signature = String(formData.get("signature") ?? "");
+
+  if (!isValidTicker(symbol)) return { ok: false, reason: "invalid_terms" };
+  if (!Number.isSafeInteger(units) || units < 1 || units > MAX_LISTING_UNITS) {
+    return { ok: false, reason: "invalid_terms" };
+  }
+  if (!Number.isSafeInteger(priceSats) || priceSats < 1) {
+    return { ok: false, reason: "invalid_terms" };
+  }
+  if (!pubkey) return { ok: false, reason: "invalid_signature" };
+
+  const rl = rateLimit(`listUnits:${pubkey}`, { limit: 20, windowMs: 60_000 });
+  if (!rl.success) return { ok: false, reason: "rate_limited" };
+
+  if (!(await signedBy(pubkey, signature, listMessage(symbol, units, priceSats)))) {
+    return { ok: false, reason: "invalid_signature" };
+  }
+
+  // ⚠ THE ADDRESS IS DERIVED FROM THE VERIFIED KEY, NEVER SUPPLIED. A
+  // client-supplied payout address would let somebody list units they hold and
+  // have buyers pay a stranger — or, worse, let an attacker list on their own
+  // key and collect at an address they do not control, which is a support
+  // problem rather than a theft, but still not ours to create.
+  let sellerAddress: string;
+  try {
+    const { PublicKey } = await getBsvSdk();
+    sellerAddress = PublicKey.fromString(pubkey).toAddress().toString();
+  } catch {
+    return { ok: false, reason: "invalid_signature" };
+  }
+
+  if (unitsListable(symbol, pubkey) < units) return { ok: false, reason: "not_enough_units" };
+
+  const res = db
+    .prepare(
+      `INSERT INTO listings (symbol, seller_pubkey, seller_address, units, price_sats)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(symbol, pubkey, sellerAddress, units, priceSats);
+  return { ok: true, id: res.lastInsertRowid as number };
+}
+
+/** Withdraw an offer. Only the seller can, and only their own. */
+export async function cancelListing(formData: FormData): Promise<{ ok: boolean }> {
+  const id = Number(formData.get("listing_id"));
+  const pubkey = String(formData.get("pubkey") ?? "");
+  const signature = String(formData.get("signature") ?? "");
+  if (!Number.isSafeInteger(id) || id <= 0 || !pubkey) return { ok: false };
+  if (!(await signedBy(pubkey, signature, cancelListingMessage(id)))) return { ok: false };
+
+  const res = db
+    .prepare(
+      `UPDATE listings SET cancelled_at = datetime('now')
+        WHERE id = ? AND seller_pubkey = ? AND cancelled_at IS NULL`
+    )
+    .run(id, pubkey);
+  return { ok: res.changes > 0 };
+}
+
+export interface ListingView {
+  id: number;
+  symbol: string;
+  unitsLeft: number;
+  priceSats: number;
+  /** The seller's public name, when they have one. */
+  sellerNym: string | null;
+  mine: boolean;
+}
+
+/** The ask side of the book for one token, cheapest first. */
+export async function getListings(symbol: string, viewer?: string): Promise<ListingView[]> {
+  const canonical = canonicalTicker(symbol);
+  if (!isValidTicker(canonical)) return [];
+  const nymOf = db.prepare("SELECT symbol FROM nyms WHERE pubkey = ?");
+  return openListings(canonical).map((l) => ({
+    id: l.id,
+    symbol: l.symbol,
+    unitsLeft: l.unitsLeft,
+    priceSats: l.priceSats,
+    sellerNym: (nymOf.get(l.sellerPubkey) as { symbol: string } | undefined)?.symbol ?? null,
+    mine: !!viewer && viewer === l.sellerPubkey,
+  }));
+}
+
+/** What a buyer must pay, and where — everything needed to build the transaction. */
+export async function getFillQuote(
+  listingId: number,
+  units: number
+): Promise<{ ok: true; address: string; totalSats: number } | { ok: false }> {
+  const listing = findOpenListing(listingId);
+  if (!listing) return { ok: false };
+  const n = Math.floor(units);
+  if (!Number.isSafeInteger(n) || n < 1 || n > listing.unitsLeft) return { ok: false };
+  return { ok: true, address: listing.sellerAddress, totalSats: n * listing.priceSats };
+}
+
+export type FillResult =
+  | { ok: true; units: number }
+  | {
+      ok: false;
+      reason:
+        | "invalid_signature"
+        | "gone"
+        | "invalid_terms"
+        | "underpaid"
+        | "replay"
+        | "seller_short"
+        | "rate_limited";
+    };
+
+/**
+ * Complete a purchase from the market.
+ *
+ * The buyer has ALREADY paid the seller, peer to peer, in a transaction this
+ * platform never touched. What happens here is the ledger moving to match a
+ * payment that has been verified against the bytes — see `market.ts` for why
+ * that is a real trust assumption and not a trustless swap.
+ *
+ * ⚠ EVERY CHECK RUNS BEFORE ANYTHING MOVES, and the move itself is one
+ * transaction. A debit without a credit is somebody's property destroyed; a fill
+ * recorded without a debit is a unit sold twice.
+ */
+export async function fillListing(formData: FormData): Promise<FillResult> {
+  const listingId = Number(formData.get("listing_id"));
+  const units = Number(formData.get("units"));
+  const rawTx = String(formData.get("raw_tx") ?? "").trim();
+  const pubkey = String(formData.get("pubkey") ?? "");
+  const signature = String(formData.get("signature") ?? "");
+
+  if (!Number.isSafeInteger(listingId) || listingId <= 0) return { ok: false, reason: "gone" };
+  if (!Number.isSafeInteger(units) || units < 1) return { ok: false, reason: "invalid_terms" };
+  if (!pubkey || !rawTx) return { ok: false, reason: "invalid_signature" };
+
+  const rl = rateLimit(`fillListing:${pubkey}`, { limit: 20, windowMs: 60_000 });
+  if (!rl.success) return { ok: false, reason: "rate_limited" };
+
+  const listing = findOpenListing(listingId);
+  if (!listing) return { ok: false, reason: "gone" };
+  if (units > listing.unitsLeft) return { ok: false, reason: "invalid_terms" };
+  // Buying from yourself would move nothing and pay yourself; refuse it rather
+  // than let it look like a trade that happened.
+  if (listing.sellerPubkey === pubkey) return { ok: false, reason: "invalid_terms" };
+
+  const verdict = verifyFillPayment({
+    rawTx,
+    sellerAddress: listing.sellerAddress,
+    minSats: units * listing.priceSats,
+  });
+  if (!verdict.ok) {
+    return { ok: false, reason: verdict.reason === "malformed_tx" ? "invalid_terms" : "underpaid" };
+  }
+
+  if (!(await signedBy(pubkey, signature, fillMessage(listingId, units, verdict.txid)))) {
+    return { ok: false, reason: "invalid_signature" };
+  }
+
+  // ⚠ THE SELLER MAY NO LONGER HAVE THEM. Holdings move between listing and
+  // filling — they could have spent the units on a room, or sold them at the
+  // door. Checked here, immediately before the transfer, because that is the
+  // only check that protects the buyer.
+  if (unitsHeld(listing.symbol, listing.sellerPubkey) < units) {
+    return { ok: false, reason: "seller_short" };
+  }
+
+  try {
+    db.transaction(() => {
+      // Replay guard: `tx_id` is UNIQUE, so a second submission of the same
+      // broadcast throws here rather than moving units twice.
+      db.prepare(
+        `INSERT INTO listing_fills (listing_id, buyer_pubkey, units, paid_sats, tx_id)
+         VALUES (?, ?, ?, ?, ?)`
+      ).run(listingId, pubkey, units, verdict.paidSats, verdict.txid);
+      db.prepare("UPDATE listings SET units_sold = units_sold + ? WHERE id = ?").run(
+        units,
+        listingId
+      );
+      if (!transferUnits(listing.symbol, listing.sellerPubkey, pubkey, units)) {
+        throw new Error("transfer_failed");
+      }
+    })();
+  } catch (e) {
+    if (e instanceof Error && /UNIQUE/i.test(e.message)) return { ok: false, reason: "replay" };
+    return { ok: false, reason: "seller_short" };
+  }
+
+  return { ok: true, units };
+}
+
+/**
+ * The cheapest second-hand ticket for each symbol.
+ *
+ * ⚠ THE MARKET PAGE AND THE DOOR BOTH NEED THIS, and they need the SAME number.
+ * The mint price is a ceiling — nobody rationally pays more second-hand than a
+ * fresh unit costs — so an ask below it is the whole point of the market
+ * existing, and a buyer who is not shown it is being overcharged by the
+ * interface rather than by the seller.
+ */
+export async function getCheapestAsks(symbols: string[]): Promise<Record<string, number>> {
+  const wanted = symbols.map(canonicalTicker).filter(isValidTicker);
+  const out: Record<string, number> = {};
+  for (const [symbol, ask] of cheapestAsks(wanted)) out[symbol] = ask;
+  return out;
 }
 
 export async function getPostById(id: number): Promise<Post | null> {

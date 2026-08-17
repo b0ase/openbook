@@ -37,6 +37,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { creditUnits } from "@/lib/holdings";
 import {
   createPost,
   getHoldings,
@@ -71,6 +72,9 @@ function author(name: string) {
 const lastId = () => (db.prepare("SELECT MAX(id) as id FROM posts").get() as { id: number }).id;
 
 beforeEach(() => {
+  // The ownership ledger accumulates across tests exactly like the tables
+  // beside it — a mint credits it, so it has to be reset with them.
+  db.exec("DELETE FROM ticker_holdings");
   db.exec("DELETE FROM tickers");
   db.exec("DELETE FROM payouts");
   db.exec("DELETE FROM bootboard");
@@ -290,6 +294,8 @@ describe("getTickerLeaderboard", () => {
     db.prepare(
       "INSERT INTO ticker_mentions (symbol, post_id, target_type) VALUES ('ORPHAN', ?, 'none')"
     ).run(id);
+    // Unowned units live in the ledger under the empty pubkey — see holdings.ts.
+    creditUnits("ORPHAN", "", 1);
 
     const board = await getTickerLeaderboard("ORPHAN");
     expect(board?.total).toBe(2);

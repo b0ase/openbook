@@ -849,6 +849,85 @@ copy and the pricing model have to agree.
 **Do not implement either pricing until this is settled.** Neither can ship before paid posting
 exists at all.
 
+## A named thread is a ROOM; a unit is the TICKET (2026-08-17, owner)
+
+**What a token confers was the open question, and this closes it.** The owner's verdict on the
+old thread view: *"non-linear, not a chatroom, not a thread, and not coherent, so no point in
+presenting it like this."* A thread claimed under a `$Ticker` is now a room, and holding one unit
+of that token lets you read and post in it. The founder already holds one by having named the word,
+so nothing locks its own author out.
+
+**This is what makes the curve mean something.** A ticket's price rises as the room fills, an early
+ticket is worth what a late one costs, and the holder can sell their seat. That is the difference
+between this and a subscription, and the door says so out loud — a reader who thinks they are
+renting will not pay a price that goes up.
+
+**⚠ THE GATE IS AN ACCESS RULE FOR THIS APP, NOT SECRECY, and the code says so rather than implying
+otherwise.** Every post is inscribed on chain by design, so anyone indexing the chain can read a
+room's contents whether or not they hold a ticket. The two halves are enforced differently on
+purpose:
+
+- **Writing is cryptographic.** A reply goes through `createPost`, which verifies a signature, so
+  the key that must hold a ticket is one the author has proved they control.
+- **Reading is a product boundary.** A read gate keys on a pubkey nobody signed for, and holdings
+  are public (the leaderboard prints them). A signature round-trip per page open, to protect
+  content that is publicly readable on chain anyway, would be theatre with a real latency cost.
+
+**The board's own thread is never a room** — gating `$OpenBooks` would gate the front door. **A
+thread with no name is not a room either**, so ordinary conversation stays open.
+
+**Consequence worth knowing:** naming a new ticker inside another's thread creates a child token,
+and that is now a members-only act, since posting there requires the parent's ticket.
+
+## Ownership left `ticker_mentions` for its own ledger (2026-08-17)
+
+**One table was doing two jobs.** `ticker_mentions` recorded both that a post NAMED a word and who
+HOLDS the units that naming minted. The first is history and must never change — usage, corpus size
+and a word's definition are all drawn from it. The second moves the instant units can be sold.
+Selling by deleting or reassigning a mention row would have rewritten the record of who said what,
+on a board whose whole premise is that the record is permanent.
+
+So mentions are unchanged (`units` there means "this naming minted N units", forever) and
+`ticker_holdings` says who owns them now. **Supply is invariant under a transfer** — a sale moves
+units and never changes the total — which is asserted in tests rather than assumed, because the day
+it stops being true the market and the mint price start disagreeing.
+
+Every "how many units exist / does this person hold / who are the holders" query reads the ledger;
+every "how many posts said this word" query still reads mentions. Unattributed units (genesis posts
+carry no key) live under `pubkey = ''`, because a NULL is uncomparable in a primary key and would
+let the same unowned pile accumulate duplicate rows.
+
+## Resale is a LEDGER market, not a trustless swap — and the docs must keep saying so (2026-08-17)
+
+Holders can list units; buyers pay the seller **peer to peer** in a transaction the platform never
+touches, and the server then moves the ledger against those verified bytes. **Money is never held
+by us.** But a unit is a row, not an ordinal anybody can move themselves, so **applying the transfer
+is something the platform is trusted to do** — a real trust assumption, and one that must not be
+dressed up as trustless. A genuinely non-custodial swap needs the units on chain (OrdLock,
+researched in TOKENS.md, not built).
+
+**Availability is checked twice and that is not belt-and-braces.** At list time it keeps the book
+honest (a seller cannot offer the same ten units four times — `unitsListable` subtracts what is
+already on offer). At fill time it is the check that protects the BUYER, because holdings move in
+between.
+
+**The verification mirrors the paid-post path deliberately:** the txid is derived from the bytes and
+never accepted, the payment check is a FLOOR (an overpayment is accepted, because the buyer has
+already broadcast and rejecting would take their money for nothing), and `listing_fills.tx_id` is
+UNIQUE so one broadcast buys one fill.
+
+**Every signed message names every term it authorises** (`listing-message.ts`). A signature over
+`list:$OCCAM` alone would authorise any quantity at any price; the units, the price and — for a
+fill — the txid are all in the string.
+
+**⚠ THE ORDER IS THE UNCOMFORTABLE ONE and the UI must respect it.** A market purchase PAYS before
+the server can confirm the transfer, because there is nothing to verify until the bytes exist. So
+`buyListing` returns `spent: true | false` and the failure copy differs accordingly — a "try again,
+nothing was spent" after a real payment would invite somebody to pay twice.
+
+**No platform cut on resale yet.** Deliberate: the mint is where revenue is taken, and adding a
+second toll before anyone has traded would be pricing a market that does not exist.
+
 ## The mint curve IS the charge — REVERSES flat cost-plus (2026-08-16, owner: *"do the curve"*)
 
 **Posting is now billed the rising mint price of every `$Ticker` it names**, on top of the flat

@@ -68,7 +68,7 @@ function lastId(): number {
 }
 
 beforeEach(() => {
-  db.exec("DELETE FROM ticker_mentions");
+  db.exec("DELETE FROM ticker_mentions"); db.exec("DELETE FROM ticker_holdings");
   db.exec("DELETE FROM tickers");
   db.exec("DELETE FROM payouts");
   db.exec("DELETE FROM bootboard");

@@ -9,6 +9,7 @@ import { InstallPitch } from "@/components/InstallPitch";
 import { NymModal } from "@/components/NymModal";
 import { ProtectModal } from "@/components/ProtectModal";
 import { RestoreModal } from "@/components/RestoreModal";
+import { SellModal } from "@/components/SellModal";
 import { TransferTickerModal } from "@/components/TransferTickerModal";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { useInstallContext } from "@/contexts/InstallContext";
@@ -183,6 +184,12 @@ export function IdentityChip({
   const [transferSymbol, setTransferSymbol] = useState<string | null>(null);
   const [pubkeyCopied, setPubkeyCopied] = useState(false);
   const [holdingsExpanded, setHoldingsExpanded] = useState(false);
+  // The holding whose sell sheet is open, if any.
+  const [selling, setSelling] = useState<{ symbol: string; held: number } | null>(null);
+
+  // Only NAMED holdings are sellable: an unnamed post token is a 1-of-1 whose
+  // market is the post itself, not a room's ticket supply.
+  const namedHoldings = holdings.filter((h) => h.kind === "name" && h.mine > 0);
 
   // Deposit modal
   const [showDeposit, setShowDeposit] = useState(false);
@@ -738,6 +745,16 @@ export function IdentityChip({
         />
       )}
 
+      {selling && (
+        <SellModal
+          symbol={selling.symbol}
+          held={selling.held}
+          onClose={() => setSelling(null)}
+          onChanged={() => {
+            if (identity) void getHoldings(identity.pubkey).then(setHoldings);
+          }}
+        />
+      )}
       {transferSymbol && identity && (
         <TransferTickerModal
           open={transferSymbol !== null}
@@ -1943,10 +1960,29 @@ export function IdentityChip({
                       </button>
                     ))}
                   </div>
+                  {/* ⚠ THE LINE UNDER THIS LIST USED TO SAY "there's nowhere to
+                      trade them yet". There is now — so it says what a holding
+                      IS and offers the door out. A wallet that lists property
+                      with no way to sell it is a museum. */}
                   <p className="text-[10px] leading-relaxed text-zinc-600">
-                    One post, one token. Yours to keep &mdash; there&rsquo;s nowhere to trade them
-                    yet.
+                    One post, one token. Yours to keep &mdash; or to sell.
                   </p>
+                  {namedHoldings.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {namedHoldings.map((h) => (
+                        <button
+                          key={h.root_id}
+                          type="button"
+                          onClick={() =>
+                            setSelling({ symbol: h.path[h.path.length - 1], held: h.mine })
+                          }
+                          className="rounded-full border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 transition-colors hover:border-amber-400/40 hover:text-amber-300"
+                        >
+                          Sell ${titleCaseTicker(h.path[h.path.length - 1])}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </div>

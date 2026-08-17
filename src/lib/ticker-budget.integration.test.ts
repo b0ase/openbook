@@ -112,7 +112,7 @@ describe("ticker_meanings: meaning must be nullable", () => {
 describe("ticker budget", () => {
   beforeEach(() => {
     db.exec("DELETE FROM ticker_budgets");
-    db.exec("DELETE FROM ticker_mentions");
+    db.exec("DELETE FROM ticker_mentions"); db.exec("DELETE FROM ticker_holdings");
     db.exec("DELETE FROM ticker_meanings");
     db.exec("DELETE FROM posts");
   });
