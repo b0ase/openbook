@@ -6,9 +6,9 @@
   "scripts": {
     "compile": "npx scrypt-cli compile",
     "test": "npx scrypt-cli compile && mocha",
-    "deploy:testnet": "node -r ts-node/register scripts/deploy-testnet.ts",
-    "mint:testnet": "node -r ts-node/register scripts/mint-testnet.ts",
-    "genkey": "node -r ts-node/register scripts/genkey.ts"
+    "genkey": "node -r ts-node/register scripts/genkey.ts",
+    "deploy": "node -r ts-node/register scripts/deploy.ts",
+    "mint": "node -r ts-node/register scripts/mint.ts"
   },
   "dependencies": {
     "scrypt-ord": "^1.0.17",

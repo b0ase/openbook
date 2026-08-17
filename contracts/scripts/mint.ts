@@ -1,10 +1,15 @@
+import { loadEnv } from './env'
 import { Addr, bsv, ContractTransaction, DefaultProvider, TestWallet } from 'scrypt-ts'
 import { BSV20V2P2PKH } from 'scrypt-ord'
 import { Utils } from 'scrypt-ts'
 import { PayToMint } from '../src/contracts/payToMint'
 
 /**
- * Mint units from a deployed covenant. **TESTNET ONLY.**
+ * Mint units from a deployed covenant.
+ *
+ * ⚠ THE NETWORK COMES FROM THE KEY, never from a flag — see `deploy.ts`. On
+ * mainnet the spend is real (113 sats for the first unit) and has to be
+ * confirmed with `--mainnet`.
  *
  * ⚠ THIS IS THE TEST THAT ACTUALLY PROVES SOMETHING. The local suite proves the
  * script accepts and refuses the right transactions; only a real spend proves
@@ -15,23 +20,35 @@ import { PayToMint } from '../src/contracts/payToMint'
  * the wrong order was perfectly valid and completely invisible.
  *
  * Usage:
- *   npx ts-node scripts/mint-testnet.ts <deploy-txid> <amount>
+ *   npm run mint -- <deploy-txid> <amount> [--mainnet]
  */
 
+loadEnv()
+
 async function main() {
-    const txid = process.argv[2]
-    const amount = BigInt(process.argv[3] ?? '1')
-    if (!txid) throw new Error('usage: ts-node scripts/mint-testnet.ts <deploy-txid> <amount>')
+    const args = process.argv.slice(2)
+    const wantsMainnet = args.includes('--mainnet')
+    const positional = args.filter((a) => !a.startsWith('--'))
+    const txid = positional[0]
+    const amount = BigInt(positional[1] ?? '1')
+    if (!txid) throw new Error('usage: npm run mint -- <deploy-txid> <amount> [--mainnet]')
 
     const wif = process.env.PRIVATE_KEY
     if (!wif) throw new Error('PRIVATE_KEY is not set. Run: npm run genkey')
     const key = bsv.PrivateKey.fromWIF(wif)
-    if (key.network.name !== 'testnet') {
-        throw new Error('PRIVATE_KEY is not a testnet key. This script is testnet only.')
+    const isMainnet = key.network.name === 'livenet'
+    // Same two-signal rule as the deploy: the network is fixed by the key, and
+    // spending real money must additionally be typed.
+    if (isMainnet && !wantsMainnet) {
+        throw new Error('PRIVATE_KEY is a MAINNET key. Re-run with --mainnet if that is intended.')
     }
+    if (!isMainnet && wantsMainnet) {
+        throw new Error('--mainnet was passed but PRIVATE_KEY is a testnet key.')
+    }
+    const network = isMainnet ? bsv.Networks.mainnet : bsv.Networks.testnet
 
     PayToMint.loadArtifact()
-    const signer = new TestWallet(key, new DefaultProvider({ network: bsv.Networks.testnet }))
+    const signer = new TestWallet(key, new DefaultProvider({ network }))
     const provider = signer.provider
     if (!provider) throw new Error('no provider — cannot read the deployed contract')
 
@@ -43,7 +60,7 @@ async function main() {
     const instance = PayToMint.fromTx(raw as unknown as bsv.Transaction, 0)
     await instance.connect(signer)
 
-    const minter = Addr(key.toAddress().toObject().hash as string)
+    const minter = Addr(key.toAddress(network).toObject().hash as string)
     const minted = instance.max - instance.supply
     const cost = instance.costOf(minted, amount)
     console.log(`minting ${amount} — ${cost} sats to the treasury`)
@@ -103,8 +120,9 @@ async function main() {
     console.log(`minted   ${amount}`)
     console.log(`  txid   ${tx.id}`)
     console.log('')
+    const explorer = isMainnet ? 'https://whatsonchain.com' : 'https://test.whatsonchain.com'
     console.log('⚠ MINED IS NOT INDEXED. Check BOTH:')
-    console.log(`  https://test.whatsonchain.com/tx/${tx.id}`)
+    console.log(`  ${explorer}/tx/${tx.id}`)
     console.log(`  ordinals indexer — the units at output 1 must show as ${amount} of the token`)
 }
 
