@@ -10,7 +10,7 @@
  * test is the door and nothing else.
  */
 
-import { PrivateKey } from "@bsv/sdk";
+import { PrivateKey, PublicKey } from "@bsv/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/bsv/onchain", () => ({
@@ -172,6 +172,36 @@ describe("the room gate", () => {
 
     // A signed-out reader is treated the same way.
     expect(await getThread(rootId, null)).toHaveLength(1);
+  });
+
+  /**
+   * ⚠ THE BUG THE OWNER HIT ON HIS OWN THREAD. A protected identity is LOCKED by
+   * default — the site is built to read normally without unlocking — and a
+   * locked wallet has no pubkey, only an address. Keying the door on pubkeys
+   * alone therefore locked every protected holder out of rooms they own.
+   */
+  it("recognises a LOCKED holder by their address alone", async () => {
+    const founder = who();
+    await post(founder, "starting $Occam");
+    const rootId = lastId();
+    await post(founder, "a message inside", rootId);
+
+    const address = PublicKey.fromString(founder.pubkey).toAddress().toString();
+    // No pubkey — exactly what the client has when the key is encrypted.
+    expect(await getThread(rootId, null, address)).toHaveLength(2);
+    expect((await getRoomAccess(rootId, null, address)).held).toBe(1);
+  });
+
+  it("does not let an unknown address in", async () => {
+    // The map only recognises addresses that have posted; a made-up one is a
+    // stranger, not a holder.
+    const founder = who();
+    await post(founder, "starting $Occam");
+    const rootId = lastId();
+    await post(founder, "members only", rootId);
+
+    const strangerAddress = PublicKey.fromString(who().pubkey).toAddress().toString();
+    expect(await getThread(rootId, null, strangerAddress)).toHaveLength(1);
   });
 
   it("sends the whole conversation to a holder", async () => {

@@ -424,6 +424,24 @@ export function preWarmBsvSdk(): void {
  * — name is stored in plaintext so we can show it in the chip even when locked.
  * Returns null if no encrypted identity exists or the field is missing.
  */
+/**
+ * The ADDRESS of a locked identity, from the encrypted store's plaintext
+ * wrapper.
+ *
+ * ⚠ THE SAME REASON THE NAME IS THERE, EXTENDED TO READ ACCESS. A protected
+ * identity is LOCKED by default and the site is designed to read normally in
+ * that state — so anything gated on "who is this" has to work without the key.
+ * The address is a public identifier (it is in every transaction they have made)
+ * and it is already stored here; the server resolves it to a pubkey through
+ * `identity_addresses`.
+ *
+ * Read access only. Signing still needs the decrypted key, so this cannot be
+ * used to write anything.
+ */
+export function getStoredAddress(): string | null {
+  return getEncryptedStoreAddress();
+}
+
 export function getStoredAnonName(): string | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(ENCRYPTED_KEY);

@@ -610,6 +610,43 @@ export function backfillTickerMentions(database: Db): void {
  * PRIMARY KEY (SQLite treats NULLs as distinct) and would let the same unowned
  * pile accumulate duplicate rows.
  */
+/**
+ * Which pubkey an address belongs to.
+ *
+ * ⚠ THIS EXISTS BECAUSE A LOCKED WALLET HAS NO PUBKEY (owner, 2026-08-17). A
+ * protected identity keeps its WIF encrypted and its ADDRESS in the clear, and
+ * locked is the DEFAULT state — the site is deliberately designed to look and
+ * read normally without unlocking. Holdings are keyed on pubkey, so a room gate
+ * that only understood pubkeys treated every locked holder as a stranger and
+ * showed them a paywall for a room they own. The owner hit exactly that on his
+ * own thread.
+ *
+ * The mapping only goes one way by derivation (pubkey → address), so it has to
+ * be recorded. It is written on every signed post, where the pubkey is already
+ * verified, and it is PUBLIC data — an address and its pubkey are both on chain
+ * in any transaction that has spent.
+ *
+ * ⚠ READ ACCESS ONLY. Writing still requires a signature, so nothing here
+ * loosens what an unlocked key is needed for.
+ */
+export function applyIdentityAddressMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS identity_addresses (
+      address TEXT PRIMARY KEY,
+      pubkey  TEXT NOT NULL
+    )
+  `);
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_identity_addresses_pubkey ON identity_addresses(pubkey)"
+  );
+  // `nyms` already carries both for anyone who claimed a name — seed from it so
+  // named identities work on the first request rather than after their next post.
+  database.exec(`
+    INSERT OR IGNORE INTO identity_addresses (address, pubkey)
+    SELECT address, pubkey FROM nyms WHERE address IS NOT NULL AND address <> ''
+  `);
+}
+
 export function applyHoldingsMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS ticker_holdings (
@@ -944,6 +981,8 @@ try {
   applyUploadAuditMigration(db);
   applyAddendumMigration(db);
   applyNymMigration(db);
+  // AFTER nyms: it seeds the address map from the names already claimed.
+  applyIdentityAddressMigration(db);
   applyReservedTickerMigration(db);
 
   // Boot grants — free boot tracking per user (no custody)

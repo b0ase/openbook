@@ -7,6 +7,7 @@ import { PostForm } from "@/app/PostForm";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import type { RoomAccess } from "@/lib/room-access";
 import { titleCaseTicker } from "@/lib/ticker";
+import { getStoredAddress } from "@/services/bsv/identity";
 import type { Post } from "@/types";
 
 /**
@@ -45,13 +46,13 @@ export function PermalinkThread({ post }: { post: Post }) {
   }, [post.id]);
 
   useEffect(() => {
-    void getThread(rootId, identity?.pubkey ?? null)
+    void getThread(rootId, identity?.pubkey ?? null, getStoredAddress())
       .then(setThread)
       .catch(() => setThread([]));
   }, [rootId, identity?.pubkey]);
 
   useEffect(() => {
-    void getRoomAccess(rootId, identity?.pubkey ?? null)
+    void getRoomAccess(rootId, identity?.pubkey ?? null, getStoredAddress())
       // Unknown stays LOCKED here rather than open: a failed lookup on a page a
       // stranger reached by link must not fall open.
       .then(setAccess)

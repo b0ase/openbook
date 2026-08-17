@@ -10,6 +10,7 @@ import type { RoomAccess } from "@/lib/room-access";
 import { formatShare } from "@/lib/share";
 import { distinctTickers, isRootTicker, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
+import { getStoredAddress } from "@/services/bsv/identity";
 import type { Post } from "@/types";
 import {
   getRoomAccess,
@@ -128,7 +129,10 @@ export function ThreadView({
   const refresh = useCallback(async () => {
     // The viewer decides what comes back — a room sends its messages only to
     // somebody holding a ticket. See getThread.
-    const thread = await getThread(rootId, identity?.pubkey ?? null);
+    // ⚠ THE ADDRESS TOO. A protected identity is LOCKED by default, and a locked
+    // wallet has no pubkey — so passing only that turned every locked holder
+    // into a stranger at a room they own. See `getStoredAddress`.
+    const thread = await getThread(rootId, identity?.pubkey ?? null, getStoredAddress());
     setPosts(thread);
     setLoading(false);
   }, [rootId, identity?.pubkey]);
@@ -176,13 +180,13 @@ export function ThreadView({
   // signing in as somebody who already holds one, has to open the door without
   // a reload.
   const refreshAccess = useCallback(async () => {
-    const next = await getRoomAccess(rootId, identity?.pubkey ?? null);
+    const next = await getRoomAccess(rootId, identity?.pubkey ?? null, getStoredAddress());
     setAccess(next);
     // The position is only meaningful to somebody who is IN — and asking for it
     // at the door would be a query per non-holder for a card they never see.
     setPosition(
-      next.symbol && next.held > 0 && identity?.pubkey
-        ? await getRoomPosition(next.symbol, identity.pubkey)
+      next.symbol && next.held > 0
+        ? await getRoomPosition(next.symbol, identity?.pubkey ?? null, getStoredAddress())
         : null
     );
   }, [rootId, identity?.pubkey]);
@@ -303,12 +307,17 @@ export function ThreadView({
   const accessUnknown = access === null;
 
   /**
-   * ⚠ THE ROOT POST STAYS VISIBLE, THE REPLIES DO NOT. The root is already
-   * public — it is in the main feed, and it is what somebody clicked to get
-   * here — so hiding it would only make the door meaningless by hiding what is
-   * behind it. The conversation is the thing the ticket buys.
+   * ⚠ A LOCKED ROOM SHOWS THE DOOR AND NOTHING ELSE (owner, 2026-08-17).
+   *
+   * This used to keep the root post visible, on the reasoning that it is public
+   * anyway — it is in the feed, and it is what somebody tapped to get here. The
+   * owner tested it from a browser with no ticket and the answer was simply
+   * *"I can still see a post by $B0ase — and I shouldn't be able to."* He is
+   * right about the surface even though the root really is public elsewhere: a
+   * door with the room's first message printed under it does not read as a
+   * door, it reads as a paywall somebody forgot to finish.
    */
-  const visiblePosts = locked || accessUnknown ? posts.filter((p) => p.parent_id === null) : posts;
+  const visiblePosts = locked || accessUnknown ? [] : posts;
 
   const replyCount = Math.max(0, posts.length - 1);
 
@@ -392,11 +401,19 @@ export function ThreadView({
                 )}
               </h1>
               <p className="text-[11px] text-zinc-500 tracking-wide mt-0.5">
+                {/* ⚠ SAY NOTHING RATHER THAN SOMETHING FALSE. A non-holder is
+                    sent the root alone, so this counted to zero and printed
+                    "Nothing said here yet" over a room that had a conversation
+                    in it. The count is not a secret — but a WRONG count is worse
+                    than no count, and it is the door's job to say the room is
+                    shut, not to describe what is inside. */}
                 {loading
                   ? "Loading…"
-                  : replyCount === 0
-                    ? "Nothing said here yet"
-                    : `${replyCount} ${replyCount === 1 ? "message" : "messages"}`}
+                  : locked || accessUnknown
+                    ? "Members only"
+                    : replyCount === 0
+                      ? "Nothing said here yet"
+                      : `${replyCount} ${replyCount === 1 ? "message" : "messages"}`}
                 {/* Your stake in the thread you are looking at. Shown only when you
                   actually hold some: "0%" on every thread you have never posted
                   in would be noise on most of them, and would read as a loss

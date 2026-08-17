@@ -2,6 +2,32 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-17 (locked out of your own room; the door showed the room)
+
+Two bugs the owner found by testing from both sides.
+
+- **A LOCKED WALLET WAS A STRANGER.** He could not see the replies in `$mandala`, a room he owns
+  100% of (the leaderboard confirmed 1 unit, his). Cause: a protected identity keeps its WIF
+  ENCRYPTED and its ADDRESS in the clear, and **locked is the default state** — the site is
+  deliberately built to read normally without unlocking. Holdings are keyed on pubkey, so gating on
+  pubkey alone turned every locked holder into a stranger at their own door.
+  - Fix: `identity_addresses(address → pubkey)`, written on every signed post (where the pubkey is
+    already verified) and seeded from `nyms`, which already carried both. `getStoredAddress()`
+    reads the locked store; `resolveViewer` accepts either identifier.
+  - **READ ACCESS ONLY.** Both are public identifiers and posting still requires a signature, so
+    nothing here loosens what an unlocked key is needed for. An address that has never posted is
+    still a stranger — tested.
+- **THE DOOR SHOWED THE ROOM'S FIRST POST.** From a fresh browser with no ticket he could still
+  read `$B0ase`'s root. It IS public (it is in the feed) — but he is right about the surface: a
+  door with the room's opening message printed under it reads as an unfinished paywall. A locked
+  room now shows the card and nothing else.
+- **The header was also lying.** A non-holder is sent the root alone, so the count came to zero and
+  printed "Nothing said here yet" over a room with a conversation in it. It says "Members only"
+  now — a wrong count is worse than no count.
+- **Note on the vanished preview:** the reply he saw quoted in the feed ("Ok I'm in") disappeared
+  because the previous commit stopped the feed printing room content. That was the fix landing, not
+  a second fault.
+
 ## 2026-08-17 (the door had a hole in the wall beside it)
 
 - **Category: security fix, feature, UX.** Owner tested a room and got in without a ticket. He was

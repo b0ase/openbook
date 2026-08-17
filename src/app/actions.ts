@@ -349,6 +349,17 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
     addendum: isAddendum,
   });
 
+  /**
+   * Remember which address this pubkey owns.
+   *
+   * ⚠ SO A LOCKED WALLET CAN STILL BE RECOGNISED. A protected identity keeps its
+   * address in the clear and its key encrypted, and locked is the default state
+   * — so without this map, every locked holder looks like a stranger at a room
+   * they own. Best-effort and never throws into the post path: the post is the
+   * durable fact, this is a convenience index. See `identity_addresses`.
+   */
+  void rememberAddressFor(pubkey);
+
   // Claim any `$Ticker` in the post — FIRST CLAIM WINS, enforced by the PRIMARY
   // KEY (see applyTickerMigration). Synchronous and inside the request, unlike
   // the on-chain log and the unfurl: those are caches of work that can be redone,
@@ -2028,11 +2039,15 @@ export async function getAddenda(postId: number): Promise<Post[]> {
  * cannot be bypassed is SPEAKING: `createPost` checks the same rule against a
  * signature-verified key.
  */
-export async function getRoomAccess(rootId: number, pubkey: string | null): Promise<RoomAccess> {
+export async function getRoomAccess(
+  rootId: number,
+  pubkey: string | null,
+  address?: string | null
+): Promise<RoomAccess> {
   if (!Number.isInteger(rootId) || rootId <= 0) {
     return { symbol: null, gated: false, held: 0, priceSats: 0 };
   }
-  return roomAccess(rootId, typeof pubkey === "string" && pubkey ? pubkey : null);
+  return roomAccess(rootId, resolveViewer(pubkey, address));
 }
 
 /**
@@ -2281,6 +2296,39 @@ export async function getCheapestAsks(symbols: string[]): Promise<Record<string,
   return out;
 }
 
+/** Record `pubkey`'s address, if it is not already known. Never throws. */
+async function rememberAddressFor(pubkey: unknown): Promise<void> {
+  if (typeof pubkey !== "string" || !pubkey) return;
+  try {
+    const { PublicKey } = await getBsvSdk();
+    const address = PublicKey.fromString(pubkey).toAddress().toString();
+    db.prepare("INSERT OR IGNORE INTO identity_addresses (address, pubkey) VALUES (?, ?)").run(
+      address,
+      pubkey
+    );
+  } catch {
+    // A convenience index, not a durable fact. A failure here costs a locked
+    // reader one unlock, not their post.
+  }
+}
+
+/**
+ * The key a viewer is asking as.
+ *
+ * ⚠ AN ADDRESS IS ACCEPTED BECAUSE A LOCKED WALLET HAS ONE AND A PUBKEY IT DOES
+ * NOT. The pubkey wins when present; otherwise the address is resolved through
+ * the map. Both are public identifiers, and this decides READ access only —
+ * posting still needs a signature, so nothing here can be used to write.
+ */
+function resolveViewer(pubkey?: string | null, address?: string | null): string | null {
+  if (typeof pubkey === "string" && pubkey) return pubkey;
+  if (typeof address !== "string" || !address) return null;
+  const row = db.prepare("SELECT pubkey FROM identity_addresses WHERE address = ?").get(address) as
+    | { pubkey: string }
+    | undefined;
+  return row?.pubkey ?? null;
+}
+
 export interface RoomPosition {
   symbol: string;
   /** Units held right now. */
@@ -2308,9 +2356,13 @@ export interface RoomPosition {
  */
 export async function getRoomPosition(
   symbol: string,
-  pubkey: string | null
+  pubkeyOrNull: string | null,
+  address?: string | null
 ): Promise<RoomPosition | null> {
   const canonical = canonicalTicker(symbol);
+  // Resolved the same way the door is, so a locked holder sees their own
+  // position rather than nothing.
+  const pubkey = resolveViewer(pubkeyOrNull, address);
   if (!isValidTicker(canonical) || !pubkey) return null;
 
   const minted = db
@@ -2356,7 +2408,11 @@ export async function getPostById(id: number): Promise<Post | null> {
   return row ?? null;
 }
 
-export async function getThread(rootId: number, viewer?: string | null): Promise<Post[]> {
+export async function getThread(
+  rootId: number,
+  viewer?: string | null,
+  address?: string | null
+): Promise<Post[]> {
   if (!Number.isInteger(rootId) || rootId <= 0) return [];
 
   /**
@@ -2377,7 +2433,7 @@ export async function getThread(rootId: number, viewer?: string | null): Promise
    * that the ordinary path no longer hands a room's contents to people who have
    * not paid, which is a different and much lower bar than "cannot be defeated".
    */
-  if (!mayEnter(rootId, typeof viewer === "string" && viewer ? viewer : null)) {
+  if (!mayEnter(rootId, resolveViewer(viewer, address))) {
     const root = db.prepare(`${POST_SELECT} WHERE p.id = ?`).get(rootId) as Post | undefined;
     return root ? [root] : [];
   }
