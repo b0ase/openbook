@@ -184,9 +184,28 @@ async function main() {
      * happened: the provider hung up having successfully broadcast, and the only
      * way to know was to read the chain.
      */
-    let tx: bsv.Transaction
+    /**
+     * ⚠ `deployToken()`, NOT `deploy(1)` — AND THE DIFFERENCE IS THE WHOLE THING.
+     *
+     * The first attempt called the generic `SmartContract.deploy(1)`, which
+     * creates an output carrying the locking script and nothing else. It landed
+     * (txid `5188220b…`, ~12,000 sats) and was **not a token**: GorillaPool
+     * returned `Not Found` for `bsv20/id/<outpoint>` and saw an inscription only
+     * on the change output. `deployToken()` prepends the BSV-21 `deploy+mint`
+     * inscription with `Ordinal.createDeployV2` before deploying, and an indexer
+     * keys on exactly that envelope, at the START of the script.
+     *
+     * This is the second time this project has paid to learn that **landing is
+     * not being recognised** — the first was an inscription envelope built in
+     * the wrong order, perfectly valid and completely invisible. Both were only
+     * ever going to be caught by asking an indexer, which is why the verify step
+     * is not optional.
+     *
+     * It returns the OUTPOINT, which is the token's permanent id.
+     */
+    let outpoint: string
     try {
-        tx = await instance.deploy(1)
+        outpoint = await instance.deployToken()
     } catch (e) {
         console.error('')
         console.error('Deploy failed — but a transaction MAY still have been broadcast.')
@@ -197,16 +216,18 @@ async function main() {
         throw e
     }
 
+    const txid = outpoint.split('_')[0]
     console.log(`deployed  $${symbol}`)
-    console.log(`  txid     ${tx.id}`)
-    console.log(`  outpoint ${tx.id}_0`)
+    console.log(`  txid     ${txid}`)
+    console.log(`  outpoint ${outpoint}`)
     console.log(`  treasury ${address}`)
     console.log(`  supply   ${MAX_SUPPLY} at ${BASE_PRICE} sats base`)
     console.log('')
     console.log('⚠ LANDING IS NOT THE SAME AS BEING RECOGNISED. Check both:')
-    console.log(`  ${explorer}/tx/${tx.id}`)
+    console.log(`  ${explorer}/tx/${txid}`)
     if (isMainnet) {
-        console.log(`  https://ordinals.gorillapool.io/api/inscriptions/txid/${tx.id}`)
+        console.log(`  https://ordinals.gorillapool.io/api/bsv20/id/${outpoint}`)
+        console.log('  ⚠ the SECOND link is the one that matters — it must NOT say "Not Found".')
     }
 }
 
