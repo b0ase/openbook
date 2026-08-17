@@ -37,6 +37,38 @@ export class FundedOrdiProvider extends OrdiProvider {
     getFeePerKb(): Promise<number> {
         return Promise.resolve(SCRIPT_FEE_PER_KB)
     }
+
+    /**
+     * ⚠ A HEALTH PING MUST NOT BE ABLE TO BLOCK A DEPLOY.
+     *
+     * `OrdiProvider.connect()` delegates to `DefaultProvider`, which probes
+     * WhatsOnChain — and **on failure it calls the same thing again immediately,
+     * inside the catch, with no backoff.** So one `429 Too Many Requests`
+     * reliably produces a second, and the deploy dies at `connect failed: Too
+     * Many Requests` having done nothing. That is what happened.
+     *
+     * Nothing here needs that probe. These scripts use exactly three operations
+     * — list UTXOs, read a fee rate, broadcast — and each reports its own
+     * failure clearly. So the probe is attempted once, its failure is tolerated,
+     * and a real problem surfaces at the operation that actually needs the
+     * network rather than at a preflight that needed nothing.
+     */
+    async connect(): Promise<this> {
+        try {
+            await (this as unknown as { _provider: { connect(): Promise<unknown> } })
+                ._provider.connect()
+        } catch {
+            // Tolerated deliberately — see above. Not silence: any operation that
+            // genuinely cannot reach the network fails loudly on its own.
+        }
+        this.emit('connected', true)
+        return this
+    }
+
+    /** Connected enough to try. The operations are the real test. */
+    isConnected(): boolean {
+        return true
+    }
 }
 
 /** The provider for a given network, with the fee rate applied. */

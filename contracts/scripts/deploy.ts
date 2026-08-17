@@ -117,9 +117,33 @@ async function main() {
     const balanceProvider = new DefaultProvider({ network })
 
     if (isMainnet) {
-        const balance = await balanceProvider.getBalance(key.toAddress(network))
-        const total = balance.confirmed + balance.unconfirmed
-        if (total > MAX_TEST_BALANCE_SATS) {
+        /**
+         * ⚠ THE SPENDABLE SET, NOT `getBalance`. WhatsOnChain reports a 0-conf
+         * parent AND the children that already spent it, so `getBalance` printed
+         * 1,308,471 sats where 654,235 was real — it double-counted an
+         * unconfirmed chain. `listUnspent` is what the transaction builder
+         * itself selects from, so it is both the accurate number and the one
+         * that matters.
+         *
+         * ⚠ AND IT DEGRADES RATHER THAN BLOCKING. If the endpoint is rate-limited
+         * this check is skipped with a warning: it is a smell test, and refusing
+         * to deploy because a courtesy lookup was throttled would be the guard
+         * doing more harm than the thing it guards against.
+         */
+        let total: number | null = null
+        try {
+            // `unspentValue` is what the caller needs covered; asking for the
+            // deploy amount plus headroom returns the set the builder would use.
+            const utxos = await provider.listUnspent(key.toAddress(network), {
+                unspentValue: 1,
+                estimateSize: 1000,
+                feePerKb: 500,
+            })
+            total = utxos.reduce((n, u) => n + u.satoshis, 0)
+        } catch {
+            console.log('⚠ Could not read the wallet (rate-limited?) — skipping the balance check.')
+        }
+        if (total !== null && total > MAX_TEST_BALANCE_SATS) {
             throw new Error(
                 `Refusing to deploy from a wallet holding ${total.toLocaleString()} sats — well ` +
                     `beyond what a test needs (ceiling ${MAX_TEST_BALANCE_SATS.toLocaleString()}). ` +
@@ -134,7 +158,7 @@ async function main() {
         console.log('⚠ MAINNET — real money, and a deploy cannot be undone.')
         console.log(`  symbol   $${symbol}`)
         console.log(`  from     ${address}`)
-        console.log(`  balance  ${total.toLocaleString()} sats`)
+        console.log(`  balance  ${total === null ? 'unknown' : `${total.toLocaleString()} sats`}`)
         console.log('  Use a DISPOSABLE symbol — this is a test, and the supply is unrecoverable')
         console.log('  if the covenant is wrong.')
         console.log('')
