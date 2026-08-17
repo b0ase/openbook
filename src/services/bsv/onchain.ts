@@ -90,3 +90,58 @@ export async function logPostOnChain(postData: PostData): Promise<string | null>
     return null;
   }
 }
+
+/**
+ * Record a room entry on chain — the receipt for a burned ticket.
+ *
+ * ⚠ THIS IS WHAT MAKES MEMBERSHIP CHECKABLE BY SOMEBODY WHO DOES NOT TRUST US.
+ * Entry destroys a unit, so a holdings query can no longer prove a member paid;
+ * `room_entries` can, but only to whoever believes our database. This record is
+ * the same fact written somewhere we cannot edit, naming the room, the member and
+ * what the door charged.
+ *
+ * ⚠ BEST-EFFORT, AND THE MEMBERSHIP IS NOT. The ticket is already destroyed by the
+ * time this runs, so a failed broadcast must not fail the entry — that would take
+ * somebody's ticket and give them nothing. Same trade `logPostOnChain` makes, for
+ * the same reason, with one difference worth knowing: **there is no sweep for
+ * these yet.** A post that fails to anchor is retried by `anchor-sweep.ts`
+ * because `tx_id IS NULL` is a queue; a room entry has no equivalent, so a
+ * failure here means that entry is recorded only in SQLite. Acceptable while the
+ * database is the authority anyway (see DECISIONS.md "Entry BURNS the ticket"),
+ * and the obvious thing to add when it stops being.
+ *
+ * ⚠ NEW FIELDS ONLY, SO `v` STAYS 1 — per the reader contract in
+ * `lib/onchain-record.ts`. `type: "room_entry"` is the discriminator; a reader
+ * that does not know it ignores the record rather than choking on it.
+ */
+export async function logRoomEntryOnChain(entry: {
+  symbol: string;
+  /** The member's pubkey — the same key that signed for the burn. */
+  member: string;
+  /** What a ticket cost at the moment the door was passed. */
+  paidSats: number;
+}): Promise<string | null> {
+  try {
+    const payload = onchainRecord("room_entry", {
+      symbol: entry.symbol,
+      member: entry.member,
+      paid: entry.paidSats,
+      // The unit is gone, and saying so explicitly is the point of the record —
+      // a reader must not mistake this for a transfer to some burn address.
+      burned: 1,
+    });
+
+    const opReturnScript = new Script();
+    opReturnScript.writeOpCode(OP.OP_FALSE);
+    opReturnScript.writeOpCode(OP.OP_RETURN);
+    opReturnScript.writeBin(Array.from(new TextEncoder().encode(payload)));
+
+    const result = await buildAndBroadcast([
+      { lockingScript: opReturnScript as LockingScript, satoshis: 0 },
+    ]);
+    return result.status === "success" ? result.txid : null;
+  } catch (e) {
+    console.error("OpenBook: room-entry logging failed", e);
+    return null;
+  }
+}

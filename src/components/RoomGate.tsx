@@ -12,15 +12,22 @@ import { titleCaseTicker } from "@/lib/ticker";
 /**
  * The door of a room.
  *
- * ⚠ WHAT IT IS FOR. A named thread is a room and one unit of its token is the
- * ticket (see `room-access.ts`). This is what somebody without one sees: the
- * price, a way to buy, and the second option — the market — which is what stops
- * the door being the only seller.
+ * ⚠ WHAT IT IS FOR. A named thread is a room and a unit of its token is the
+ * ticket — BURNED on the way in (see `room-access.ts`). This is what somebody
+ * outside sees: the price, a way to buy, and the market as a second seller so the
+ * door is not the only one.
  *
- * ⚠ IT SAYS WHAT A TICKET IS. "Yours to keep, and yours to sell" is not a
- * flourish: it is the difference between this and a subscription, and it is the
- * reason the price is worth paying. A reader who thinks they are renting will
- * not buy at a price that rises.
+ * ⚠ TWO STATES, BECAUSE BUYING AND ENTERING ARE NOW DIFFERENT ACTS. Somebody with
+ * no ticket is being sold one. Somebody who HOLDS one is being asked to spend it,
+ * and told plainly that it will be destroyed — a door that quietly consumed
+ * property on a tap would be the interface taking a decision that is not its own.
+ *
+ * ⚠ THE OLD PITCH HAD TO GO, AND THE HONEST ONE IS NOT WEAKER. This card used to
+ * say a ticket was *"yours to keep, and yours to sell"*. Under burn-on-entry that
+ * is false for a ticket you actually use: you keep the membership, not the token.
+ * What remains true, and is the real argument, is that entry is bought ONCE and
+ * lasts — and that the price only goes up, so the cheapest this room will ever be
+ * is now. A subscription has neither property.
  *
  * Buying goes through the SAME `BuyConfirm` the compose box uses, so the price
  * shown at a door and the price shown for `/buy 1 $X` cannot drift apart — and
@@ -30,6 +37,7 @@ export function RoomGate({
   access,
   onBuy,
   onBuyListing,
+  onEnter,
   onClose,
 }: {
   access: RoomAccess;
@@ -37,6 +45,8 @@ export function RoomGate({
   onBuy: (text: string) => void;
   /** Buys an EXISTING ticket from a holder, at their price. */
   onBuyListing: (listingId: number) => void;
+  /** Burns one held ticket and admits the reader. Destroys a unit. */
+  onEnter: () => void;
   onClose: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -103,7 +113,15 @@ export function RoomGate({
             <span className="text-amber-400">${titleCaseTicker(symbol)}</span>
           </h2>
           <p className="mt-2 text-[13px] leading-relaxed text-zinc-400">
-            One unit of this token is the ticket in. Hold one and you can read and post here.
+            {access.held > 0 ? (
+              <>
+                You hold{" "}
+                {access.held === 1 ? "a ticket" : `${access.held.toLocaleString()} tickets`}.
+                Burning one lets you in for good — the ticket is gone, the seat is yours.
+              </>
+            ) : (
+              <>A ticket gets you in, and is burned at the door. Entry is once, and permanent.</>
+            )}
           </p>
 
           <div className="mt-4 flex items-baseline gap-2 border-t border-zinc-800/80 pt-4">
@@ -118,51 +136,73 @@ export function RoomGate({
             )}
           </div>
 
-          {/* ⚠ THE PROPERTY, NOT THE ACCESS, IS THE PITCH. A ticket that rises
-              with the room and can be sold on is an asset; the same money spent
-              on a subscription is gone. Somebody deciding whether to pay a price
-              that goes UP needs to know which of those they are being offered. */}
+          {/* ⚠ WHAT IS STILL TRUE AFTER BURNING, AND ONLY THAT. The old line here
+              promised a ticket was "yours to keep, and yours to sell", which a
+              burned one is not. The surviving argument is better anyway: the
+              price only rises, so today is the cheapest this room will ever be,
+              and what you buy is permanent rather than rented. An UNUSED ticket
+              is still property and still sellable — said where it applies. */}
           <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
-            The price rises as the room fills, so a ticket bought now is worth what a later one
-            costs. It is yours to keep, and yours to sell.
+            The price rises as the room fills, so this is the cheapest entry will ever be. You pay
+            once and you are in for good — no renewal, nothing to keep paying.
+            {access.held > 1 && " Tickets you do not burn stay yours to sell."}
           </p>
 
-          {/* ⚠ THE CHEAPER OPTION LEADS. A buyer offered two prices should be
-              shown the lower one first; anything else is the interface working
-              for the house. An ask ABOVE the mint price is still a real offer —
-              it just is not the one to lead with, because minting is cheaper
-              today. */}
-          {ask && ask.priceSats < access.priceSats && (
+          {access.held > 0 ? (
+            /* ⚠ THE ONLY BUTTON THAT DESTROYS SOMETHING, AND IT SAYS SO. Burning
+               is irreversible and the label carries the word rather than hiding
+               it behind "Enter" — somebody should not learn what happened from
+               their balance afterwards. */
             <button
               type="button"
               onClick={() => {
                 if (!requireIdentity()) return;
-                onBuyListing(ask.id);
+                onEnter();
               }}
               className="mt-4 w-full rounded-lg bg-amber-500 py-2.5 text-[13px] font-medium text-black transition-colors hover:bg-amber-400"
             >
-              Buy from a holder — {ask.priceSats.toLocaleString()} sats
+              Burn a ticket and come in
             </button>
-          )}
+          ) : (
+            <>
+              {/* ⚠ THE CHEAPER OPTION LEADS. A buyer offered two prices should be
+                  shown the lower one first; anything else is the interface working
+                  for the house. An ask ABOVE the mint price is still a real offer —
+                  it just is not the one to lead with, because minting is cheaper
+                  today. */}
+              {ask && ask.priceSats < access.priceSats && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!requireIdentity()) return;
+                    onBuyListing(ask.id);
+                  }}
+                  className="mt-4 w-full rounded-lg bg-amber-500 py-2.5 text-[13px] font-medium text-black transition-colors hover:bg-amber-400"
+                >
+                  Buy from a holder — {ask.priceSats.toLocaleString()} sats
+                </button>
+              )}
 
-          <button
-            type="button"
-            onClick={() => {
-              // Same gate every spending action uses — a locked reader is asked
-              // to sign in rather than shown a purchase that would fail.
-              if (!requireIdentity()) return;
-              setConfirming(true);
-            }}
-            className={`mt-3 w-full rounded-lg py-2.5 text-[13px] font-medium transition-colors ${
-              ask && ask.priceSats < access.priceSats
-                ? "border border-zinc-700 text-zinc-300 hover:border-zinc-500"
-                : "bg-amber-500 text-black hover:bg-amber-400"
-            }`}
-          >
-            {ask && ask.priceSats < access.priceSats
-              ? `Mint a new one — ${access.priceSats.toLocaleString()} sats`
-              : "Buy a ticket"}
-          </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // Same gate every spending action uses — a locked reader is asked
+                  // to sign in rather than shown a purchase that would fail.
+                  if (!requireIdentity()) return;
+                  setConfirming(true);
+                }}
+                className={`mt-3 w-full rounded-lg py-2.5 text-[13px] font-medium transition-colors ${
+                  ask && ask.priceSats < access.priceSats
+                    ? "border border-zinc-700 text-zinc-300 hover:border-zinc-500"
+                    : "bg-amber-500 text-black hover:bg-amber-400"
+                }`}
+              >
+                {ask && ask.priceSats < access.priceSats
+                  ? `Mint a new one — ${access.priceSats.toLocaleString()} sats`
+                  : "Buy a ticket"}
+              </button>
+            </>
+          )}
 
           {/* Who already holds it — the roster a resale comes out of. */}
           <a
@@ -187,6 +227,15 @@ export function RoomGate({
 
 /**
  * Your position in a room you are already in.
+ *
+ * ⚠ A MEMBER'S BALANCE IS ZERO BY CONSTRUCTION, so this card cannot lead with
+ * holdings the way it did. The ticket was burned at the door; what a member has is
+ * a seat, plus whatever spare stock they never spent. So the headline is now the
+ * membership — what entry cost against what it costs today, which is the
+ * comparison the owner asked this card to make in the first place. The holdings
+ * rows stay, and simply say "none" for the ordinary member who spent their only
+ * ticket, because that is the truth and hiding it would make the burn feel like a
+ * loss nobody acknowledged.
  *
  * ⚠ A HOLDER WANTS THE NUMBERS, NOT A PRICE TAG (owner, 2026-08-17). This was a
  * one-line strip showing the entry price. What somebody sitting on a position
@@ -229,42 +278,51 @@ export function RoomPosition({
         <span className="text-[13px] font-medium text-amber-400">
           ${titleCaseTicker(position.symbol)}
         </span>
-        <span className="font-mono text-[13px] tabular-nums text-white">
-          {position.units.toLocaleString()}
-        </span>
-        <span className="text-[11px] text-zinc-500">
-          {position.units === 1 ? "ticket" : "tickets"}
-        </span>
-        <button
-          type="button"
-          onClick={onSell}
-          className="ml-auto rounded-full border border-zinc-700 px-3 py-0.5 text-[11px] text-zinc-300 transition-colors hover:border-amber-400/50 hover:text-amber-300"
-        >
-          Sell
-        </button>
+        {/* The membership, not the balance — the balance is the row below. */}
+        <span className="text-[11px] text-zinc-400">Member</span>
+        {/* ⚠ SELL ONLY WHAT EXISTS. A member who burned their only ticket has
+            nothing to list, and a Sell button that opens onto a zero balance is
+            an interface offering something it cannot do. */}
+        {position.units > 0 && (
+          <button
+            type="button"
+            onClick={onSell}
+            className="ml-auto rounded-full border border-zinc-700 px-3 py-0.5 text-[11px] text-zinc-300 transition-colors hover:border-amber-400/50 hover:text-amber-300"
+          >
+            Sell {position.units.toLocaleString()} spare
+          </button>
+        )}
       </div>
 
       <dl className="mt-1.5 grid grid-cols-3 gap-x-3 gap-y-1 text-[10px]">
         <div>
-          <dt className="text-zinc-600">You paid</dt>
+          {/* What the door charged THIS member, from the burn that admitted them
+              — not the sum of everything they ever spent on the token, which is
+              a different and less useful number. */}
+          <dt className="text-zinc-600">Entry cost you</dt>
           <dd className="font-mono tabular-nums text-zinc-300">
-            {position.spentSats.toLocaleString()}
-            <span className="text-zinc-600">{fmtUsd(usd(position.spentSats))}</span>
+            {position.entryPaidSats === null ? (
+              "—"
+            ) : (
+              <>
+                {position.entryPaidSats.toLocaleString()}
+                <span className="text-zinc-600">{fmtUsd(usd(position.entryPaidSats))}</span>
+              </>
+            )}
           </dd>
         </div>
         <div>
-          <dt className="text-zinc-600">Avg / ticket</dt>
-          <dd className="font-mono tabular-nums text-zinc-300">
-            {avg === null ? "—" : avg.toLocaleString()}
-          </dd>
-        </div>
-        <div>
-          {/* The honest label. It is what the NEXT one costs, which is the price
-              a buyer can always fall back to — not what this holding would
-              fetch if it were sold. */}
-          <dt className="text-zinc-600">New one costs</dt>
+          {/* The honest label. It is what the NEXT one costs, which is what a new
+              member would pay today — not what anything here would fetch. */}
+          <dt className="text-zinc-600">Entry costs now</dt>
           <dd className="font-mono tabular-nums text-amber-400">
             {position.mintPriceSats.toLocaleString()}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-zinc-600">Spare tickets</dt>
+          <dd className="font-mono tabular-nums text-zinc-300">
+            {position.units.toLocaleString()}
           </dd>
         </div>
       </dl>

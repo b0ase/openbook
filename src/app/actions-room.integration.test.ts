@@ -15,6 +15,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/bsv/onchain", () => ({
   logPostOnChain: vi.fn().mockResolvedValue("mocktxid_post"),
+  // The burn receipt. Mocked because it spends from the server wallet, and
+  // omitting it made a passing gate throw from a fire-and-forget anchor.
+  logRoomEntryOnChain: vi.fn().mockResolvedValue("mocktxid_entry"),
 }));
 vi.mock("@/services/bsv/anchor-sweep", () => ({
   sweepOrphans: vi.fn().mockResolvedValue(undefined),
@@ -39,8 +42,9 @@ vi.mock("next/headers", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { enterRoomMessage } from "@/lib/room-entry-message";
 import { ROOT_TICKER } from "@/lib/ticker";
-import { createPost, getPosts, getRoomAccess, getThread } from "./actions";
+import { createPost, enterRoomAction, getPosts, getRoomAccess, getThread } from "./actions";
 
 /** A fresh key per author — `createPost` rate-limits per pubkey. */
 function who() {
@@ -49,6 +53,11 @@ function who() {
 }
 
 type Who = ReturnType<typeof who>;
+
+/** The same DER signature `post` produces, over an arbitrary message. */
+function signAs(me: Who, message: string): string {
+  return me.key.sign(Array.from(new TextEncoder().encode(message))).toDER("hex") as string;
+}
 
 async function post(me: Who, content: string, parentId?: number) {
   const fd = new FormData();
@@ -68,6 +77,9 @@ function lastId(): number {
 }
 
 beforeEach(() => {
+  // ⚠ Membership too — it outlives holdings by design, so clearing only the
+  // ledger leaks members into the next test and every gate reads open.
+  db.exec("DELETE FROM room_entries");
   db.exec("DELETE FROM ticker_mentions");
   db.exec("DELETE FROM ticker_holdings");
   db.exec("DELETE FROM tickers");
@@ -91,14 +103,23 @@ describe("the room gate", () => {
     expect(db.prepare("SELECT COUNT(*) n FROM posts").get()).toEqual({ n: 1 });
   });
 
-  it("lets the founder speak — naming a word gave them a unit of it", async () => {
+  it("lets the founder speak — founding a room admits its founder", async () => {
+    // ⚠ THE REASON CHANGED WITH BURNING, even though the assertion did not.
+    // It used to pass because claiming minted them a unit and holding was access.
+    // Holding is no longer access, so this now passes because `admitFounder`
+    // records the claim itself as their entry — otherwise naming a word would
+    // build a room its own author could not speak in.
     const founder = who();
     await post(founder, "starting $Occam");
     const rootId = lastId();
     expect((await post(founder, "my own room", rootId)).ok).toBe(true);
   });
 
-  it("lets a ticket holder in", async () => {
+  it("does NOT let a ticket holder in until they BURN one", async () => {
+    // ⚠ THE HOLE BURNING CLOSED. Holding used to be access, so one unit could
+    // admit an unlimited chain of people in sequence — buy, enter, sell on,
+    // repeat — and the room was paid once for all of them. Buying is now only
+    // half of getting in.
     const founder = who();
     await post(founder, "starting $Occam");
     const rootId = lastId();
@@ -106,7 +127,37 @@ describe("the room gate", () => {
     // Buying is a ROOT post, so the door never blocks the purchase itself.
     const buyer = who();
     expect((await post(buyer, "/buy 1 $Occam")).ok).toBe(true);
+    expect((await post(buyer, "not in yet", rootId)).ok).toBe(false);
+
+    const fd = new FormData();
+    fd.set("symbol", "OCCAM");
+    fd.set("pubkey", buyer.pubkey);
+    fd.set("signature", signAs(buyer, enterRoomMessage("OCCAM")));
+    expect(await enterRoomAction(fd)).toEqual({ ok: true, alreadyMember: false });
+
     expect((await post(buyer, "now I'm in", rootId)).ok).toBe(true);
+  });
+
+  it("REFUSES entry on an unsigned or wrongly-signed request", async () => {
+    // ⚠ Entry DESTROYS a unit, so an unauthenticated version would let anybody
+    // burn anybody's ticket by naming their pubkey.
+    const founder = who();
+    await post(founder, "starting $Occam");
+    const buyer = who();
+    await post(buyer, "/buy 1 $Occam");
+
+    const bare = new FormData();
+    bare.set("symbol", "OCCAM");
+    bare.set("pubkey", buyer.pubkey);
+    bare.set("signature", "");
+    expect(await enterRoomAction(bare)).toEqual({ ok: false, reason: "bad_signature" });
+
+    // A signature over a DIFFERENT room does not open this one.
+    const wrong = new FormData();
+    wrong.set("symbol", "OCCAM");
+    wrong.set("pubkey", buyer.pubkey);
+    wrong.set("signature", signAs(buyer, enterRoomMessage("ELSEWHERE")));
+    expect(await enterRoomAction(wrong)).toEqual({ ok: false, reason: "bad_signature" });
   });
 
   it("does NOT let a reply that names the ticker buy its own way in", async () => {

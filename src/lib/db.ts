@@ -423,6 +423,85 @@ export function applyTickerBudgetMigration(database: Db): void {
  * are pruned by age rather than kept forever, because an outpoint whose spender
  * has long since confirmed can never be offered again.
  */
+/**
+ * Who has burned a ticket to get into which room.
+ *
+ * ⚠ THE TICKET IS DESTROYED AT THE DOOR, so a holdings query can no longer answer
+ * "is this person a member" — after entry their balance is zero by construction.
+ * Membership is this table, and what makes it trustworthy is `burn_txid`: the
+ * burn is a real transaction, on chain, permanent, naming the room it bought. The
+ * row is an INDEX of that fact, not the fact itself.
+ *
+ * ⚠ AND IT IS NOT YET VERIFIED AGAINST THE CHAIN. Until the indexer question is
+ * settled (DEPLOY.md), the authority here is still this database recording that
+ * it saw the transaction. The improvement over holdings is that the evidence now
+ * exists to be checked; it is not being checked. Do not describe this gate as
+ * trustless.
+ *
+ * `paid_sats` is what entry cost at the moment it happened — the member's cost
+ * basis, kept because the in-room card shows it against the current price and
+ * reconstructing it later from a curve position is guesswork.
+ */
+export function applyRoomEntryMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS room_entries (
+      symbol     TEXT NOT NULL,
+      pubkey     TEXT NOT NULL,
+      -- HOW this membership was acquired — recorded rather than inferred.
+      --
+      -- 'burn' is the rule; the other two are the honest exceptions, and they are
+      -- NAMED because a nullable burn_txid was already carrying three different
+      -- meanings at once (no burn happened / a burn happened but the anchor
+      -- failed / this member founded the room). A column that means three things
+      -- is a column somebody will read as one of them.
+      --
+      --   'burn'          a ticket was destroyed at the door. The rule.
+      --   'founder'       claimed the word, which is what created the room.
+      --                   No burn -- see admitFounder in room-access.ts.
+      --   'grandfathered' held a ticket while hold-to-enter was briefly live.
+      entry_kind TEXT NOT NULL DEFAULT 'burn',
+      -- Present for 'burn' once the anchor lands; NULL for the other kinds, and
+      -- NULL for a burn whose anchor never landed.
+      burn_txid  TEXT,
+      paid_sats  INTEGER,
+      entered_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (symbol, pubkey)
+    )
+  `);
+  // For databases created before the column existed.
+  addColumnIfMissing(
+    database,
+    "room_entries",
+    "entry_kind",
+    "entry_kind TEXT NOT NULL DEFAULT 'burn'"
+  );
+  database.exec("CREATE INDEX IF NOT EXISTS idx_room_entries_pubkey ON room_entries(pubkey)");
+
+  /**
+   * ⚠ GRANDFATHER EVERY EXISTING HOLDER, AND DO NOT BURN THEIR UNITS.
+   *
+   * Hold-to-enter was live for a few hours, and anybody who acquired a ticket
+   * under it was told holding was what access meant. Destroying their unit now to
+   * satisfy a rule that did not exist when they bought it would be taking
+   * somebody's property to tidy up a schema. So they keep the unit AND get
+   * membership; only entrants from here on burn.
+   *
+   * `burn_txid` is NULL for exactly these rows, which is the honest record: no
+   * burn happened, so there is no transaction to point at. That is also why the
+   * column is nullable — see the note above about what makes the rest of the
+   * table checkable.
+   *
+   * Idempotent (`INSERT OR IGNORE` on the primary key), so a re-run cannot
+   * re-admit somebody who has since been removed, and cannot duplicate a member.
+   */
+  database.exec(`
+    INSERT OR IGNORE INTO room_entries (symbol, pubkey, entry_kind, burn_txid, paid_sats)
+    SELECT h.symbol, h.pubkey, 'grandfathered', NULL, NULL
+      FROM ticker_holdings h
+     WHERE h.units > 0 AND h.pubkey <> ''
+  `);
+}
+
 export function applySpentOutpointMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS spent_outpoints (
@@ -1001,6 +1080,9 @@ try {
   applyTickerMentionMigration(db);
   // Ownership + the market. AFTER mentions, which it seeds itself from.
   applyHoldingsMigration(db);
+  // ⚠ AFTER holdings — it backfills membership FROM `ticker_holdings`, so the
+  // table it reads has to exist and be populated first.
+  applyRoomEntryMigration(db);
   applyAgentReplyMigration(db);
   applySpentOutpointMigration(db);
   applyTickerMeaningMigration(db);

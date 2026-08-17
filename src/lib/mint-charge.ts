@@ -54,24 +54,30 @@ type Db = ReturnType<typeof Database>;
 export const MINT_SLACK_UNITS = 5;
 
 /**
- * Current supply of each symbol — one indexed GROUP BY, not a query per word.
+ * Units EVER minted of each symbol — the curve's position, one indexed GROUP BY.
  *
- * Reads the OWNERSHIP LEDGER, the same table `getTickerSupply` and the market
- * page read. Supply is what exists, so the counter that prices a mint has to be
- * the counter that records one — and after a sale only the ledger knows who
- * holds what. See `holdings.ts`.
+ * ⚠ MENTIONS, NOT HOLDINGS, AND THAT IS A REVERSAL WITH A REASON. This read
+ * `ticker_holdings` on the argument that "supply is what exists". Correct while
+ * the only operation was a transfer, which preserves the total — the two tables
+ * agreed, and the ledger was the better-defined source.
+ *
+ * Burning a ticket to enter a room is the first operation that makes them
+ * diverge, and it exposed the inversion: a burn lowers held supply, so the next
+ * entry would be priced CHEAPER, and a room would get cheaper the busier it got.
+ * The curve's input is how far along the curve we are — units issued — which no
+ * burn can walk back. `ticker_mentions` is append-only, so it is that number.
+ *
+ * See `holdings.ts` for the two counters, and DECISIONS.md "Entry BURNS the
+ * ticket". Do not switch this back to holdings without reading both.
  */
-export function mintSupplies(symbols: readonly string[], database: Db = defaultDb) {
+export function mintedSupplies(symbols: readonly string[], database: Db = defaultDb) {
   const supply = new Map<string, number>();
   const wanted = [...new Set(symbols)];
   if (!wanted.length) return supply;
   const placeholders = wanted.map(() => "?").join(",");
   const rows = database
     .prepare(
-      // ⚠ HOLDINGS, NOT MENTIONS. Supply is what EXISTS, and after a sale the
-      // two tables agree on the total but only one of them is the ledger. See
-      // `holdings.ts`.
-      `SELECT symbol, COALESCE(SUM(units), 0) AS n FROM ticker_holdings
+      `SELECT symbol, COALESCE(SUM(units), 0) AS n FROM ticker_mentions
         WHERE symbol IN (${placeholders}) GROUP BY symbol`
     )
     .all(...wanted) as Array<{ symbol: string; n: number }>;
@@ -94,13 +100,13 @@ export function mintChargeSats(content: string, database: Db = defaultDb): numbe
   // anchored), so there is nothing else in it to price.
   const buy = parseBuyCommand(content);
   if (buy) {
-    const supply = mintSupplies([buy.symbol], database);
+    const supply = mintedSupplies([buy.symbol], database);
     return mintCostForRange(supply.get(buy.symbol) ?? 0, buy.units);
   }
 
   const symbols = distinctTickers(content);
   if (!symbols.length) return 0;
-  const supply = mintSupplies(symbols, database);
+  const supply = mintedSupplies(symbols, database);
   return quoteMintSats(symbols, (s) => supply.get(s) ?? 0);
 }
 
@@ -117,14 +123,14 @@ export function mintFloorSats(content: string, database: Db = defaultDb): number
   // mention would accept one unit's payment for a thousand units of stock.
   const buy = parseBuyCommand(content);
   if (buy) {
-    const supply = mintSupplies([buy.symbol], database);
+    const supply = mintedSupplies([buy.symbol], database);
     const from = Math.max(0, (supply.get(buy.symbol) ?? 0) - MINT_SLACK_UNITS);
     return mintCostForRange(from, buy.units);
   }
 
   const symbols = distinctTickers(content);
   if (!symbols.length) return 0;
-  const supply = mintSupplies(symbols, database);
+  const supply = mintedSupplies(symbols, database);
   return symbols.reduce(
     (total, s) => total + mintPriceSats(Math.max(0, (supply.get(s) ?? 0) - MINT_SLACK_UNITS)),
     0

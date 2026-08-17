@@ -115,7 +115,8 @@ function form(who: Identity, content: string, rawTx?: string): FormData {
 
 beforeEach(() => {
   process.env.PAID_POSTING = "true";
-  db.exec("DELETE FROM ticker_mentions"); db.exec("DELETE FROM ticker_holdings");
+  db.exec("DELETE FROM ticker_mentions");
+  db.exec("DELETE FROM ticker_holdings");
   db.exec("DELETE FROM tickers");
   db.exec("DELETE FROM payouts");
   db.exec("DELETE FROM bootboard");

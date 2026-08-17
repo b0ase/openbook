@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "./db";
 import { creditUnits } from "./holdings";
-import { MINT_SLACK_UNITS, mintChargeSats, mintFloorSats, mintSupplies } from "./mint-charge";
+import { MINT_SLACK_UNITS, mintChargeSats, mintedSupplies, mintFloorSats } from "./mint-charge";
 import { MINT_BASE_SATS } from "./mint-price";
 
 /**
@@ -44,11 +44,11 @@ beforeEach(() => {
   db.exec("DELETE FROM posts");
 });
 
-describe("mintSupplies", () => {
+describe("mintedSupplies", () => {
   it("counts units per symbol in one query", () => {
     mint("ALPHA", 3);
     mint("BETA", 1);
-    const supply = mintSupplies(["ALPHA", "BETA", "GAMMA"]);
+    const supply = mintedSupplies(["ALPHA", "BETA", "GAMMA"]);
     expect(supply.get("ALPHA")).toBe(3);
     expect(supply.get("BETA")).toBe(1);
     // A word nobody has named is absent rather than zero — callers default it.

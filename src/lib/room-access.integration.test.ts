@@ -1,17 +1,32 @@
 /**
- * A named thread is a room, and one unit of its token is the ticket.
+ * A named thread is a room, and a unit of its token is the ticket — BURNED at the
+ * door.
  *
- * The tests that matter are the ones that would let somebody in for nothing:
- * the board's own thread must never lock, a nameless thread must never lock,
- * and naming the room's ticker in a reply must not buy you in on the way
- * through the door.
+ * The tests that matter are the ones that would let somebody in for nothing: the
+ * board's own thread must never lock, a nameless thread must never lock, and
+ * naming the room's ticker in a reply must not buy you in on the way through the
+ * door.
+ *
+ * ⚠ AND, SINCE ENTRY BURNS, THE ONE THAT WOULD LOCK OUT SOMEBODY WHO PAID.
+ * Membership is what grants access, not a balance — a member's balance is zero by
+ * construction, so a gate that tested units excluded exactly the people who had
+ * bought their way in, while admitting anybody merely holding stock they had never
+ * spent at the door. `held` is now stock, `entered` is access, and these assert the
+ * difference in both directions.
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "./db";
 import { creditUnits } from "./holdings";
 import { MINT_BASE_SATS } from "./mint-price";
-import { heldUnits, mayEnter, roomAccess, roomTickerFor } from "./room-access";
+import {
+  admitFounder,
+  enterRoom,
+  heldUnits,
+  mayEnter,
+  roomAccess,
+  roomTickerFor,
+} from "./room-access";
 import { ROOT_TICKER } from "./ticker";
 
 const HOLDER = "pk_holder";
@@ -43,6 +58,9 @@ function room(symbol: string | null, opts: { units?: number; holder?: string } =
 }
 
 beforeEach(() => {
+  // ⚠ Membership too. It outlives holdings by design, so a suite that clears
+  // only the ledger leaks members into the next test and every gate reads open.
+  db.exec("DELETE FROM room_entries");
   db.exec("DELETE FROM ticker_mentions");
   db.exec("DELETE FROM ticker_holdings");
   db.exec("DELETE FROM tickers");
@@ -84,20 +102,37 @@ describe("heldUnits", () => {
 });
 
 describe("roomAccess", () => {
-  it("prices the door from the CURRENT supply", () => {
+  it("prices the door from the ISSUED supply", () => {
     const rootId = room("OCCAM", { units: 3 });
     const access = roomAccess(rootId, STRANGER);
     expect(access).toEqual({
       symbol: "OCCAM",
       gated: true,
+      entered: false,
       held: 0,
       priceSats: 4 * MINT_BASE_SATS,
     });
   });
 
-  it("reports a holder's units", () => {
+  it("does NOT drop the price when tickets are burned", () => {
+    // ⚠ The inversion this guards: burning lowers held supply, so a door priced
+    // off holdings gets CHEAPER as the room fills. Three units issued, all three
+    // burned — the fourth entrant must still pay the fourth unit's price.
+    const rootId = room("OCCAM", { units: 3 });
+    const before = roomAccess(rootId, STRANGER).priceSats;
+    enterRoom("OCCAM", HOLDER, { burnTxid: "t1", paidSats: before });
+    enterRoom("OCCAM", HOLDER, { burnTxid: "t2", paidSats: before });
+    enterRoom("OCCAM", HOLDER, { burnTxid: "t3", paidSats: before });
+    expect(heldUnits("OCCAM", HOLDER)).toBe(2); // idempotent: only one burned
+    expect(roomAccess(rootId, STRANGER).priceSats).toBe(before);
+  });
+
+  it("reports a holder's spare units separately from their membership", () => {
     const rootId = room("OCCAM", { units: 2 });
-    expect(roomAccess(rootId, HOLDER).held).toBe(2);
+    const access = roomAccess(rootId, HOLDER);
+    expect(access.held).toBe(2);
+    // Holding is not being in. Nothing has been burned yet.
+    expect(access.entered).toBe(false);
   });
 
   it("is not gated at all when the thread has no name", () => {
@@ -108,8 +143,38 @@ describe("roomAccess", () => {
 });
 
 describe("mayEnter", () => {
-  it("lets a holder in", () => {
-    expect(mayEnter(room("OCCAM"), HOLDER)).toBe(true);
+  it("lets a MEMBER in — somebody who burned a ticket", () => {
+    const rootId = room("OCCAM");
+    expect(enterRoom("OCCAM", HOLDER, { burnTxid: "t1", paidSats: 113 }).ok).toBe(true);
+    expect(mayEnter(rootId, HOLDER)).toBe(true);
+  });
+
+  it("KEEPS OUT a holder who has not burned anything", () => {
+    // ⚠ The hole burning closed. Under hold-to-enter this was `true`, and one
+    // unit could admit an unlimited chain of people in sequence: buy, enter, sell
+    // on, repeat — the room paid once for all of them.
+    const rootId = room("OCCAM", { units: 5 });
+    expect(heldUnits("OCCAM", HOLDER)).toBe(5);
+    expect(mayEnter(rootId, HOLDER)).toBe(false);
+  });
+
+  it("lets a MEMBER in after their balance has gone to zero", () => {
+    // ⚠ The failure in the other direction: a member's balance is zero because
+    // they paid. Testing units locked out precisely the people who had.
+    const rootId = room("OCCAM", { units: 1 });
+    enterRoom("OCCAM", HOLDER, { burnTxid: "t1", paidSats: 113 });
+    expect(heldUnits("OCCAM", HOLDER)).toBe(0);
+    expect(mayEnter(rootId, HOLDER)).toBe(true);
+  });
+
+  it("lets a FOUNDER in without them having burned anything", () => {
+    // ⚠ The one exception, and it cannot be sold on: membership from founding is
+    // not attached to a unit, so the unit the founder keeps is ordinary stock and
+    // its buyer still has to burn it. See admitFounder.
+    const rootId = room("OCCAM", { units: 1 });
+    admitFounder("OCCAM", HOLDER, 113);
+    expect(heldUnits("OCCAM", HOLDER)).toBe(1);
+    expect(mayEnter(rootId, HOLDER)).toBe(true);
   });
 
   it("keeps a stranger out", () => {

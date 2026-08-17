@@ -910,6 +910,11 @@ costs anything. That is a much smaller question and it does not block building t
 
 ## A named thread is a ROOM; a unit is the TICKET (2026-08-17, owner)
 
+> ⚠ **AMENDED LATER THE SAME DAY — THE TICKET IS BURNED AT THE DOOR, NOT HELD.** Everything below
+> stands except the mechanism: entry destroys the unit. See "Entry BURNS the ticket" below, which
+> supersedes "holding one unit … lets you read and post in it" and "the holder can sell their seat"
+> (a holder can still sell an *unused* ticket; a member who has entered has nothing left to sell).
+
 **What a token confers was the open question, and this closes it.** The owner's verdict on the
 old thread view: *"non-linear, not a chatroom, not a thread, and not coherent, so no point in
 presenting it like this."* A thread claimed under a `$Ticker` is now a room, and holding one unit
@@ -937,6 +942,95 @@ thread with no name is not a room either**, so ordinary conversation stays open.
 
 **Consequence worth knowing:** naming a new ticker inside another's thread creates a child token,
 and that is now a members-only act, since posting there requires the parent's ticket.
+
+## Entry BURNS the ticket (2026-08-17, owner — supersedes hold-to-enter)
+
+Hours after the room gate shipped, the owner's call: *"Tickets have to be burned on entry to a
+chatroom. Seriously, otherwise it's a security again."* Hold-to-enter is reversed. **A unit is
+destroyed at the door, and the burn transaction is the membership receipt.**
+
+**Two independent reasons, which is why this is not a preference.**
+
+1. **A held ticket is REUSABLE ACROSS PEOPLE, and resale made that exploitable.** Under
+   hold-to-enter, one unit admits an unlimited number of members in sequence: buy, enter, sell to
+   the next person, they enter, sell on. Access is checked per request, so each holder in the chain
+   is legitimately inside while they hold. The room is paid **once**, for however many people pass
+   through it. Burning closes it arithmetically: N members means N units destroyed means N payments
+   up the curve. This is the reason that needs no legal opinion — it is a counting error.
+2. **Hold-to-access is the shape of a security; consumption is not.** A thing you buy, keep, watch
+   appreciate, and draw ongoing rights from looks like an investment. A thing you buy and consume is
+   a ticket. Burning moves the token from the first category to the second. Not a legal opinion —
+   I am not a lawyer and this is not designed around enforcement — but the mechanism difference is
+   real and it is the owner's judgement to make.
+
+**⚠ THE PRICE MUST KEY ON UNITS EVER MINTED, NEVER ON UNITS CURRENTLY HELD.** This was a live bug
+the moment burning existed, and it inverted the entire economics: `mintSupplies` read
+`SUM(units) FROM ticker_holdings`, so every burn *reduced* supply and made the next entry
+**cheaper** — the more popular a room got, the less it cost to join. Pricing now reads the
+monotonic minted count, which burning does not decrement.
+
+The earlier "HOLDINGS, NOT MENTIONS" reasoning was correct when written and is not being
+overturned as a mistake: a transfer preserves the total, so under transfer-only the two counters
+agreed and the ledger was the better source. Burning is the first operation that makes them
+diverge, and for *pricing* the minted counter is the right one. `ticker_holdings` remains the
+ownership ledger; it is simply no longer what a price is derived from. The covenant already got
+this right (`minted = max - supply`, and supply only falls on mint), so the app is now matching the
+contract rather than the contract matching the app.
+
+**Membership is permanent, and the burn is what proves it.** A ticket is torn once at the door;
+charging per visit would mean paying to re-read a room you already joined. The burn transaction is
+on chain, permanent, publicly verifiable and names the room it bought — so membership is not a row
+we are trusted about, it is a chain fact we index. That is strictly better than the holdings model,
+which required trusting our balance arithmetic.
+
+**⚠ ONE EXCEPTION: THE FOUNDER IS ADMITTED WITHOUT BURNING.** Naming a word creates the room, and a
+founder who burned their only unit would be locked out of it — so `admitFounder` records the claim
+itself as their entry. This was first built as an ordinary burn, for uniformity, and reverted
+because of what it did downstream rather than to the rule: the founder held nothing, so they
+disappeared from their own wallet, their room reported zero holders, and **every "supply" counter on
+the site changed meaning at once.** Ten tests failed, each correct about something different.
+
+It does not reopen the hole. The exploit was one unit admitting many people in sequence; a
+founder's membership is not attached to a unit at all, so it cannot be sold to the next person. The
+unit they keep is ordinary tradeable stock and its buyer still has to burn it. **Every entry after
+the first is still one destroyed ticket.**
+
+`room_entries.entry_kind` records which of the three it was — `'burn'`, `'founder'`,
+`'grandfathered'` — rather than leaving a nullable `burn_txid` to mean three things at once.
+
+**Two counters, and every display had to pick one deliberately.** Burning is the first operation
+that separates *issued* from *held*, and the sweep through the call sites landed on:
+
+| number | source | why |
+|---|---|---|
+| any price | issued | the curve's position; a burn must not make the next unit cheaper |
+| ticker index / leaderboard `total` | issued | held units read ~0 for a full room, ranking popular tokens below dead ones |
+| leaderboard `holders` | held | genuinely "who could sell you one" — a burned-out member could not |
+| wallet `mine` | held | what you can actually sell |
+| wallet `total` | issued | must equal what the feed prints beside the same ticker, or they disagree |
+| token existence | issued | a room whose members all burned still exists — testing held units made the index link to a 404 |
+
+**Not built, and worth knowing:** the leaderboard no longer describes membership at all — it is a
+holder list, and a full room can have no holders. "Who is in this room" is now a different roster
+(`room_entries`) and does not have a surface yet. There is also **no sweep for failed entry
+anchors**, unlike posts, where `tx_id IS NULL` is a queue.
+
+**⚠ BUT NOT YET, AND THE CODE MUST NOT PRETEND OTHERWISE.** Until the indexer question is settled
+(see DEPLOY.md — our overlay only indexes whitelisted tokens), the *authority* on a burn is still
+this database recording that it saw the transaction. The improvement is that the evidence now
+exists on chain to be checked later; it is not yet being checked. Do not describe the room gate as
+trustless before an indexer verifies burns.
+
+**What this changes downstream:**
+
+- **The resale market survives, and sharpens.** It becomes a market in *unused* tickets — a holder
+  who has not entered may sell; a member who has entered holds nothing and has nothing to list. The
+  ceiling rule is unaffected: an ask above the mint price is still a limit order.
+- **The in-room card cannot show holdings**, because a member's balance is zero by construction. It
+  shows what entry cost them against what entry costs now — which is what the owner asked the card
+  to say in the first place ("telling the holders what the current listed entry price is").
+- **Losing a key loses membership** unless the same address is restored, since the burn is bound to
+  the address that made it. Same story as everything else here, stated so it is not a surprise.
 
 ## Ownership left `ticker_mentions` for its own ledger (2026-08-17)
 

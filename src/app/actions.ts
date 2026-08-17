@@ -7,7 +7,15 @@ import { db } from "@/lib/db";
 import { verifyFillPayment } from "@/lib/fill-payment";
 import { FORK_POINT_ID } from "@/lib/fork-point";
 import { tryConsumeFreeBootForIp } from "@/lib/free-boot-cap";
-import { creditUnits, totalUnits, transferUnits, unitsHeld } from "@/lib/holdings";
+import {
+  burnUnits,
+  creditUnits,
+  mintedBySymbol,
+  mintedUnits,
+  totalUnits,
+  transferUnits,
+  unitsHeld,
+} from "@/lib/holdings";
 import {
   attachPreviewToPost,
   firstLinkIn,
@@ -34,7 +42,8 @@ import {
 } from "@/lib/post-economics";
 import { MAX_POST_CHARS } from "@/lib/post-length";
 import { rateLimit } from "@/lib/rate-limit";
-import { mayEnter, type RoomAccess, roomAccess } from "@/lib/room-access";
+import { admitFounder, enterRoom, mayEnter, type RoomAccess, roomAccess } from "@/lib/room-access";
+import { enterRoomMessage } from "@/lib/room-entry-message";
 import {
   FREE_BOOT_COST_SATS,
   hasDailyBudget,
@@ -59,7 +68,7 @@ async function getBsvSdk() {
 }
 
 import { sweepOrphans } from "@/services/bsv/anchor-sweep";
-import { logPostOnChain } from "@/services/bsv/onchain";
+import { logPostOnChain, logRoomEntryOnChain } from "@/services/bsv/onchain";
 import { getServerAddress, isServerSpendDisabled } from "@/services/bsv/wallet";
 import { executeBoot } from "@/services/fairness/boot-orchestrator";
 import { getBootPrice, getBootPriceForUser } from "@/services/fairness/pricing";
@@ -374,6 +383,13 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
   // said. See TOKENS.md "a tag is a MENTION WITH A TARGET".
   recordTickerMentions(postId, content.trim(), pubkey);
 
+  // ⚠ THIRD, AND THE ORDER IS THE WHOLE REASON IT IS A SEPARATE STEP. Founding a
+  // room has to admit its founder, and admission BURNS a unit — which only exists
+  // after `recordTickerMentions` has credited it. Doing this inside
+  // `registerTickers` (where the claim happens) burned nothing, silently, because
+  // the ticket had not been minted yet.
+  admitFounders(postId, pubkey);
+
   // Fire-and-forget: log on-chain, update tx_id if successful
   const trimmedContent = content.trim();
   const sigStr = typeof signature === "string" ? signature : null;
@@ -436,6 +452,43 @@ export async function createPost(formData: FormData): Promise<CreatePostResult> 
  * here and have no writer yet: tagging is gated on paid posting. The columns
  * exist so that gate opens onto a schema that already fits.
  */
+/**
+ * Admit the founder to every room this post created.
+ *
+ * ⚠ WITHOUT THIS, NOBODY CAN SPEAK IN A ROOM THEY JUST FOUNDED. Entry burns a
+ * ticket and a claim mints one, so the claimant ends up holding a ticket, having
+ * never entered, locked out of their own room. Not hypothetical: it broke six
+ * ordinary "start a thread, then reply in it" tests the moment the gate moved from
+ * balance to membership.
+ *
+ * ⚠ AND IT DOES NOT BURN THE FOUNDING UNIT — see `admitFounder` in
+ * `room-access.ts` for why that was built, reverted, and why the exception does
+ * not reopen the hole burning exists to close.
+ *
+ * ⚠ CLAIMS ONLY, NEVER MENTIONS. `tickers.post_id = ?` is true only of a claim
+ * that LANDED, which is the distinction that matters: merely mentioning an
+ * existing ticker also mints a unit, and admitting on that would hand out
+ * membership of an expensive room to anybody who typed its name in passing.
+ *
+ * Best-effort — a post that publishes must not fail because a door did not open.
+ */
+function admitFounders(postId: number, pubkey: FormDataEntryValue | null): void {
+  const pk = typeof pubkey === "string" ? pubkey : null;
+  if (!pk) return;
+  try {
+    const claimed = db
+      .prepare("SELECT symbol FROM tickers WHERE post_id = ? AND pubkey = ?")
+      .all(postId, pk) as Array<{ symbol: string }>;
+    for (const { symbol } of claimed) {
+      // The board's own thread is not a room, so there is no door to pass.
+      if (isRootTicker(symbol)) continue;
+      admitFounder(symbol, pk, mintPriceSats(mintedUnits(symbol)));
+    }
+  } catch (e) {
+    console.error(`OpenBook: founder admission failed for post ${postId}`, e);
+  }
+}
+
 function recordTickerMentions(
   postId: number,
   content: string,
@@ -1344,9 +1397,23 @@ export async function getTickerSupply(symbols: string[]): Promise<Record<string,
   const placeholders = wanted.map(() => "?").join(",");
   const rows = db
     .prepare(
-      // The ownership ledger, not the mention history — see `holdings.ts`.
+      /**
+       * ⚠ ISSUED SUPPLY, NOT THE FLOAT — mentions, not holdings.
+       *
+       * This briefly read `ticker_holdings` on the reasoning that "supply is what
+       * exists", which was indistinguishable from issued supply while the only
+       * operation was a transfer. Burning a ticket to enter a room separates them,
+       * and it separates them in a way that would have made this number lie about
+       * the most successful tokens: every member of a busy room has burned their
+       * ticket, so a held-supply count of a hundred-member room reports whatever
+       * happens to be left unspent — a popular token would rank BELOW an ignored
+       * one. "How big is this token" is how many units were ever issued.
+       *
+       * The float (units currently held, i.e. what could actually be bought) is a
+       * real and different number: `unitsBySymbol` in `holdings.ts`.
+       */
       `SELECT symbol, COALESCE(SUM(units), 0) AS n
-         FROM ticker_holdings
+         FROM ticker_mentions
         WHERE symbol IN (${placeholders})
         GROUP BY symbol`
     )
@@ -1478,15 +1545,34 @@ export async function listTickerBoards(limit = 100): Promise<TickerBoardSummary[
   const capped = Math.min(Math.max(1, limit), 200);
   const rows = db
     .prepare(
-      // Ownership, from the ledger. `holders` counts people who still hold
-      // something — a seller who sold out is no longer a holder, which is the
-      // whole difference between this and counting mentions.
-      `SELECT symbol,
-              COALESCE(SUM(units), 0) AS total,
-              COUNT(DISTINCT CASE WHEN pubkey <> '' AND units > 0 THEN pubkey END) AS holders
-         FROM ticker_holdings
-        GROUP BY symbol
-        ORDER BY total DESC, symbol ASC
+      /**
+       * ⚠ TWO DIFFERENT QUESTIONS, SO TWO DIFFERENT TABLES, JOINED.
+       *
+       * `total` is ISSUED supply, from the append-only mention history. It was
+       * held units, and burning broke that in the direction that matters: every
+       * member of a busy room has destroyed their ticket, so a held-unit total
+       * reports only what happens to be left unspent — a hundred-member room could
+       * total zero and sort below a token nobody ever used. It also broke the
+       * invariant the index relies on, that only the root may total zero.
+       *
+       * `holders` stays the ownership ledger, because it answers a question that
+       * really is about holdings: who currently has a ticket they could sell. A
+       * member who burned their only one is not one of them, and should not be
+       * counted as though a resale could come from them.
+       *
+       * ⚠ SO `holders` MAY BE 0 WHILE `total` IS LARGE, and that is not a bug —
+       * it is a full room with nothing for sale. What it also means is that this
+       * board no longer describes MEMBERSHIP at all. "Who is in this room" is now
+       * a different roster (`room_entries`) and a worthwhile surface; it is not
+       * this one. See DECISIONS.md "Entry BURNS the ticket".
+       */
+      `SELECT m.symbol AS symbol,
+              COALESCE(SUM(m.units), 0) AS total,
+              (SELECT COUNT(DISTINCT h.pubkey) FROM ticker_holdings h
+                WHERE h.symbol = m.symbol AND h.pubkey <> '' AND h.units > 0) AS holders
+         FROM ticker_mentions m
+        GROUP BY m.symbol
+        ORDER BY total DESC, m.symbol ASC
         LIMIT ?`
     )
     .all(capped) as { symbol: string; total: number; holders: number }[];
@@ -1559,6 +1645,20 @@ export async function getTickerLeaderboard(
          FROM ticker_holdings WHERE symbol = ?`
     )
     .get(canonical) as { total: number; attributed: number | null };
+
+  /**
+   * Does this token EXIST — which is not the same question as whether anybody
+   * currently holds one.
+   *
+   * ⚠ A BURNED-OUT ROOM IS A REAL TOKEN WITH NO HOLDERS, and testing held units
+   * for existence made the index link to a 404: a founder whose only unit was
+   * burned at their own door left `ticker_holdings` empty, so the board this page
+   * is reached from listed a token whose page denied it. Existence is issuance,
+   * which is permanent; holdings are a snapshot that burning can legitimately
+   * take to zero.
+   */
+  const issued = mintedUnits(canonical);
+
   // A name nobody has ever written is not an empty leaderboard, it is not a
   // token — the page 404s rather than implying it exists.
   //
@@ -1567,7 +1667,10 @@ export async function getTickerLeaderboard(
   // exist, and it is linked from the header of every page. A 404 there would be
   // the site reporting that it is not a thing. An honest empty board is the
   // right answer while nobody has named it yet.
-  if (!totals || totals.total === 0) return isRootTicker(canonical) ? emptyBoard(canonical) : null;
+  if (issued === 0) return isRootTicker(canonical) ? emptyBoard(canonical) : null;
+  // Issued but nothing held: everybody spent their ticket at the door. An honest
+  // empty holder list, not a 404.
+  if (!totals || totals.total === 0) return emptyBoard(canonical);
 
   // The cap matches the split's 100. A leaderboard that listed more holders than
   // a payment can reach would advertise a share nobody can be paid.
@@ -1668,9 +1771,19 @@ export async function getHoldings(pubkey: string): Promise<Holding[]> {
   // internally correct and they measured different things.
   const namedRows = db
     .prepare(
+      /**
+       * ⚠ `mine` IS HELD, `total` IS ISSUED, and mixing them up breaks the very
+       * agreement this query exists to keep. `mine` must be what the holder can
+       * actually sell, which burning legitimately reduces. `total` must be the
+       * number the FEED prints beside the same ticker — `getTickerSupply`, which
+       * counts issued units — or the wallet says "2 of 3" while the feed says
+       * "one of 4" about the same token, which is the exact disagreement the
+       * comment above describes and this query was rewritten to end.
+       */
       `SELECT h.symbol AS symbol,
               SUM(CASE WHEN h.pubkey = ? THEN h.units ELSE 0 END) AS mine,
-              SUM(h.units) AS total,
+              (SELECT COALESCE(SUM(m.units), 0) FROM ticker_mentions m
+                WHERE m.symbol = h.symbol) AS total,
               t.root_id AS root_id,
               (SELECT p.tx_id FROM posts p WHERE p.id = t.root_id) AS tx_id
          FROM ticker_holdings h
@@ -2007,16 +2120,13 @@ export async function getMintQuote(
   if (!wanted.length) return [];
 
   const placeholders = wanted.map(() => "?").join(",");
-  const rows = db
-    .prepare(
-      `SELECT symbol, COALESCE(SUM(units), 0) AS n FROM ticker_holdings
-        WHERE symbol IN (${placeholders}) GROUP BY symbol`
-    )
-    .all(...wanted) as Array<{ symbol: string; n: number }>;
-
-  const supply = new Map(rows.map((r) => [r.symbol, r.n]));
+  // ⚠ BOTH NUMBERS COME FROM THE MINTED COUNTER, and they have to agree: a
+  // "supply" of 40 next to a price struck at 12 would be two different tokens on
+  // one row. Issued supply IS the curve's position — see `getTickerSupply` for
+  // why held units are the wrong public figure, and `holdings.ts` for the float.
+  const minted = mintedBySymbol(wanted);
   return wanted.map((symbol) => {
-    const n = supply.get(symbol) ?? 0;
+    const n = minted.get(symbol) ?? 0;
     return { symbol, supply: n, priceSats: mintPriceSats(n) };
   });
 }
@@ -2045,7 +2155,7 @@ export async function getRoomAccess(
   address?: string | null
 ): Promise<RoomAccess> {
   if (!Number.isInteger(rootId) || rootId <= 0) {
-    return { symbol: null, gated: false, held: 0, priceSats: 0 };
+    return { symbol: null, gated: false, entered: false, held: 0, priceSats: 0 };
   }
   return roomAccess(rootId, resolveViewer(pubkey, address));
 }
@@ -2149,6 +2259,63 @@ export async function cancelListing(formData: FormData): Promise<{ ok: boolean }
     )
     .run(id, pubkey);
   return { ok: res.changes > 0 };
+}
+
+/**
+ * Burn one ticket and enter a room.
+ *
+ * ⚠ SIGNATURE-VERIFIED, BECAUSE IT DESTROYS SOMEBODY'S PROPERTY. Every other
+ * gate in this file that moves units is authorised the same way; this one has to
+ * be, because an unauthenticated version would let anybody burn anybody's ticket
+ * by naming their pubkey. The message names the room (`room-entry-message.ts`),
+ * so a captured signature cannot be replayed against a different, dearer door.
+ *
+ * ⚠ IDEMPOTENT, AND THAT IS NOT A NICETY. A lost response on a double-tap must
+ * not cost a second ticket, so `enterRoom` returns success without burning
+ * anything when the key is already a member.
+ *
+ * ⚠ THE BURN IS ANCHORED, AND THE ANCHOR IS BEST-EFFORT WHILE THE MEMBERSHIP IS
+ * NOT. The on-chain record is what makes membership checkable by somebody who
+ * does not trust this database — but a chain write that fails must not swallow a
+ * ticket that has already been destroyed. So the DB transaction is the
+ * authority today and the anchor is fire-and-forget, exactly as post logging is.
+ * See DECISIONS.md "Entry BURNS the ticket" on what is and is not verified yet.
+ */
+export async function enterRoomAction(
+  formData: FormData
+): Promise<{ ok: true; alreadyMember: boolean } | { ok: false; reason: string }> {
+  const symbol = canonicalTicker(String(formData.get("symbol") ?? ""));
+  const pubkey = String(formData.get("pubkey") ?? "");
+  const signature = String(formData.get("signature") ?? "");
+  if (!isValidTicker(symbol) || !pubkey) return { ok: false, reason: "invalid" };
+  if (isRootTicker(symbol)) return { ok: false, reason: "not_a_room" };
+  if (!(await signedBy(pubkey, signature, enterRoomMessage(symbol)))) {
+    return { ok: false, reason: "bad_signature" };
+  }
+
+  // Priced BEFORE the burn: the curve reads minted units, which a burn does not
+  // move, but taking the number first keeps the recorded cost basis equal to what
+  // the door was actually showing.
+  const paidSats = mintPriceSats(mintedUnits(symbol));
+  const res = enterRoom(symbol, pubkey, { burnTxid: "", paidSats });
+  if (!res.ok) return { ok: false, reason: res.reason };
+  if (res.alreadyMember) return { ok: true, alreadyMember: true };
+
+  // Fire-and-forget, and the txid is written back if it lands. A NULL `burn_txid`
+  // therefore means one of two things — grandfathered from hold-to-enter, or an
+  // anchor that did not land — and neither invalidates the membership.
+  void logRoomEntryOnChain({ symbol, member: pubkey, paidSats })
+    .then((txid) => {
+      if (!txid) return;
+      db.prepare("UPDATE room_entries SET burn_txid = ? WHERE symbol = ? AND pubkey = ?").run(
+        txid,
+        symbol,
+        pubkey
+      );
+    })
+    .catch(() => {});
+
+  return { ok: true, alreadyMember: false };
 }
 
 export interface ListingView {
@@ -2343,6 +2510,15 @@ export interface RoomPosition {
   mintPriceSats: number;
   /** Units this holder currently has on offer. */
   listedUnits: number;
+  /**
+   * What entry cost this member, from the burn that admitted them.
+   *
+   * ⚠ NULL MEANS "NOT KNOWN", NOT "FREE". Members grandfathered in from
+   * hold-to-enter never burned anything, so there is no entry price to report —
+   * and neither does an entry whose row predates the price being recorded.
+   * Inventing one from today's curve would show somebody a fabricated gain.
+   */
+  entryPaidSats: number | null;
 }
 
 /**
@@ -2397,8 +2573,15 @@ export async function getRoomPosition(
     spentSats: minted.spent + bought.spent,
     pricedUnits: minted.priced + bought.units,
     receivedSats: sold.received,
-    mintPriceSats: mintPriceSats(totalUnits(canonical)),
+    // Minted, never held — a burn must not make the next unit cheaper.
+    mintPriceSats: mintPriceSats(mintedUnits(canonical)),
     listedUnits: unitsCommitted(canonical, pubkey),
+    entryPaidSats:
+      (
+        db
+          .prepare("SELECT paid_sats FROM room_entries WHERE symbol = ? AND pubkey = ?")
+          .get(canonical, pubkey) as { paid_sats: number | null } | undefined
+      )?.paid_sats ?? null,
   };
 }
 

@@ -56,7 +56,7 @@ export function PermalinkThread({ post }: { post: Post }) {
       // Unknown stays LOCKED here rather than open: a failed lookup on a page a
       // stranger reached by link must not fall open.
       .then(setAccess)
-      .catch(() => setAccess({ symbol: null, gated: true, held: 0, priceSats: 0 }));
+      .catch(() => setAccess({ symbol: null, gated: true, entered: false, held: 0, priceSats: 0 }));
   }, [rootId, identity?.pubkey]);
 
   useEffect(() => {
@@ -68,7 +68,8 @@ export function PermalinkThread({ post }: { post: Post }) {
   // Addenda are the author revising themselves; replies are other people
   // answering. Mixing them would make a correction look like a conversation.
   const addendumIds = new Set(addenda.map((a) => a.id));
-  const locked = access === null || (access.gated && access.held === 0);
+  // ⚠ MEMBERSHIP, NOT BALANCE — entry burns the ticket, so a member holds zero.
+  const locked = access === null || (access.gated && !access.entered);
   const replies = locked
     ? []
     : (thread ?? []).filter((p) => p.id !== post.id && !addendumIds.has(p.id));
@@ -141,13 +142,15 @@ export function PermalinkThread({ post }: { post: Post }) {
 
       {/* The door, in its compact form: the permalink is a reading surface, so
           it points at the room rather than trying to sell a ticket inline. */}
-      {access?.gated && access.held === 0 && access.symbol && (
+      {access?.gated && !access.entered && access.symbol && (
         <div className="mt-5 rounded-lg border border-amber-400/20 bg-amber-400/[0.03] px-4 py-3">
           <p className="text-[10px] uppercase tracking-[0.16em] text-amber-500/70">Members only</p>
           <p className="mt-1 text-[13px] leading-relaxed text-zinc-400">
             The replies here are in{" "}
-            <span className="text-amber-400">${titleCaseTicker(access.symbol)}</span>. One unit of
-            that token is the ticket in — {access.priceSats.toLocaleString()} sats.
+            <span className="text-amber-400">${titleCaseTicker(access.symbol)}</span>.{" "}
+            {access.held > 0
+              ? "You hold a ticket — burn one at the door to come in."
+              : `A ticket costs ${access.priceSats.toLocaleString()} sats, and is burned on entry.`}
           </p>
           <a
             href={`/$${access.symbol.toLowerCase()}`}

@@ -13,6 +13,7 @@ import { timeAgo } from "@/lib/utils";
 import { getStoredAddress } from "@/services/bsv/identity";
 import type { Post } from "@/types";
 import {
+  enterRoomAction,
   getRoomAccess,
   getRoomPosition,
   getThread,
@@ -176,16 +177,18 @@ export function ThreadView({
     void refresh();
   }, [refresh]);
 
-  // Re-read on identity change as well as on thread change: buying a ticket, or
-  // signing in as somebody who already holds one, has to open the door without
+  // Re-read on identity change as well as on thread change: burning a ticket, or
+  // signing in as somebody who is already a member, has to open the door without
   // a reload.
   const refreshAccess = useCallback(async () => {
     const next = await getRoomAccess(rootId, identity?.pubkey ?? null, getStoredAddress());
     setAccess(next);
-    // The position is only meaningful to somebody who is IN — and asking for it
-    // at the door would be a query per non-holder for a card they never see.
+    // ⚠ `entered`, NOT `held`. A member burned their ticket to get in, so their
+    // balance is zero — gating the card on units would hide it from precisely the
+    // people it is for. Asking at the door would also be a query per stranger for
+    // a card they never see.
     setPosition(
-      next.symbol && next.held > 0
+      next.symbol && next.entered
         ? await getRoomPosition(next.symbol, identity?.pubkey ?? null, getStoredAddress())
         : null
     );
@@ -296,14 +299,18 @@ export function ThreadView({
   }, [refresh, onBooted]);
 
   /**
-   * Locked out: this thread is a room and the reader holds no ticket.
+   * Locked out: this thread is a room and the reader has not burned a ticket.
+   *
+   * ⚠ MEMBERSHIP, NOT BALANCE. Entry destroys the unit, so `held === 0` is the
+   * NORMAL state of a member — testing it locked out everybody who had actually
+   * paid, and let in anybody merely holding stock they had not spent at the door.
    *
    * ⚠ `access === null` IS NOT LOCKED AND IS NOT OPEN — it is unknown, and the
    * render below treats it as "show nothing but the root yet". Guessing either
    * way for one frame either flashes a paid room at somebody who has not paid
    * or flashes a paywall at somebody who has.
    */
-  const locked = access?.gated && access.held === 0;
+  const locked = access?.gated && !access.entered;
   const accessUnknown = access === null;
 
   /**
@@ -500,6 +507,45 @@ export function ThreadView({
                   setBuyError(res.message);
                   return;
                 }
+                await refreshAccess();
+                await refresh();
+              }}
+              onEnter={async () => {
+                if (!identity || buying) return;
+                setBuying(true);
+                setBuyError(null);
+                /**
+                 * ⚠ SIGNED, BECAUSE IT DESTROYS SOMETHING. Entry burns a unit, so
+                 * the server will not act on a bare pubkey — it verifies a
+                 * signature over `enter-room:<SYMBOL>`. The symbol is in the
+                 * message so a captured signature cannot be replayed against a
+                 * dearer door.
+                 */
+                const symbol = access.symbol ?? "";
+                const { enterRoomMessage } = await import("@/lib/room-entry-message");
+                const signed = await sign(enterRoomMessage(symbol));
+                setBuying(false);
+                if (!signed) {
+                  setBuyError("Could not sign — try again.");
+                  return;
+                }
+                const fd = new FormData();
+                fd.set("symbol", symbol);
+                // ⚠ THE PUBKEY FROM THE SIGNATURE, not from `identity`. The
+                // server derives nothing here; it verifies the signature against
+                // the key it is given, so the two must be the same pair.
+                fd.set("pubkey", signed.pubkey);
+                fd.set("signature", signed.signature);
+                const res = await enterRoomAction(fd);
+                if (!res.ok) {
+                  setBuyError(
+                    res.reason === "no_ticket"
+                      ? "That ticket is no longer there — buy one and try again."
+                      : "Could not open the door. Try again."
+                  );
+                  return;
+                }
+                // The door opens by re-reading membership, not by assuming.
                 await refreshAccess();
                 await refresh();
               }}
