@@ -2,6 +2,53 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-17 (the covenant is live on mainnet, and it enforces)
+
+**The pay-to-mint covenant is deployed and working on MAINNET.** `$Ticker` supply can now live in a
+script rather than in a database row, which is the gap the owner identified when he said typing
+`$newticker` "should be minted as a new token on the bsv blockchain" — and was right that it wasn't.
+
+- **Deploy:** `$TESTMINT2`, outpoint
+  `5a3232d9b39b29db2fce36b514681f3ed7f6266007fc9b3b8652b7cc61671acd_0`. GorillaPool returns
+  `sym: TESTMINT2, amt: 21000000, dec: 0, op: deploy+mint` — **recognised as a BSV-21 token**, not
+  merely mined. The ord envelope sits at byte 20, before the contract code, which is where an
+  indexer looks.
+- **Mint:** tx `20a467f642d685812d43c832174db462409f652ddc28d924934b69444048a6d2`, and the shape is
+  exactly what the covenant demands:
+  | vout | sats | what |
+  |---|---|---|
+  | 0 | 1 | contract continuation, `transfer amt 20999999` |
+  | 1 | 1 | the minted unit, `transfer amt 1`, to the minter |
+  | 2 | **113** | **the treasury — the curve's price for unit #1** |
+  | 3 | 1 | change |
+  The indexer confirms vout 1 as `op: transfer, amt: 1`. **The 113 sats were not paid by
+  politeness — `hash256(outputs)` made them a condition of the spend.**
+
+**⚠ TESTNET WAS ABANDONED, deliberately.** Both faucets were dead for the owner; his call was to
+test on mainnet and discard the results. Total cost of the whole exercise: well under a penny.
+`$TESTMINT1` / `$TESTMINT2` are DISPOSABLE and must be thrown away before any real word is deployed.
+
+**Seven plumbing failures, none in the covenant.** Recorded because they will recur:
+1. `scrypt-cli genprivkey` DOES NOT EXIST — I invented it. Wrote `scripts/genkey.ts` instead.
+2. `ts-node`'s BINARY will not execute on this `noowners` volume → `node -r ts-node/register`.
+3. `DefaultProvider.getFeePerKb()` returns **1** sat/kB → ARC 465 "fee too low".
+4. `OrdiProvider.connect()` retries its own failing probe inside the catch → one 429 becomes two.
+5. `WhatsonchainProvider` throws `Timeout of 3000ms` from a FLOATING PROMISE, escaping
+   `main().catch()`. All of 3–5 fixed by writing `ScriptProvider` — no fan-out, no preflight.
+6. **`deploy(1)` is not `deployToken()`.** The generic deploy landed a transaction that was NOT a
+   token (`bsv20/id` → Not Found). `deployToken()` prepends the `deploy+mint` inscription.
+7. Genesis `id` is `''` — the contract assigns its own id via `initId()` on first spend, so BOTH
+   the continuation AND the receiver must be given the deploy outpoint off-chain or `setAmt` reads
+   a `utxo` that does not exist.
+
+**⚠ OPEN, WITH REAL COST: GorillaPool's BSV-20 indexer wants each token's index account FUNDED**
+(`included: false`, `fundBalance: 0`, `fundAddress` given per token; the mint shows `status: 0`,
+pending). The model is one token per word — potentially thousands — so this is a per-token running
+cost. Decide before the migration: pay it, self-index, or use another indexer.
+
+**Also this session:** my commit message claimed to remove a stray `a_file` when `git add -A` had
+in fact committed it. Untracked and ignored; the file was left on disk (Hard Rule #2).
+
 ## 2026-08-17 (docs reconciled; a command I invented)
 
 - **⚠ I TOLD THE OWNER TO RUN A COMMAND THAT DOES NOT EXIST.** `npx scrypt-cli genprivkey` — written
