@@ -2,6 +2,66 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-18 (the overlay works, the site is public, and one switch was only half-wired)
+
+**Three things shipped: the overlay's `/submit` fixed, an indexer client written, and the site
+made publicly indexable.** The thread running through all of them is the same — something that
+reported success while doing nothing.
+
+**The overlay's `/submit` had NEVER worked, on any token.** `~/src/bsv21-heroku/cmd/server/server.go`
+omitted `OctetStreamLimit` from `server.RegisterRoutesConfig`, Go zero-valued it, and the middleware
+refused every body against a limit of **0 bytes**. Patched (`1 << 30`), rebuilt, swapped and pm2
+restarted on the box; the owner's uncommitted `-bind` hardening preserved. The runbook was also
+wrong on three counts: the route is `/bsv21/api/v1/submit`, it needs `x-topics: tm_<txid>_<vout>`,
+and the body is **plain binary BEEF** (WoC serves it as hex text). No dependency bump was ever
+needed — that whole detour was against `~/src/bsv21-overlay`, a stale checkout.
+
+**`src/services/indexer/overlay.ts` + 12 tests** — the half of the migration that reads chain state.
+Every answer is a tagged union, never a bare number, because *the failure this indexer is most
+likely to hand us is not an error — it is a room whose holders quietly vanish because we asked
+before it had the data.* Its own tests caught that in my first draft: `Number(null)`, `Number("")`
+and `Number(false)` are all `0`, so a response with no balance field read as a confident empty
+wallet. Three findings from reading `routes/bsv21.go`, each of which would otherwise have been
+learned by shipping something wrong: **there is no "who holds this token" route** (balances key on
+`p2pkh:<address>:<id>`, so a question must name an address); **the batch POST is a SUM, not a map**;
+and **503 / 500 / 200+zero all mean different things**, none of them interchangeable.
+
+**The whitelist problem had one solution, not three.** DEPLOY.md called it unsolved. The whitelist
+is a Redis set and `RegisterTopics` runs on a **30-second ticker**, so an add needs no restart. Of
+the three listed options, pre-whitelisting is **impossible by construction** (a token's id IS its
+deploy outpoint) and the SSH hook trades a scoped token for shell access to the host. The route is
+written as `ops/overlay-admin.go` — **not installed**, the sandbox refused the copy to the box.
+
+**`ALLOW_INDEXING=true` — and the switch was only half-wired.** Prompted by the Twitter card not
+rendering. Everything about the card was correct; `robots.txt` said `Disallow: /`, and **Twitterbot
+obeys robots.txt**, so it never fetched the page. Then: setting the variable did nothing, a
+`railway redeploy` did nothing (it reuses the image), and a fresh build from a push did nothing
+either — `robots.ts` is cached by default and generated during `npm run build`, which runs inside
+the Dockerfile where Railway's variables do not exist. Meanwhile the `robots` META TAG flipped
+correctly on its own, because the page is ISR and re-renders at runtime. One half of one switch
+worked and the other silently did not. `force-dynamic` on `robots.ts` makes both read the same
+environment at the same moment.
+
+**`scripts/denylist-check.mjs`** — sweeps a candidate `CONTENT_DENYLIST` over all 2,023 posts plus
+the project's prose and treats every hit as a false positive by definition. It found **two live
+over-blocks in production**: *"Never paste your private key into any website"* and *"You can sync
+your wallet with the app on another device"* — both matched whether the sentence was soliciting or
+warning, which is the `/seed phrase/` bug repeating. Revised patterns require the destination a
+scam always gives. Also threw out a pattern that looked good: bare `cp` blocked `cp the folder to
+/data` and every other shell command.
+
+**Ruled out / deferred:**
+- The illegal-floor patterns are written and tested but **NOT set** — the sandbox refused the
+  `railway variables --set`. They are at `~/Desktop/openbooks-CONTENT_DENYLIST-2026-08-18.txt`,
+  deliberately not in this repo.
+- ⚠ They are **not** the lawyer/T&S-sourced list DECISIONS.md asked for. The real CSAM control is
+  hash matching (`scripts/block-hashes.mjs`, still empty); IWF membership is the route to licensed
+  lists for a UK operator.
+- Legal `[TODO]`s and DMCA agent registration untouched — they need facts only the owner has.
+- The migration itself is still ahead, and its next decision is the scrypt/Next boundary: the
+  covenant cannot enter the Next build, so deploy+mint per post likely needs a small minting
+  service on the Hetzner box.
+
 ## 2026-08-17 (the covenant is live on mainnet, and it enforces)
 
 **The pay-to-mint covenant is deployed and working on MAINNET.** `$Ticker` supply can now live in a

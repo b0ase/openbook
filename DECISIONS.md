@@ -135,6 +135,65 @@
 - **Supersedes** the earlier `pool_excluded` pubkey-table idea from the genesis plan: a `created_at` epoch is cleaner and, unlike a pubkey ban, lets the 3 genesis users earn normally from their FUTURE post-launch posts.
 - **Threaded as an optional param** (`launchTs = FAIRNESS_CONFIG.launchTs`) for testability; both prod callers pass `(db)` only. Non-blocking note: the 30s weights cache isn't keyed on `launchTs` — safe because it's a deploy-constant; a footgun only if a future caller varies it per-request. Tests: 199 total (5 new cutoff cases proving pre-launch=0, post-launch earns, `>=` boundary inclusion, mixed-pubkey counts only post-launch).
 
+## Runtime env cannot reach a Docker build — `robots.ts` is `force-dynamic` (settled 2026-08-18)
+
+- **Decision:** `src/app/robots.ts` carries `export const dynamic = "force-dynamic"`. Do not remove
+  it "because robots.txt is static" — that is exactly the assumption that broke.
+- **What happened:** flipping `ALLOW_INDEXING=true` produced no change at all. Setting the variable
+  did nothing; `railway redeploy` did nothing (it reuses the built image); a **fresh build from a
+  push did nothing either**. `robots.ts` is a Route Handler Next caches by default, so it is
+  generated during `npm run build` — and that build runs inside the Dockerfile (`RUN npm run
+  build`), where Railway's service variables do not exist. The answer was baked as `Disallow: /`
+  and no deploy could change it.
+- **Why it was hard to see:** the `robots` META TAG in `layout.tsx` reads the same variable and
+  flipped correctly on its own, because the page is ISR and re-renders at RUNTIME where the
+  variable does exist. **One half of a single switch worked and the other half silently did not**,
+  which reads as caching, or as the variable not being set, or as anything but the real cause.
+- **Rejected:** an `ARG`/`ENV` pair in the Dockerfile. It works, and it leaves a config switch whose
+  behaviour depends on the host passing build args — the trap itself, one layer down.
+- **The general rule this establishes:** any `process.env` read that must respond to a dashboard
+  change has to happen at REQUEST time. In this repo the build is hermetic. Check for others before
+  assuming an env var works.
+
+## robots.txt gates every social preview, not just Google (recorded 2026-08-18)
+
+- **Twitterbot, facebookexternalhit and the rest read robots.txt before fetching**, so `Disallow: /`
+  means no card renders anywhere — with no error, nothing in any log, and every tag on the page
+  perfectly correct. This is what surfaced the decision above: the `$OpenBooks` Twitter card was
+  blank while `og:image` was absolute and valid, the JPEG served 200 at 1200x630, and fetching the
+  page *as Twitterbot* returned every tag intact.
+- **Consequence for the quiet-launch decision below:** it reasoned about SEARCH indexing alone. The
+  cost of `noindex` was never only invisibility to Google — it was that no shared link previewed
+  anywhere, for the entire quiet-launch period. Recorded so the trade is stated honestly if a
+  quiet phase is ever re-entered; the narrower fix is a crawler allowlist rather than a blanket
+  disallow.
+- **And Twitter caches cards for about a week**, so fixing robots.txt does not fix an existing
+  blank card. Re-scrape in the Card Validator.
+
+## A denylist must be swept for FALSE POSITIVES before it ships (settled 2026-08-18)
+
+- **Decision:** no `CONTENT_DENYLIST` change goes live without `node scripts/denylist-check.mjs`
+  passing. It runs the candidate over every post in the corpus plus the project's own prose and
+  treats every hit as a false positive by definition, since all of it is known-good.
+- **Why this direction:** a denylist that MISSES something fails loudly the moment somebody notices.
+  One that BLOCKS LEGAL SPEECH fails silently — the author sees a refusal, nobody else sees
+  anything, and no log names the pattern. On a board whose proposition is that you own what you
+  post, that is the worse failure, and it cuts directly against the free-speech ethos the thin-core
+  moderation decision is built on.
+- **It immediately found two live over-blocks in production**, both ordinary sentences for this
+  board: *"Never paste your private key into any website, including this one."* and *"You can sync
+  your wallet with the app on another device."* Both patterns matched whether the sentence was
+  soliciting or warning — the same shape as the `/seed phrase/` bug that blocked the app's own
+  safety copy. **Revised patterns require the destination a scam always gives** ("...here", "...to
+  unlock", a URL), which still catches the scam.
+- **A pattern was thrown out for being unusable:** bare `cp` (as a CSAM abbreviation) blocked
+  `cp the folder to /data` and every other shell command on a developer-adjacent board. Coverage is
+  not worth a filter that fights its own users.
+- **⚠ A clean sweep proves ONE thing: the list blocks nothing known-good.** It says nothing about
+  coverage, and no corpus of the real thing exists here or should. Coverage is a separate question
+  with a separate answer — a licensed hash list (`scripts/block-hashes.mjs`, still empty; IWF
+  membership is the route for a UK operator). Do not let a green sweep read as "the filter works".
+
 ## Quiet launch: noindex, NO password gate (decided 2026-08-10, two-agent reviewed)
 
 - **Decision:** the pre-public "quiet launch" phase uses an **env-driven `noindex`**, NOT an HTTP Basic-Auth password gate. Search-indexing is OFF by default (`src/app/robots.ts` serves `Disallow: /`; `layout.tsx` emits a `noindex, nofollow` meta) and flips ON only when `ALLOW_INDEXING=true` (set at go-public). The site is otherwise **openly reachable** at `opencook.fun` — unadvertised, shared directly with a small trusted group.
