@@ -114,8 +114,9 @@ the next session does not have to ask.
 | Process | **pm2**, `bsv21-overlay` — *not* a container, so `docker ps` shows nothing |
 | Listens | `127.0.0.1:3055`, nginx-exposed at `https://api.b0ase.com/bsv21/` |
 | Read | `GET /bsv21/api/1sat/bsv21/<txid>_<vout>` |
-| Submit | `POST /bsv21/submit` |
+| Submit | `POST /bsv21/api/v1/submit` — ⚠ **not** `/bsv21/submit`, see below |
 | Admin | `~/src/bsv21-heroku/config.run` on the box — ⚠ **not** `server.run` |
+| Source | `~/src/bsv21-heroku` on the box — ⚠ **not** `~/src/bsv21-overlay`, which is a stale checkout that builds a different binary |
 | Operator | the owner. Same box as bit-sign's self-hosted Supabase. |
 
 Full runbook — failure modes, the watchdog, the CLI — lives with the project that built it:
@@ -136,19 +137,50 @@ Anything else returns **503 `Topic not available`**. That gate is deliberate and
 the overlay — it is what makes a public `/submit` endpoint safe and keeps disk bounded.
 
 It is also **directly at odds with how this board works.** $OpenBooks mints one token per word,
-from the browser, at the moment somebody types it. There is no HTTP admin route on that
-service, so a mint originating in the app cannot whitelist itself, and a token the overlay has
-never heard of is indistinguishable from a token with no holders.
+from the browser, at the moment somebody types it. A mint originating in the app cannot
+whitelist itself, and a token the overlay has never heard of is indistinguishable from a token
+with no holders.
 
-Three ways out, none of them chosen yet — two of them mean changing the overlay's source:
+#### RESOLVED IN PRINCIPLE (2026-08-18) — and two of the three options were never real
 
-1. an authenticated admin endpoint on the overlay, called by the app at mint time;
-2. a narrow SSH-triggered hook the app can fire;
-3. pre-whitelisting, if the token ids can be known ahead of the mint.
+Reading the overlay's source settled it. **The whitelist is a Redis set** (`bsv21:whitelist`),
+and `whitelist-add` is one line — `queueStore.SAdd(ctx, constants.KeyWhitelist, tokenID)`.
+More importantly, `peer.RegisterTopics` is called from **a 30-second ticker** in
+`cmd/server/server.go`, not once at boot: managers are created and destroyed as the set
+changes. **So an add takes effect within 30 seconds and needs no restart.**
 
-**Settle this before designing the holdings migration.** The migration demotes
-`ticker_holdings` from a ledger to an index of chain state, and a room gate that reads an
-indexer which has never been told about the room is a door that is locked for everyone.
+Of the three options previously listed:
+
+1. **an authenticated admin endpoint on the overlay** — the only real one, and now written
+   (`cmd/server/admin.go`, `POST /api/v1/admin/whitelist`, bearer token, fail-closed when
+   `OVERLAY_ADMIN_TOKEN` is unset, so an operator who has not opted in has no endpoint to
+   probe). ⚠ **Written but NOT YET INSTALLED** — the copy to the box was refused, see below.
+2. **an SSH-triggered hook** — strictly worse. It means a private key for the box in Railway's
+   environment, trading a scoped bearer token for shell access to the host.
+3. **pre-whitelisting** — **impossible by construction.** A BSV-21 token's id *is* its deploy
+   outpoint, which cannot be known before the deploy transaction exists. There is nothing to
+   pre-register.
+
+So there was one option, not three.
+
+#### ⚠ Three more corrections, all of which cost a round trip to find
+
+- **`/submit` had NEVER worked**, on any token. `cmd/server/server.go` omitted
+  `OctetStreamLimit` from `server.RegisterRoutesConfig`, Go zero-valued it, and the middleware
+  refused every body against a limit of **0 bytes**. Fixed and deployed 2026-08-18
+  (`OctetStreamLimit: 1 << 30`).
+- **The submit route wants `x-topics: tm_<txid>_<vout>`**, and the body must be **plain binary
+  BEEF** (magic `0100beef`) — not a raw transaction and not Atomic BEEF. WhatsOnChain serves
+  BEEF at `/v1/bsv/main/tx/<txid>/beef` but as **hex text**, so it must be decoded to bytes
+  first.
+- **`/submit` broadcasts.** It is built for live transactions, so an already-mined one is
+  refused ("failed to broadcast"). This does not block anything: the overlay follows new
+  blocks, so tokens minted from the app *going forward* index live. Backfilling a historic
+  token needs a GASP peer that has it, or `server.run -s`.
+
+- ⚠ nginx's `/bsv21/` location sets no `client_max_body_size`, so it inherits the **1 MB**
+  default. Our transactions are far smaller, but a BEEF body carrying a deep merkle path is
+  not obviously bounded — if a submit ever fails with `413`, that is where it is.
 
 ### ⚠ AN EMPTY ANSWER AND A CORRECT ANSWER LOOK IDENTICAL
 
@@ -161,6 +193,30 @@ data** → only then point the app at it.
 Related trap, worth knowing before we write a client: the overlay's route shape is **not**
 GorillaPool's. `/api/1sat/bsv21/<id>` here; `/api/bsv20/id/<id>/holders` there. They are not
 drop-in substitutes for one another, whatever an env var suggests.
+
+### What the read API actually offers (read from `routes/bsv21.go`, 2026-08-18)
+
+The client is `src/services/indexer/overlay.ts`. Three findings shaped it, and each would
+otherwise have been discovered by shipping something wrong:
+
+- **There is no "who holds this token" route.** Every balance is keyed
+  `p2pkh:<address>:<tokenId>`, so a question must NAME an address. We can ask *does this person
+  hold it*; we cannot ask *who holds it*. A holder list is therefore ours to assemble from
+  addresses we already know — and it can never include a holder who has never used this
+  platform. That is a real limit on the leaderboard, not a temporary one.
+- **The batch `POST …/:lockType/balance` is a SUM, not a map.** It builds one event per address
+  and calls `GetBalance(ctx, events, topic)`, which adds them all together and returns a single
+  figure. It answers "how much do these people hold between them". Attributing it to any one
+  address overstates that holder by everyone else's units. Per-holder numbers need one request
+  each. The client names it `combinedBalance` for this reason.
+- **`p2pkh` is the only lock type indexed by address.** `lookups/bsv21-events-lookup.go` decodes
+  the script suffix and emits nothing for anything else — including the pay-to-mint covenant's
+  own continuation output, which is correct, since a contract is not an address.
+
+And the status codes carry meaning worth preserving: **503** is "never told about this token",
+**500** is "tracked, no data yet" (observed on both whitelisted test tokens), **200 + balance 0**
+is a real zero *only if* the token has finished syncing. None of the three is interchangeable
+with the others and none of them is a reason to write down zero.
 
 ---
 
