@@ -45,9 +45,30 @@ import type { MetadataRoute } from "next";
  */
 export const dynamic = "force-dynamic";
 
+/**
+ * ⚠ `/api/og` MUST BE ALLOWED, AND IT IS NOT AN EXCEPTION WORTH TIDYING AWAY.
+ *
+ * Every `$Ticker` thread page builds its social card at `/api/og?p=…` — see the
+ * note in `app/api/og/route.tsx`: *"THIS IS THE CARD THAT ACTUALLY GETS
+ * SHARED"*, because a ticker URL is the addressable form of an idea and it is
+ * what people paste into a chat. A blanket `Disallow: /api/` told every crawler
+ * not to fetch it, so the image 200s perfectly for a browser and is refused for
+ * the one audience it exists to serve.
+ *
+ * The symptom was maddening precisely because it was PARTIAL: the site root
+ * previews from the static `/og-openbooks.jpg` and worked, while every thread
+ * link came back bare. That reads as flaky infrastructure rather than as a rule
+ * doing exactly what it says.
+ *
+ * ⚠ The longest matching path wins under the robots.txt convention, so this
+ * `Allow` beats the `Disallow` below it for `/api/og` alone. Everything else
+ * under `/api/` stays closed. Do not "simplify" this back to a single allow.
+ */
+const CRAWLABLE_API = "/api/og";
+
 export default function robots(): MetadataRoute.Robots {
   const allowIndexing = process.env.ALLOW_INDEXING === "true";
   return allowIndexing
-    ? { rules: { userAgent: "*", allow: "/", disallow: "/api/" } }
+    ? { rules: { userAgent: "*", allow: ["/", CRAWLABLE_API], disallow: "/api/" } }
     : { rules: { userAgent: "*", disallow: "/" } };
 }
