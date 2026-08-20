@@ -15,7 +15,7 @@ import { parseSendCommand } from "@/lib/send-command";
 import { parseSlashCommand } from "@/lib/slash";
 import { titleCaseTicker } from "@/lib/ticker";
 import { ACCEPTED_MIME } from "@/lib/upload";
-import { createPost, getPostingMode, screenDraft } from "./actions";
+import { createPost, getPostingMode, getRoomRecipients, screenDraft } from "./actions";
 import { TickerHint } from "./TickerHint";
 
 /**
@@ -55,6 +55,19 @@ interface PostFormProps {
    * pill used to live there too, until the agent got its own tab.
    */
   compact?: boolean;
+  /**
+   * Seal this post so only the room's members (and the platform) can read it.
+   *
+   * ⚠ THE SYMBOL, NOT A BOOLEAN, because the recipient list is derived from it
+   * on the SERVER — membership lives in `room_entries` and the platform key is
+   * deployment configuration, neither of which the browser can be trusted to
+   * assemble. Undefined means an ordinary public post.
+   *
+   * ⚠ A ROOM'S CONVERSATION IS THE ONLY THING THIS ENCRYPTS. The post is still
+   * inscribed, still paid for, still signed — what changes is that the body on
+   * chain is ciphertext instead of words.
+   */
+  sealToRoom?: string | null;
   placeholder?: string;
   /**
    * Text to drop into the box, from a control elsewhere on the page.
@@ -77,6 +90,7 @@ export function PostForm({
   parentId,
   addendum,
   compact,
+  sealToRoom,
   placeholder,
   prefill,
 }: PostFormProps): React.JSX.Element {
@@ -335,11 +349,57 @@ export function PostForm({
           return;
         }
 
-        const sig = await sign(content);
+        /**
+         * ── Sealing a room post ──────────────────────────────────────────────
+         *
+         * ⚠ EVERYTHING FROM HERE ON USES `body`, NOT `content`. `content` is
+         * what the author typed and what was just screened; `body` is what gets
+         * signed, inscribed, paid for and stored. For a public post they are
+         * the same string. For a room post `body` is the sealed envelope, and
+         * any line that reaches for `content` instead would publish the room's
+         * conversation in the clear — silently, since the post would look
+         * perfectly normal to its author.
+         */
+        let body = content;
+        if (sealToRoom) {
+          const recipients = await getRoomRecipients(sealToRoom);
+          if (!recipients.ok) {
+            /**
+             * ⚠ REFUSE. NEVER FALL BACK TO POSTING IN THE CLEAR. The failure
+             * modes here are a missing platform key or an empty room, and both
+             * would produce a plaintext message in a room somebody paid for
+             * privacy in — permanently, on a public chain. A post that does not
+             * happen can be retried; one that does cannot be taken back.
+             */
+            onPostRejected?.(tempId, "seal_failed");
+            onDone?.(false, "seal_failed");
+            return;
+          }
+          const { sealForRoom } = await import("@/lib/room-crypto");
+          body = JSON.stringify(sealForRoom(content, recipients.pubkeys));
+        }
+
+        /**
+         * ⚠ THE SIGNATURE COVERS `body`, WHICH IS A CHANGE WORTH NOTICING.
+         *
+         * It used to sign the plaintext, and for a public post that is still
+         * exactly what happens. For a sealed post it must not: the server
+         * verifies the signature against what it STORES, and it stores the
+         * envelope. It cannot verify a signature over a plaintext it has no key
+         * to read, and it must not be asked to take the author's word for what
+         * that plaintext was.
+         *
+         * What this signs is therefore "I published this envelope", not "I
+         * wrote these words". A member who opens it learns the words; anybody
+         * can verify who published it. That is the right split — the alternative
+         * puts an unverifiable claim inside a signature that looks verified.
+         */
+        const sig = await sign(body);
         if (sig) {
           formData.set("signature", sig.signature);
           formData.set("pubkey", sig.pubkey);
         }
+        formData.set("content", body);
 
         // ── Paid posting ───────────────────────────────────────────────────
         // ⚠ THE MODE IS ASKED FOR, NEVER ASSUMED. Guessing wrong in either
@@ -352,7 +412,12 @@ export function PostForm({
           mode,
           wif: currentIdentity.wif,
           address: currentIdentity.address,
-          content,
+          // ⚠ `body`, NOT `content` — this is what gets INSCRIBED. Passing the
+          // plaintext here would put the room's conversation on chain in the
+          // clear while the database stored the envelope: the post would look
+          // encrypted everywhere in the app and be readable by anyone with a
+          // block explorer.
+          content: body,
           author: currentIdentity.name,
           sig: sig?.signature ?? null,
           pubkey: sig?.pubkey ?? null,
@@ -392,7 +457,15 @@ export function PostForm({
         onDone?.(true);
       }
     },
-    [onPostCreated, onPostRejected, sign, parentId, addendum]
+    /**
+     * ⚠ `sealToRoom` IS LOAD-BEARING IN THIS LIST. Biome caught it missing, and
+     * the consequence is not a stale render — it is a stale CLOSURE that still
+     * holds `null` after the prop becomes a room symbol, which posts a room
+     * reply IN THE CLEAR, permanently, on a public chain. Exactly the failure
+     * the sealing code above is written to prevent, arriving through the back
+     * door.
+     */
+    [onPostCreated, onPostRejected, sign, parentId, addendum, sealToRoom]
   );
 
   /**

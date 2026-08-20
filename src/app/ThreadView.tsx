@@ -7,6 +7,7 @@ import { SellModal } from "@/components/SellModal";
 import { useIdentityContext } from "@/contexts/IdentityContext";
 import { readCachedNym } from "@/lib/nym-cache";
 import type { RoomAccess } from "@/lib/room-access";
+import { revealContent } from "@/lib/room-reveal";
 import { formatShare } from "@/lib/share";
 import { distinctTickers, isRootTicker, titleCaseTicker } from "@/lib/ticker";
 import { timeAgo } from "@/lib/utils";
@@ -326,7 +327,34 @@ export function ThreadView({
    * door with the room's first message printed under it does not read as a
    * door, it reads as a paywall somebody forgot to finish.
    */
-  const visiblePosts = locked || accessUnknown ? [] : posts;
+  const gatedPosts = locked || accessUnknown ? [] : posts;
+
+  /**
+   * ⚠ DECRYPTED HERE, ONCE, SO EVERYTHING DOWNSTREAM STAYS UNCHANGED.
+   * `PostContent` parses the body for buy commands, sends, links and media, and
+   * folds it by length — all of which would read an envelope as gibberish. Doing
+   * the reveal at the seam means none of that has to know rooms exist.
+   *
+   * ⚠ A LOCKED POST KEEPS ITS PLACE IN THE THREAD. Dropping it would make the
+   * room look emptier than it is and would renumber the conversation for
+   * somebody who joined late; it is replaced by a line saying what it is, which
+   * is a permanent and expected state rather than an error. See
+   * `room-reveal.ts`.
+   */
+  const visiblePosts = useMemo(() => {
+    if (!gatedPosts.length) return gatedPosts;
+    return gatedPosts.map((p) => {
+      const revealed = revealContent(p.content, identity?.wif ?? null, identity?.pubkey ?? null);
+      if (revealed.state === "plain") return p;
+      return {
+        ...p,
+        content:
+          revealed.state === "opened"
+            ? revealed.text
+            : "🔒 Sealed to this room before you joined — your ticket opens it from the moment you walked in.",
+      };
+    });
+  }, [gatedPosts, identity?.wif, identity?.pubkey]);
 
   const replyCount = Math.max(0, posts.length - 1);
 
@@ -689,7 +717,12 @@ export function ThreadView({
             <PostForm
               parentId={rootId}
               compact
-              placeholder="Reply…"
+              /* ⚠ SEALED ONLY WHEN THE ROOM ACTUALLY CHARGES FOR ENTRY. A
+                 nameless thread is not a room, and encrypting an open thread
+                 would hide a public conversation from the feed it belongs in.
+                 `access.gated` is the same flag the door uses. */
+              sealToRoom={access?.gated ? access.symbol : null}
+              placeholder={access?.gated ? "Reply — only this room can read it…" : "Reply…"}
               prefill={prefill}
               onPostCreated={handleReplyCreated}
               onPostRejected={handleReplyRejected}

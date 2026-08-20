@@ -34,8 +34,15 @@ import {
 } from "@/lib/post-economics";
 import { MAX_POST_CHARS } from "@/lib/post-length";
 import { rateLimit } from "@/lib/rate-limit";
-import { enterRoom, mayEnter, type RoomAccess, roomAccess } from "@/lib/room-access";
+import {
+  enterRoom,
+  getRoomMembers,
+  mayEnter,
+  type RoomAccess,
+  roomAccess,
+} from "@/lib/room-access";
 import { enterRoomMessage } from "@/lib/room-entry-message";
+import { roomRecipients } from "@/lib/room-recipients";
 import { parseSendCommand, type SendRecipient } from "@/lib/send-command";
 import {
   FREE_BOOT_COST_SATS,
@@ -1517,6 +1524,35 @@ export async function getPostingMode(): Promise<PostingMode> {
     // author had already paid for the broadcast.
     markupPercent: configuredMarkupPercent(),
   };
+}
+
+/**
+ * Who a post into this room must be encrypted to.
+ *
+ * ⚠ THE CLIENT CANNOT WORK THIS OUT, AND MUST NOT GUESS. Membership lives in
+ * `room_entries` on the server, and the platform's key is deployment
+ * configuration. A client that assembled its own recipient list would seal a
+ * room's conversation to the wrong set of people — permanently, since a post's
+ * recipients are fixed at the moment it is inscribed and cannot be widened
+ * afterwards.
+ *
+ * ⚠ THE LIST IS NOT A SECRET. Membership of a paid room is already public — it
+ * was bought on chain — and `room-crypto.ts` says plainly that a sealed post
+ * names who could read it. What is protected is the CONTENT, not the roster.
+ *
+ * ⚠ AND IT FAILS CLOSED. `roomRecipients` refuses when the platform key is
+ * missing or malformed rather than returning members alone, so a misconfigured
+ * deployment cannot quietly produce rooms nobody can moderate. The caller must
+ * treat a refusal as "do not post", never as "post in the clear".
+ */
+export async function getRoomRecipients(
+  symbol: string
+): Promise<{ ok: true; pubkeys: string[] } | { ok: false; reason: string }> {
+  const canonical = typeof symbol === "string" ? symbol.trim().toUpperCase() : "";
+  if (!canonical) return { ok: false, reason: "no_symbol" };
+  const members = getRoomMembers(canonical);
+  const result = roomRecipients(members);
+  return result.ok ? { ok: true, pubkeys: result.pubkeys } : { ok: false, reason: result.reason };
 }
 
 /**

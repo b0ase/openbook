@@ -212,6 +212,30 @@ export function RoomGate({
             See who holds ${titleCaseTicker(symbol)}
           </a>
 
+          {/* ⚠ SAID AT THE DOOR, BEFORE MONEY CHANGES HANDS, AND NOT BURIED IN
+              TERMS. What a ticket buys is privacy from other USERS: the room's
+              posts are encrypted on chain and unreadable to anyone who has not
+              paid. It is NOT privacy from the platform, which holds a key to
+              every room so it can moderate what this site serves.
+
+              Selling entry to a "private room" while quietly reading it would
+              be a false claim about the product — the one thing this board
+              cannot afford, since its whole proposition is that you can check
+              what it tells you. Two sentences here is the entire cost of it
+              being true. Do not move this behind a link.
+
+              The other half is stated too: joining does not open what was said
+              before you arrived. That is permanent — recipients are fixed when
+              a post is inscribed — and finding it out afterwards would feel
+              like a bug. */}
+          <p className="mt-4 border-t border-zinc-800 pt-3 text-[11px] leading-relaxed text-zinc-500">
+            Posts here are encrypted — nobody outside the room can read them.{" "}
+            <span className="text-zinc-400">
+              OpenBooks can, so it can remove anything illegal from the site.
+            </span>{" "}
+            Joining opens the room from now on, not what was said before you arrived.
+          </p>
+
           <button
             type="button"
             onClick={onClose}

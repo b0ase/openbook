@@ -71,6 +71,13 @@ const POST_FAILURE_TEXT: Record<string, string> = {
   daily_limit: "Daily post limit reached",
   paused: "Posting briefly paused",
   rejected_content: "Can't be posted",
+  /**
+   * ⚠ NOTHING WAS SENT AND NOTHING WAS SPENT. A room post could not be sealed —
+   * the platform key is missing or the room has no members — and posting in the
+   * clear instead was refused deliberately, because a plaintext message in a
+   * room somebody paid for privacy in cannot be taken back off the chain.
+   */
+  seal_failed: "Couldn't secure this room post — nothing was sent",
   // Paid posting — nothing was broadcast, so nothing was spent.
   insufficient_funds: "Not enough funds — add some and try again",
   no_utxos: "No funds yet — add some to post",

@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import { parseBuyCommand } from "./buy-command";
 import { db as defaultDb } from "./db";
 import { mintCostForRange, mintPriceSats, quoteMintSats } from "./mint-price";
+import { isSealed } from "./room-crypto";
 import { parseSendCommand } from "./send-command";
 import { distinctTickers } from "./ticker";
 
@@ -107,6 +108,23 @@ export function mintChargeSats(content: string, database: Db = defaultDb): numbe
    */
   if (parseSendCommand(content)) return 0;
 
+  /**
+   * ⚠ A SEALED POST MINTS NOTHING, AND IT IS SAID HERE RATHER THAN LEFT TO
+   * EMERGE. `distinctTickers` finds no `$Word` in an encrypted envelope, so
+   * this already returned 0 by accident — an invariant nothing states and
+   * nothing protects. If a base64 body ever happened to contain something that
+   * parsed as a ticker, an author would be charged for minting a word they
+   * never named, in a room nobody can read to check.
+   *
+   * The RULE (owner's decision, 2026-08-20) is that naming a word inside a
+   * private room mints nothing and costs nothing to mint. The alternative was
+   * to let the client declare which symbols a sealed post contained, and
+   * `CLAUDE.md` is explicit that symbols are derived from content and never
+   * supplied — a claim the server cannot check is not a claim it should price.
+   * A private claim on a public namespace is odd anyway.
+   */
+  if (isSealed(content)) return 0;
+
   // ⚠ A BUY IS PRICED FIRST AND ON ITS OWN. `/buy 1000 $Memeplex` names a
   // ticker, so falling through to the ordinary path would charge for ONE unit
   // and mint a thousand. The command IS the whole message (`parseBuyCommand` is
@@ -136,6 +154,11 @@ export function mintFloorSats(content: string, database: Db = defaultDb): number
   // nothing. A floor above zero here would REJECT every send after broadcast,
   // for underpaying a mint that never happened.
   if (parseSendCommand(content)) return 0;
+
+  // Same rule as the charge, and it has to be here too: a floor above zero
+  // would REJECT every sealed post after broadcast, for underpaying a mint
+  // that never happened.
+  if (isSealed(content)) return 0;
 
   // Same order as the charge, and it has to be: a buy checked as an ordinary
   // mention would accept one unit's payment for a thousand units of stock.
