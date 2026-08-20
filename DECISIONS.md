@@ -1516,3 +1516,79 @@ consequences nobody had numbers for, and both were measured by building a real m
    is also the natural place to build the transaction. Note it does not require custody: the mint
    payment is fixed by the covenant and only the author's own funding inputs need their signature,
    so a coordinator can assemble an unsigned transaction and have the browser sign its own inputs.
+
+## Minting is DECOUPLED from posting (2026-08-20, delegated: *"make good decisions"*)
+
+**The destination this serves.** A `$Ticker` unit becomes a real BSV-21 token whose supply and
+price are enforced by script rather than by us — that is what the covenant is for and TOKENS.md
+settled it. But the product's core action is *posting*, and "own what you post" is a claim about
+the post. Nothing about migrating the token model is worth degrading the thing the token model
+exists to serve.
+
+**The constraint that forces a choice.** A covenant is ONE UTXO. Every mint spends it and
+re-creates it, so mints of the same word are a strict chain — two authors naming `$Occam` in the
+same second build from the same outpoint and one of them is a double-spend. This is not a rare
+race on a popular word; it is the normal case.
+
+**REJECTED: the post transaction spends the covenant.** It is the maximally-owned design — the
+author mints with their own key, synchronously, funded by themselves — and that is genuinely
+attractive. It is rejected because it puts a contended UTXO on the critical path of posting. The
+loser of the race does not lose their mint, they lose their **post**. It also asks a phone to
+upload 48KB per post. *Choose the design with the fewest failure modes on the critical path.*
+
+**CHOSEN: the post is inscribed synchronously as it is today (~113 sats, parallel, unchanged); the
+mint is a SEPARATE transaction, queued, and drained by a per-symbol single-flight sweep.**
+
+- **Serialization disappears by construction.** One process holds each covenant, so there is no
+  contention, no lease, no double-spend, and no distributed lock to get wrong. Compare the
+  alternative — handing out timed leases to browsers, where a browser that dies mid-lease stalls a
+  word for everyone.
+- **It is a shape this repo has already proven.** `anchor-sweep.ts` accepts a post immediately and
+  guarantees it reaches the chain afterwards, with the queue as a QUERY rather than a table. Same
+  invariant, same failure handling, same absence of a dedicated worker.
+- **`token-source.ts` was built for exactly this state** and it is why nothing has to be fudged: a
+  unit is honestly `database` until the sweep lands and `chain` after. The provenance already
+  exists, so the UI can say "pending" without the app ever claiming the chain guarantees something
+  it does not yet.
+
+⚠ **THE SWEEP MINTS TO THE AUTHOR'S OWN ADDRESS — the server is a courier, not a custodian.** It
+never holds the author's key or their money; it pays a network fee on their behalf, exactly as
+post-anchoring already did. **And custody would not be required even if this later moved
+client-side**, which is worth writing down because it is not obvious: `mint` is permissionless, so
+the covenant input needs NO signature. Only the funder's own inputs do. A coordinator can therefore
+assemble a complete mint transaction it cannot spend, hand it over to be signed, and broadcast the
+result.
+
+⚠ **WHAT TRUST THIS DOES NOT REMOVE, said plainly.** The platform must actually run the sweep. The
+covenant removes trust about *supply and price*; it does not remove trust about us doing our job.
+That is strictly better than today and it is less than "trustless" — do not let a status page round
+it up.
+
+**Who pays.** The mint price goes to the treasury, which is us, so it is a self-payment; the real
+cost is the ~5,329-sat miner fee. The author's mint charge is UNCHANGED — charging 48× more to name
+a word would be a visible product regression for an invisible benefit. The sweep is gated on
+`server-spend-budget.ts`, and gating means **defer, never drop**: the author has been charged, so
+the unit is owed.
+
+**What would NOT change this.** Making the contract smaller. Serialization is a property of there
+being one UTXO, not of how big it is — so a 10× smaller covenant improves the economics and leaves
+this decision exactly where it is.
+
+## The 24KB covenant is a 20-digit number-to-string conversion (2026-08-20)
+
+Where the fee goes, since ~5,329 sats/mint is ~47× the token being bought and the cause was worth
+knowing before anyone tries to fix the symptom.
+
+`Ordinal.int2Str` — which the covenant calls on every mint, because a BSV-21 `amt` is a decimal
+STRING inside the inscription JSON — is a **20-iteration loop, unrolled at compile time**, sized for
+2^64-1. Each iteration carries a power-of-ten lookup, a division and a modulo. Script loops must be
+bounded at compile time, so the whole 20 digits are paid for on every spend regardless of the number.
+
+⚠ **Our supplies will never exceed 8 digits**, so most of that unroll is bought and never used. That
+is a concrete lever, and it is the FIRST thing to measure before considering any contract revision.
+
+⚠ **NOT ACTED ON, DELIBERATELY.** The contract is deployed, tested, and settled by TOKENS.md; the
+size of the win is identified but not measured; and a covenant bug is not a thrown error — it locks
+a token's unissued supply forever. Recording the cause is the useful move here. Do not shrink the
+contract without redoing `contracts/tests/` in full, including the byte-equality suites, which is
+what makes such a change checkable at all.

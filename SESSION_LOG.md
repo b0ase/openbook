@@ -2,6 +2,52 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-20b (the mint spend, and the decision about where minting happens)
+
+**The whole covenant-specific half of minting is now built and verified**; what remains is ordinary
+transaction assembly.
+
+- `src/services/bsv/covenant-mint.ts` — the five-push unlocking script and the BIP143 preimage.
+  Verified byte-for-byte against sCrypt in `contracts/tests/covenantMint.test.ts`, including across
+  the `OP_N`/data push boundary (1..16 are opcodes, 17+ is data — both leave the same value on the
+  stack, so getting it wrong evaluates correctly and emits the wrong bytes) and with a control
+  proving the preimage actually tracks the transaction.
+- The preimage turned out to be the easy part — standard BIP143 over `SIGHASH_ALL | SIGHASH_FORKID`,
+  which the SDK already produces. The delicate work was the locking scripts, done in 2026-08-20a.
+
+### The decision: minting is DECOUPLED from posting
+
+A covenant is one UTXO, so mints of the same word are a strict chain — two authors naming `$Occam`
+in the same second collide. **Rejected: the post transaction spends the covenant.** It is the
+maximally-owned design and it puts a contended UTXO on the critical path of the product's core
+action — the loser of the race loses their POST, not just their mint.
+
+**Chosen:** the post stays synchronous, parallel and unchanged; the mint is a separate transaction
+drained by a per-symbol single-flight sweep. Contention disappears by construction instead of being
+managed with leases. `anchor-sweep.ts` is the same shape and already proven, and `token-source.ts`
+was built for exactly this state — a unit is honestly `database` until the sweep lands, `chain`
+after.
+
+⚠ **The sweep mints to the AUTHOR'S address — courier, not custodian.** And custody would not be
+needed even client-side: `mint` is permissionless, so the covenant input takes no signature and a
+coordinator can assemble a transaction it cannot spend. What this does NOT remove is trust that we
+run the sweep; the covenant removes trust about supply and price, not about us doing our job.
+
+### Where the 24KB actually goes
+
+`Ordinal.int2Str` is a **20-iteration loop unrolled at compile time**, sized for 2^64-1, because a
+BSV-21 `amt` is a decimal STRING in the inscription JSON. Our supplies will never exceed 8 digits,
+so most of that unroll is bought and never used. **Cause identified, size of the win NOT measured,
+deliberately not acted on** — the contract is deployed and settled, and a covenant bug locks a
+token's supply forever.
+
+### Mistake worth noting
+
+Appended the decision entries to `contracts/DECISIONS.md` — a `cd` earlier in the session had
+persisted. Caught by `git status`, content moved to the real file. Also, `${PIPESTATUS[0]}` after a
+pipe reported nothing (zsh uses `$pipestatus`), the same shape as the two `$?`-after-a-pipe errors
+last session; the push was confirmed by comparing local and remote refs instead.
+
 ## 2026-08-20 (the covenant, rebuilt without its compiler — and verified byte for byte)
 
 **The migration's hardest remaining piece is now construction rather than research.** The app can

@@ -80,11 +80,23 @@ chain enforces.
       `contracts/tests/covenantScript.test.ts` (12 equality cases + a mint the real interpreter
       accepts + a negative control). This was the piece that made the migration research rather
       than construction; it is now construction.
-- [ ] **The mint TRANSACTION builder** — sighash preimage, the author's funding inputs, change,
-      broadcast. The unlocking script is five pushes and all five are computable:
-      `<amount> <minterHash> <preimage> <changeSats> <changeAddrHash>`. The script layer it needs
-      is finished.
-- [ ] ⚠ **Mints of the same word SERIALIZE — nothing is built for this.** A covenant is one UTXO,
+- [x] **The mint SPEND builds with `@bsv/sdk`** (`covenant-mint.ts`, 2026-08-20) — the five-push
+      unlocking script and the BIP143 preimage, both verified byte-for-byte against sCrypt in
+      `contracts/tests/covenantMint.test.ts` (including across the `OP_N`/data push boundary, and
+      a control proving the preimage tracks the transaction).
+- [ ] **Assembly and broadcast** — select the funder's UTXOs, compute change, order the four
+      outputs, sign the funding inputs. Ordinary transaction work now; every covenant-specific
+      part is built and verified.
+- [x] **DECIDED (2026-08-20): minting is decoupled from posting.** The post is inscribed
+      synchronously and unchanged (~113 sats, parallel); the mint is a separate transaction drained
+      by a per-symbol single-flight sweep, so contention disappears by construction rather than
+      being managed. The sweep mints to the AUTHOR'S address — courier, not custodian. See
+      DECISIONS "Minting is DECOUPLED from posting".
+- [ ] **Build the sweep** — the queue is a QUERY (mentions with no on-chain mint), single-flight
+      per symbol, `server-spend-budget`-gated, and gating means DEFER not drop: the author has been
+      charged, so the unit is owed.
+- [ ] ~~⚠ **Mints of the same word SERIALIZE — nothing is built for this.**~~ (superseded by the
+      decision above) A covenant is one UTXO,
       so two authors naming `$Occam` at the same moment build from the same outpoint and one is a
       double-spend. Posting is fully parallel today. **This is the next real design decision.** It
       does not require custody: only the author's own funding inputs need their signature, so a
