@@ -1519,6 +1519,60 @@ export async function getPostingMode(): Promise<PostingMode> {
   };
 }
 
+/**
+ * Screen a draft BEFORE the author's browser broadcasts it.
+ *
+ * ⚠ THIS EXISTS BECAUSE THE "PRE-PUBLISH" SCREEN STOPPED BEING PRE-PUBLISH. The
+ * screen inside `createPost` was written when the SERVER broadcast the
+ * `OP_RETURN`, fire-and-forget, right after the insert — so refusing there
+ * genuinely kept content off the chain. Paid posting inverted that: the browser
+ * now builds AND BROADCASTS the inscription in `payForPost` and only then calls
+ * `createPost`. By the time anything is screened the content is already
+ * inscribed, permanently. The screen still stops it appearing on the BOARD,
+ * which is worth having, but it stopped being the control the legal documents
+ * describe.
+ *
+ * So the client calls this FIRST, before it spends anything. A refusal here
+ * costs the author nothing — no network fee, no platform payment, no
+ * inscription.
+ *
+ * ⚠ AND IT IS THE ONLY SCREEN A PRIVATE ROOM CAN EVER HAVE. An encrypted post
+ * reaches the server as ciphertext, so `createPost` cannot read it — not
+ * because of a policy choice but because the operator deliberately holds no
+ * key. For sealed posts this call is not the first line of defence, it is the
+ * only one.
+ *
+ * ⚠ A CLIENT CAN SKIP THIS, and that is accepted rather than solved. Anyone
+ * determined can inscribe straight to the chain without going near this app;
+ * the screen was never a chain-level control and claiming otherwise would be
+ * the over-promise `content-filter.ts` warns against. What it does is stop OUR
+ * product from being the thing that publishes.
+ *
+ * ⚠ IT IS ALSO A DENYLIST ORACLE — call it repeatedly and you can map
+ * `CONTENT_DENYLIST`, which is deliberately uncommitted. Hence the rate limit,
+ * which is tighter than posting because a legitimate author needs this once per
+ * post and an extractor needs it thousands of times.
+ */
+export async function screenDraft(content: string): Promise<{ ok: boolean }> {
+  const text = typeof content === "string" ? content.trim() : "";
+  // An empty draft has nothing to screen. Answering `ok` costs nothing and
+  // avoids burning the caller's budget on a request that cannot post anyway.
+  if (!text) return { ok: true };
+
+  const hdrs = await headers();
+  const ip =
+    hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    hdrs.get("x-real-ip")?.trim() ||
+    "unknown";
+  const rl = rateLimit(`screen:${ip}`, { limit: 60, windowMs: 60_000 });
+  // ⚠ FAILS CLOSED. A throttled caller is told the draft is not screenable, not
+  // that it is clean — an oracle that answers `ok` when it is tired is worse
+  // than no oracle, because the client would broadcast on the strength of it.
+  if (!rl.success) return { ok: false };
+
+  return { ok: screenContent(text).ok };
+}
+
 export interface TickerHolder {
   pubkey: string;
   /** The holder's public name, or null if they have not claimed one. */

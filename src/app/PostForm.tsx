@@ -15,7 +15,7 @@ import { parseSendCommand } from "@/lib/send-command";
 import { parseSlashCommand } from "@/lib/slash";
 import { titleCaseTicker } from "@/lib/ticker";
 import { ACCEPTED_MIME } from "@/lib/upload";
-import { createPost, getPostingMode } from "./actions";
+import { createPost, getPostingMode, screenDraft } from "./actions";
 import { TickerHint } from "./TickerHint";
 
 /**
@@ -309,6 +309,32 @@ export function PostForm({
       });
 
       async function submitOnce(): Promise<void> {
+        /**
+         * ⚠ SCREENED BEFORE ANYTHING IS SPENT, AND THAT ORDER IS THE POINT.
+         *
+         * The screen inside `createPost` runs AFTER `payForPost` has already
+         * broadcast the inscription, so by the time it refuses, the content is
+         * on chain permanently and the author has paid the network fee. It was
+         * written when the SERVER did the broadcasting, where refusing really
+         * did keep content off the chain; paid posting inverted that and the
+         * check was left where it was.
+         *
+         * Calling it here costs a rejected draft nothing at all — no fee, no
+         * platform payment, no inscription — and it is the only screen an
+         * encrypted room post can ever get, since the server cannot read
+         * ciphertext.
+         *
+         * The server screen STAYS. This one can be skipped by a modified
+         * client; that one cannot, and it is what keeps a refused post off the
+         * board.
+         */
+        const screened = await screenDraft(content);
+        if (!screened.ok) {
+          onPostRejected?.(tempId, "rejected_content");
+          onDone?.(false, "rejected_content");
+          return;
+        }
+
         const sig = await sign(content);
         if (sig) {
           formData.set("signature", sig.signature);
