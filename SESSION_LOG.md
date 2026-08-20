@@ -2,6 +2,61 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-20 (the covenant, rebuilt without its compiler — and verified byte for byte)
+
+**The migration's hardest remaining piece is now construction rather than research.** The app can
+build the pay-to-mint covenant's scripts with `@bsv/sdk` alone, and the proof is byte equality
+against sCrypt's own output, not a shape test.
+
+**The design decision that made it safe: the contract code is COPIED FROM CHAIN, never templated.**
+The obvious route was to ship the compiled artifact's 23,685-byte `hex` and substitute six
+constructor parameters — reimplementing a compiler's output format from observation, discovered
+wrong only by broadcasting. It turned out to be unnecessary: a mint's continuation carries the
+*same* contract code as the input it spends (verified byte-for-byte), so only the leading
+inscription and the trailing state change. The 24KB middle is transplanted verbatim and cannot
+drift from the chain, because it is the chain's own bytes.
+
+- `src/services/bsv/covenant-script.ts` — split / decode / rebuild, pure, no sCrypt. 16 unit tests.
+- `contracts/tests/covenantScript.test.ts` — **where the proof lives**, because it needs the
+  compiler. 12 byte-equality cases (including supply 128, the sign-pad case a naive encoder gets
+  wrong) plus a real mint whose output scripts the app built, accepted by the real interpreter.
+- `tsconfig.json` — `target` ES2017 → ES2020. BSV-21 supplies reach 2^64-1, so `number` would
+  silently misencode a large supply; `bigint` literals need ES2020. Type-check-only change.
+
+**The state format, derived rather than guessed** (`scrypt-ts` `VarIntWriter`):
+`OP_RETURN <bool firstCall> <bytes id> <int supply> <uint32LE len> <0x00>`. The five trailing bytes
+locate the state; scanning for the last `OP_RETURN` is not a substitute, because `0x6a` occurs
+inside 24KB of compiled script by coincidence.
+
+### The negative control caught itself being vacuous
+
+"REJECTS a continuation with a single byte changed" passed on its first run — while the covenant was
+never reached at all. The harness threw first, on an undeployed instance, and a rejection for the
+wrong reason is indistinguishable from a real one. It now requires the failure message to name the
+script assertion. **The recurring shape, in a new place: a verification that cannot fail.** Previous
+instances were runtime paths that could not report failure; this is the first one that was a
+*test*.
+
+### One alarm investigated and dismissed, one raised
+
+- **Dismissed:** a genesis covenant appeared to carry `supply = 0`, which would have made every
+  first mint fail on chain. It was an artifact of reading `lockingScript` before sCrypt materialises
+  the state — the real value is correct. Worth the detour; it looked exactly like a live bug.
+- **Raised — and unresolved:** ⚠ **mints of the same word serialize.** A covenant is one UTXO, so
+  two authors naming `$Occam` at the same moment build from the same outpoint and one is a
+  double-spend. Posting is fully parallel today. **This is the next real design decision**, and it
+  does not require custody to solve. See DECISIONS.md.
+
+### Also recorded
+
+A mint transaction is 48,438 bytes / ~5,329 sats — ~47× the token being bought — so **the curve is
+flat where it looks steepest**: below about unit 47 the first unit and the fortieth cost a minter
+almost the same. Owner's call was *"leave it"* (under a tenth of a penny). Documented in
+`mint-price.ts` with a warning against burying it in `MINT_BASE_SATS`.
+
+**Not done:** the mint *transaction* builder — sighash preimage, funding inputs, broadcast — and
+the deploy-on-first-naming path. The script layer they both need is finished and verified.
+
 ## 2026-08-18 (the overlay works, the site is public, and one switch was only half-wired)
 
 **Three things shipped: the overlay's `/submit` fixed, an indexer client written, and the site

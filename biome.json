@@ -46,7 +46,10 @@
       "!**/node_modules",
       "!**/next-env.d.ts",
       "!**/globals.css",
-      "!**/*.code-workspace"
+      "!**/*.code-workspace",
+      "!contracts/artifacts",
+      "!contracts/scrypt.index.json",
+      "!contracts/tsconfig-scryptTS.json"
     ]
   }
 }

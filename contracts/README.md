@@ -62,6 +62,24 @@ anything real.
   orphan whatever the old key holds, including a deployed contract.
 - The WIF is never printed. Only the address is.
 
+## The app's copy of these scripts is verified HERE
+
+`src/services/bsv/covenant-script.ts` builds the covenant's locking scripts with `@bsv/sdk` alone,
+because the toolchain in this directory must never reach the browser. Nothing about that
+reproduction is self-checking: a wrong byte yields a transaction that is structurally fine,
+broadcasts, and is rejected by the covenant.
+
+So the verification lives in `tests/covenantScript.test.ts` — the one workspace with the compiler —
+and it compares **bytes**, not behaviour: 12 equality cases against sCrypt's own output, plus a
+mint whose output scripts the app built, run against the real interpreter.
+
+⚠ **Changing `covenant-script.ts` without running `npm test` here proves nothing.** The app's own
+unit tests are self-consistent by construction, which is exactly what a wrong byte layout also is.
+
+⚠ **The negative control is not decoration.** It flips one byte of the continuation and requires the
+covenant to reject it *naming the assertion* — because on its first run it passed while the covenant
+was never reached at all, and a rejection for the wrong reason looks identical to a real one.
+
 ## Running it
 
 ```sh

@@ -1417,3 +1417,102 @@ price rather than trusting a committed dollar number.
 **What the correct figure exposes is the more useful fact:** an agent reply costs ~26,000 sats of
 compute against ~113 sats of chain. **Inference is ~230× the on-chain cost** — the blockchain is
 rounding error in this system's economics, and the model bill is the whole business.
+
+## The covenant's code is COPIED FROM CHAIN, never templated (2026-08-20)
+
+The app has to build pay-to-mint transactions without sCrypt — `contracts/README.md` is explicit
+that the toolchain must never enter the Next build, because it pulls a compiler binary and a second
+Bitcoin library.
+
+**The obvious approach was to ship the compiled artifact.** Its `hex` is 23,685 bytes with six
+`<placeholder>` slots for the constructor parameters; substitute them, append the state, done. That
+reimplements a compiler's output format from observation, ships a build artifact to browsers, and
+every mistake in it is discovered by broadcasting.
+
+**It is also unnecessary, because of a fact that can be CHECKED rather than trusted: a mint's
+continuation carries the same contract code as the input it spends.** Verified byte-for-byte. The
+only parts that differ between the covenant before a mint and after it are the leading BSV-21
+inscription (whose `amt` changes) and the trailing state (whose `supply` changes). The ~24KB
+between them is identical.
+
+So `src/services/bsv/covenant-script.ts` reads the covenant UTXO — which it must fetch anyway, to
+build the sighash preimage — splits it into `{inscription, code, state}`, and rebuilds only the two
+small ends. The middle is transplanted verbatim. It cannot drift from what is on chain, because it
+*is* what is on chain, and no compiler artifact ships to the browser.
+
+**The layout, derived from sCrypt's output rather than guessed:**
+
+```
+<BSV-21 inscription>  ‖  <contract code>  ‖  OP_RETURN <state>
+state = <bool firstCall> <bytes id> <int supply> <uint32LE len> <0x00 version>
+```
+
+⚠ **The five trailing bytes are how the state is located, and scanning for the last `OP_RETURN` is
+NOT an acceptable substitute.** `0x6a` is an ordinary byte and occurs inside 24KB of compiled
+script by coincidence — a scan finds the right boundary today and a different one after any
+recompile. The length field gives an exact answer, and the `OP_RETURN` it lands on is then
+*checked*: a verification that can fail, rather than a search that always returns something.
+
+⚠ **`writeBool` is a bare byte, not a push** — the one field in the state without a push prefix.
+⚠ **Script numbers need the sign pad.** Supply 128 is `0x80 0x00`; without the pad the interpreter
+reads it as negative. Covered by a dedicated case, because a builder that forgets it is wrong only
+for those values.
+⚠ **The id comes from the OUTPOINT when the input is genesis.** A BSV-21 token's id is its own
+deploy outpoint, so it cannot exist before the deploy transaction does; the contract fills it in on
+first spend (`initId`). This is the one place the app mirrors on-chain behaviour instead of copying
+bytes. Carrying the empty id forward builds a continuation the covenant refuses — after the author
+has broadcast and paid.
+
+**The proof lives in `contracts/tests/covenantScript.test.ts`, and it has to.** The app's unit tests
+are self-consistent by construction, which is exactly what a wrong byte layout also is. The
+contracts workspace is the only place with the compiler, so that is where bytes are compared: 12
+byte-equality cases plus a mint whose output scripts the app built, run against the real
+interpreter. **Changing `covenant-script.ts` without re-running `npm test` in `contracts/` proves
+nothing.**
+
+⚠ **The negative control is load-bearing and it caught itself being vacuous.** "REJECTS a
+continuation with a single byte changed" passed while the covenant was never reached at all — the
+harness threw first, on an undeployed instance, and a rejection for the wrong reason looks exactly
+like a real one. It now asserts the failure message names the script assertion. *A verification
+that cannot fail is not a verification.* This repo keeps finding relatives of it — an empty answer
+and a correct answer that look identical, a landing that was mistaken for being recognised — but
+this is the first one recorded as a TEST that could not fail, rather than a runtime path.
+
+## tsconfig `target` raised to ES2020 (2026-08-20)
+
+Required by `covenant-script.ts`: BSV-21 supplies run to 2^64-1, so `number` would lose precision
+above 2^53 and silently misencode a large supply. `bigint` is the correct type and its literals
+need ES2020.
+
+Low risk by construction — `noEmit: true` means tsc type-checks only and Turbopack does its own
+transpiling against its own browser targets, so this changes what TypeScript *permits*, not what
+ships. `lib` already included `esnext`. Full build, 940 tests and Biome all clean after the change.
+
+⚠ **A stale `tsconfig.tsbuildinfo` masked the change** — tsc kept reporting the old target's errors
+after the edit. If a tsconfig change appears to do nothing, delete the incremental cache before
+concluding anything.
+
+## Two measured facts about minting that were not known when the covenant was chosen (2026-08-20)
+
+Recorded rather than acted on. Neither reopens the covenant decision (TOKENS.md), but both are
+consequences nobody had numbers for, and both were measured by building a real mint spend
+(`contracts/scripts/dump-mint.ts`) rather than estimated.
+
+1. **A mint transaction is 48,438 bytes and costs ~5,329 sats** at the app's 110 sat/kB — the
+   covenant carries its whole 24KB locking script twice, once as the output it re-creates and once
+   inside the sighash preimage. That is ~47× the 113-sat first-unit price, and it does not shrink
+   with the number of units taken. **Consequence: the curve is flat where it looks steepest** —
+   below about unit 47 the fee dominates so completely that the first unit and the fortieth cost a
+   minter almost the same. Long-run appreciation is unaffected. Owner's call (2026-08-20): *"leave
+   it"* — the whole mint is under a tenth of a penny. See `src/lib/mint-price.ts`, which carries an
+   explicit warning against "fixing" this by raising `MINT_BASE_SATS`.
+
+2. **⚠ MINTS OF THE SAME WORD SERIALIZE, AND NOTHING IS BUILT FOR THAT YET.** A covenant is a
+   single UTXO: every mint spends it and re-creates it, so two authors naming `$Occam` at the same
+   moment build from the same outpoint and one of them is a double-spend. Today posting is fully
+   parallel and browser-built; under the covenant, posting a `$Ticker` becomes a per-word serialized
+   operation. On a popular word this is a routine failure, not a rare race. **This is unresolved and
+   is the next real design decision** — it needs a serialization point, and wherever that point goes
+   is also the natural place to build the transaction. Note it does not require custody: the mint
+   payment is fixed by the covenant and only the author's own funding inputs need their signature,
+   so a coordinator can assemble an unsigned transaction and have the browser sign its own inputs.

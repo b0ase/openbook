@@ -73,6 +73,23 @@ chain enforces.
       satoshi, redirecting the payment, taking more than paid for, dropping the continuation,
       minting zero, minting past supply). The price is asserted equal to the app's own
       `mintCostForRange` across the range.
+- [x] **The app can build the covenant's scripts WITHOUT sCrypt** (`covenant-script.ts`,
+      2026-08-20). The contract code is copied from the chain rather than templated from the
+      compiled artifact — a continuation carries the same code as the input it spends, so only the
+      inscription and the state are rebuilt. Verified BYTE-FOR-BYTE against sCrypt in
+      `contracts/tests/covenantScript.test.ts` (12 equality cases + a mint the real interpreter
+      accepts + a negative control). This was the piece that made the migration research rather
+      than construction; it is now construction.
+- [ ] **The mint TRANSACTION builder** — sighash preimage, the author's funding inputs, change,
+      broadcast. The unlocking script is five pushes and all five are computable:
+      `<amount> <minterHash> <preimage> <changeSats> <changeAddrHash>`. The script layer it needs
+      is finished.
+- [ ] ⚠ **Mints of the same word SERIALIZE — nothing is built for this.** A covenant is one UTXO,
+      so two authors naming `$Occam` at the same moment build from the same outpoint and one is a
+      double-spend. Posting is fully parallel today. **This is the next real design decision.** It
+      does not require custody: only the author's own funding inputs need their signature, so a
+      coordinator can assemble an unsigned transaction and have the browser sign its own inputs.
+      See DECISIONS "Two measured facts about minting".
 - [ ] ⚠ **Deploy a THROWAWAY symbol and confirm an indexer sees deploy + mint + transfer.** Same
       discipline that gated paid posting. **Blocked on funding** — the owner has no testnet coins;
       either a faucet (witnessonchain / scrypt.io) or a mainnet deploy at ~200 sats. The scripts
