@@ -495,6 +495,57 @@ export function applyRoomEntryMigration(database: Db): void {
    */
 }
 
+/**
+ * Which on-chain contract issues a word's units.
+ *
+ * ⚠ THIS TABLE IS THE SEAM OF THE WHOLE MIGRATION. Today a `$Ticker` unit is a
+ * row in `ticker_holdings` — real money is charged for it, and what guarantees
+ * it is a database the operator runs. The pay-to-mint covenant replaces that
+ * guarantee with one the network enforces, and this is where the two are joined:
+ * a symbol on one side, its deploy outpoint on the other.
+ *
+ * Until a symbol has a row here, its units are OURS to vouch for and nothing
+ * else. That is not a defect to be hidden; it is the honest state, and the app
+ * should say so rather than imply a chain fact it cannot produce.
+ *
+ * ⚠ `token_id` IS THE DEPLOY OUTPOINT (`<txid>_<vout>`), and it is the token's
+ * permanent identity under BSV-21 — not a name we assign. It cannot be known
+ * before the deploy transaction exists, which is exactly why a token cannot be
+ * pre-registered anywhere, including with our own indexer.
+ *
+ * ⚠ `whitelisted_at` EXISTS BECAUSE OUR INDEXER ONLY WATCHES WHAT IT IS TOLD
+ * ABOUT. A deployed token the overlay has never heard of reads as a token with
+ * no holders — an empty answer indistinguishable from a correct one. Recording
+ * the moment we asked lets a reader tell "nobody holds this" from "we never
+ * asked", which is the difference between a fact and a silence.
+ */
+export function applyTickerContractMigration(database: Db): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ticker_contracts (
+      -- The canonical UPPERCASE symbol, matching ticker_holdings/ticker_mentions.
+      symbol         TEXT PRIMARY KEY,
+      -- The BSV-21 token id: the deploy outpoint, "<txid>_<vout>".
+      token_id       TEXT NOT NULL UNIQUE,
+      -- Where the unissued supply lives, so a minter knows what to spend.
+      -- Same value as token_id at deploy; kept separately because the covenant
+      -- MOVES as it is spent, and the current outpoint is not the identity.
+      contract_outpoint TEXT,
+      -- Satoshis for the first unit, as deployed. Stored rather than assumed:
+      -- the off-chain curve and the on-chain one must agree to the satoshi, and
+      -- a constant that drifted would make every mint fail at broadcast.
+      base_price     INTEGER NOT NULL,
+      max_supply     TEXT NOT NULL,
+      deployed_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      -- When our overlay was asked to index it. NULL means never asked, which
+      -- is NOT the same as "asked and it reported nothing".
+      whitelisted_at TEXT
+    )
+  `);
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_ticker_contracts_token ON ticker_contracts(token_id)"
+  );
+}
+
 export function applySpentOutpointMigration(database: Db): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS spent_outpoints (
@@ -1078,6 +1129,7 @@ try {
   applyRoomEntryMigration(db);
   applyAgentReplyMigration(db);
   applySpentOutpointMigration(db);
+  applyTickerContractMigration(db);
   applyTickerMeaningMigration(db);
   applyTickerBudgetMigration(db);
   applyUploadAuditMigration(db);
