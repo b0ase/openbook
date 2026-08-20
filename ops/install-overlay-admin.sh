@@ -71,6 +71,36 @@ print("  server.go patched")
 PY
 fi
 
+# ── Patch 2: a not-found that reports itself as a server fault ───────────────
+#
+# ⚠ A REAL BUG, FOUND BY REFUSING TO CALL A 500 "PRE-EXISTING". The token
+# details route has an explicit not-found branch, but it compares
+# `err.Error() == "token not found"` — and the storage layer returns
+# **"outpoint not found"** (overlay/storage/{sqlite,postgres,mongo}.go). The
+# exact match never fires, so every genuine not-found falls through to the 500
+# catch-all: "Failed to retrieve token details".
+#
+# ⚠ WHY IT MATTERS TO US SPECIFICALLY. `src/services/indexer/overlay.ts` reads
+# these status codes as MEANINGS: 503 = never whitelisted, 404 = tracked but no
+# data yet, 5xx = the indexer is unwell. With this bug a token that is tracked
+# and simply has nothing yet is indistinguishable from a broken indexer — and
+# the app is built to never turn either into a balance, so it would report
+# "unreachable" forever for a token that is merely empty.
+if grep -q 'err.Error() == "token not found"' routes/bsv21.go; then
+  cp routes/bsv21.go "routes/bsv21.go.bak-$STAMP"
+  python3 - <<'PY2'
+p = "routes/bsv21.go"
+s = open(p).read()
+old = 'if err.Error() == "token not found" {'
+new = 'if strings.Contains(err.Error(), "not found") {'
+assert old in s
+open(p, "w").write(s.replace(old, new, 1))
+print("  routes/bsv21.go patched — not-found now answers 404, not 500")
+PY2
+else
+  echo "→ routes/bsv21.go already patched, leaving it alone"
+fi
+
 echo "→ building (cmd/server is package main)"
 export PATH="$HOME/go-toolchain/go/bin:$PATH"
 go build -o server.run.new ./cmd/server

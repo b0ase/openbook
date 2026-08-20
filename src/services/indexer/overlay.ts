@@ -217,11 +217,26 @@ export async function isIndexed(tokenId: string): Promise<boolean | null> {
   if (!isTokenId(tokenId)) return false;
   try {
     const { status } = await getJson(`/api/1sat/bsv21/${tokenId}`);
+    // The only answer that means "this overlay was never told about the token".
+    // It is returned before the lookup is even attempted, by the topic-manager
+    // gate — so it is the one status that justifies whitelisting.
     if (status === 503) return false;
-    // ⚠ 500 IS NOT "NO". The overlay returns `Failed to retrieve token details`
-    // for a token it IS tracking but has no data for yet — observed on both
-    // whitelisted test tokens, 2026-08-18. Answering `false` there would send a
-    // caller off to re-whitelist something already whitelisted.
+
+    /**
+     * ⚠ 404 MEANS TRACKED-BUT-EMPTY, WHICH IS A "YES" TO THIS QUESTION.
+     * Reaching the lookup at all means the topic manager exists; the token
+     * simply has no data yet. Answering `false` would send a caller off to
+     * re-whitelist something already whitelisted.
+     *
+     * ⚠ AND IT USED TO ARRIVE AS A 500, WHICH IS WHY THIS READS ODDLY. The
+     * overlay's route compared `err.Error() == "token not found"` while its
+     * storage returns `"outpoint not found"`, so the exact match never fired
+     * and every genuine not-found fell through to the 500 catch-all. Fixed on
+     * the box (see `ops/install-overlay-admin.sh`), but a 5xx is still treated
+     * as "cannot say" rather than "no" — an indexer that is unwell must never
+     * be read as an answer about a token.
+     */
+    if (status === 404) return true;
     if (status >= 500) return null;
     return status < 400;
   } catch {
