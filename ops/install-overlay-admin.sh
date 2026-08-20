@@ -77,13 +77,27 @@ go build -o server.run.new ./cmd/server
 echo "  server.run.new  $(wc -c < server.run.new) bytes"
 
 # ⚠ A LIBRARY ARCHIVE IS NOT A SERVER. An earlier build produced a 1.6MB .a and
-# was very nearly reported as a success. An ELF executable is the only thing
-# worth swapping in.
-if ! file server.run.new | grep -q "executable"; then
-  echo "✗ server.run.new is not an executable — refusing to go further"
-  file server.run.new
+# was very nearly reported as a success, so the output is checked rather than
+# assumed.
+#
+# ⚠ AND THE CHECK ITSELF HAS ALREADY BEEN WRONG ONCE. It used `file`, which is
+# not installed on this box — so a perfectly good 58MB binary was declared "not
+# an executable" and a working install was refused. A guard that fails when its
+# own tooling is missing is worse than no guard: it stops correct work and
+# points at the wrong thing.
+#
+# So: compare magic bytes against the binary ALREADY RUNNING. No external
+# tools, no assumptions about platform or format — whatever the live server is,
+# the new one has to be the same kind of file.
+new_magic="$(head -c 4 server.run.new | od -An -c | tr -d ' \n')"
+run_magic="$(head -c 4 server.run    | od -An -c | tr -d ' \n')"
+if [ "$new_magic" != "$run_magic" ]; then
+  echo "✗ server.run.new does not look like the running binary — refusing to go further"
+  echo "  running: $run_magic"
+  echo "  built:   $new_magic"
   exit 1
 fi
+echo "  magic matches the running binary ($run_magic)"
 
 if [ "$SWAP" -eq 0 ]; then
   echo ""
