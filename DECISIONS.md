@@ -167,8 +167,31 @@
   anywhere, for the entire quiet-launch period. Recorded so the trade is stated honestly if a
   quiet phase is ever re-entered; the narrower fix is a crawler allowlist rather than a blanket
   disallow.
-- **And Twitter caches cards for about a week**, so fixing robots.txt does not fix an existing
-  blank card. Re-scrape in the Card Validator.
+- **⚠ AND THE PAGE CACHE AND THE IMAGE CACHE ARE SEPARATE — busting one does not bust the other.**
+  This is the part that cost the most time, and it is the durable lesson. After robots.txt was
+  fixed, a cache-busting PAGE url (`/?v=2`) produced a card with a frame, a title and a description
+  and **an empty placeholder where the picture goes**. That split is the whole diagnosis: the page
+  was re-crawled, the image was not. `Disallow: /` had blocked `/og-openbooks.jpg` as well as the
+  page, so X held a cached FETCH FAILURE against that exact image url — and `og:image` still
+  pointed at it, unchanged, so the stale verdict was reused.
+- **The fix is to MOVE THE IMAGE URL**, since there is nothing to purge (see the correction below).
+  `OG_IMAGE_PATH` in `src/lib/site-origin.ts` is now the single definition; it was hard-coded in
+  three files, and moving one while missing the others would leave pages pointing at a url a
+  scraper holds a verdict on, with an empty placeholder giving no hint which page is at fault.
+  **If it ever needs redoing, bump the date in the filename — never reuse a name.**
+- **⚠ The OLD image file STAYS in `public/`.** Telegram had already cached a WORKING card against
+  it. Deleting it would break previews that are currently fine in order to fix ones that are not,
+  and it costs 96KB. Confirmed working after the change: new url 200, old url still 200.
+- **⚠ CORRECTION — Twitter's Card Validator is GONE.** `cards-dev.twitter.com/validator` now
+  bounces to an X login; there is no self-serve re-scrape. Earlier advice in this repo to "re-scrape
+  in the Card Validator" was wrong. The working methods are: a url the scraper has never seen (for
+  X), and forwarding the link to **@WebpageBot** (for Telegram).
+- **Diagnosing this, in order, because the symptom points everywhere except the cause:** a card that
+  does not appear AT ALL is usually robots.txt or the tags; a card that appears WITH AN EMPTY IMAGE
+  is the image url specifically — either unreachable, or cached as unreachable. Check the image as
+  the crawler (`curl -A Twitterbot/1.0`) before touching anything else. Ours returned a valid
+  1200x630 JPEG throughout, which is what proved the fault was a cached verdict rather than the
+  file.
 
 ## A denylist must be swept for FALSE POSITIVES before it ships (settled 2026-08-18)
 

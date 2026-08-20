@@ -50,6 +50,17 @@ warning, which is the `/seed phrase/` bug repeating. Revised patterns require th
 scam always gives. Also threw out a pattern that looked good: bare `cp` blocked `cp the folder to
 /data` and every other shell command.
 
+**Postscript (2026-08-20) — the card, finally.** Three faults stacked, each masking the next.
+(1) `Disallow: /` blocked every scraper, so no card rendered anywhere. (2) With that fixed, thread
+links stayed bare because their card is built at `/api/og?p=…` and robots.txt still said
+`Disallow: /api/` — the route's own header reads *"THIS IS THE CARD THAT ACTUALLY GETS SHARED"*.
+(3) With THAT fixed, X returned a card frame with an **empty placeholder**: the page cache and the
+image cache are separate, and `Disallow: /` had poisoned the image url too. A cache-busting PAGE
+url does not clear it — the image url has to move. `OG_IMAGE_PATH` is now one constant (it was
+hard-coded in three files); the old file stays in `public/` because Telegram had a working card
+cached against it. Confirmed working by the owner. **Correction recorded: Twitter's Card Validator
+is retired, so earlier advice in this repo to re-scrape with it was wrong.**
+
 **Ruled out / deferred:**
 - The illegal-floor patterns are written and tested but **NOT set** — the sandbox refused the
   `railway variables --set`. They are at `~/Desktop/openbooks-CONTENT_DENYLIST-2026-08-18.txt`,
