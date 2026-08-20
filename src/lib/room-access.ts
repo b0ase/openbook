@@ -157,6 +157,24 @@ export function mayEnter(rootId: number, pubkey: string | null, database: Db = d
  * the browser builds and broadcasts the burn; callers must have verified it before
  * calling. Null is allowed only for the grandfathered rows the migration writes.
  */
+/**
+ * Everyone who has walked through a room's door.
+ *
+ * ⚠ MEMBERSHIP IS `room_entries`, NOT `ticker_holdings`, AND CONFUSING THE TWO
+ * EMPTIES THE ROOM. A ticket is BURNED on entry, so a member's balance is zero
+ * by construction — reading holders would return the people who have NOT come
+ * in and miss everyone who has. Sealing a post to that list would encrypt the
+ * room's conversation to exactly the wrong set of people.
+ *
+ * Returns pubkeys, because that is what a post is encrypted to.
+ */
+export function getRoomMembers(symbol: string, database: Db = defaultDb): string[] {
+  const rows = database
+    .prepare("SELECT pubkey FROM room_entries WHERE symbol = ? ORDER BY entered_at ASC")
+    .all(symbol) as Array<{ pubkey: string }>;
+  return rows.map((r) => r.pubkey).filter(Boolean);
+}
+
 export function enterRoom(
   symbol: string,
   pubkey: string,
