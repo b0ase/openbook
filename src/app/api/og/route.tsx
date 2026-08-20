@@ -14,7 +14,9 @@ import { canonicalTicker, isValidTicker, titleCaseTicker } from "@/lib/ticker";
  * ⚠ THIS IS THE CARD THAT ACTUALLY GETS SHARED. A ticker URL is the addressable
  * form of an idea — what someone pastes into a chat to say "look at this" — so
  * without it every such link previewed as the generic site card and the idea
- * being pointed at was invisible. `app/opengraph-image.tsx` still covers `/`.
+ * being pointed at was invisible. The site root is covered by the static `openGraph.images`
+ * photo declared in `app/layout.tsx` — NOT by an `app/opengraph-image.tsx`, which
+ * was deleted precisely because a file-based OG image always overrides that photo.
  *
  * ⚠ THE LINE IS TOKEN vs MARKET (TOKENS.md). This card MAY say tokens exist and
  * are owned by whoever posted — live and true. It may NOT say they are buyable,
