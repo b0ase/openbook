@@ -243,3 +243,65 @@ export async function isIndexed(tokenId: string): Promise<boolean | null> {
     return null;
   }
 }
+
+/**
+ * Ask this overlay to start watching a token.
+ *
+ * ⚠ THIS IS THE PIECE THE MIGRATION WAS MISSING, AND IT COULD NOT BE FAKED. The
+ * overlay indexes only tokens it has been told about — `engine.Submit` returns
+ * `ErrUnknownTopic` for a topic with no manager, so a mint cannot bootstrap its
+ * own indexing by submitting itself. And a BSV-21 token's id IS its deploy
+ * outpoint, so it cannot be pre-registered before the transaction exists
+ * either. The only way through was an authenticated route on the overlay, which
+ * now exists (`ops/overlay-admin.go`).
+ *
+ * ⚠ CALL IT AT DEPLOY TIME, NOT AT READ TIME. A token nobody asked us to watch
+ * reads as a token with no holders, and `token-source.ts` will correctly refuse
+ * to turn that into a balance — so the room simply will not work. The moment a
+ * covenant is deployed is the moment to register it.
+ *
+ * ⚠ AND THE ANSWER IS NOT IMMEDIATE. Topic managers refresh on a 30-second
+ * ticker on the box, so a read straight after this returns an empty answer that
+ * is NOT authoritative. `markWhitelisted` records that we ASKED; it does not
+ * record that the data has arrived.
+ *
+ * Server-only: it carries a secret. Never import this into a client component.
+ */
+export type WhitelistResult =
+  | { ok: true }
+  | { ok: false; reason: "no_token_configured" | "unauthorized" | "rejected" | "unreachable" };
+
+export async function whitelistToken(tokenId: string): Promise<WhitelistResult> {
+  if (!isTokenId(tokenId)) return { ok: false, reason: "rejected" };
+
+  const secret = process.env.OVERLAY_ADMIN_TOKEN?.trim();
+  /**
+   * ⚠ A DISTINCT REASON, NOT A GENERIC FAILURE. An unconfigured deployment and
+   * a rejected request are the same shape and completely different problems —
+   * one is a five-second fix by the operator, the other means the token on the
+   * box changed. Collapsing them sends whoever debugs this to the wrong place.
+   */
+  if (!secret) return { ok: false, reason: "no_token_configured" };
+
+  try {
+    const res = await fetch(`${OVERLAY_BASE_URL}/api/v1/admin/whitelist`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        authorization: `Bearer ${secret}`,
+      },
+      body: JSON.stringify({ token: tokenId }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      cache: "no-store",
+    });
+    if (res.status === 401) return { ok: false, reason: "unauthorized" };
+    // The route is idempotent — SAdd on a member already present is a no-op — so
+    // a retry after a lost response is harmless. That matters: the alternative
+    // to retrying is a token that is on chain and permanently unindexed.
+    if (res.ok) return { ok: true };
+    return { ok: false, reason: res.status >= 500 ? "unreachable" : "rejected" };
+  } catch {
+    return { ok: false, reason: "unreachable" };
+  }
+}

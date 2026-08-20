@@ -36,6 +36,29 @@
  * than read from the live fee policy: the market page prices thousands of tokens
  * in one render, and a curve that moved with the fee estimator would make two
  * rows disagree for no reason a reader could see.
+ *
+ * ⚠ "PRICED AT COST" STOPS BEING TRUE ONCE A COVENANT IS IN THE PATH, and the
+ * gap is not small. Measured 2026-08-20 by building a real mint spend
+ * (`contracts/scripts/dump-mint.ts`): the pay-to-mint contract's locking script
+ * is ~24KB, and a spend carries it TWICE — once as the output it re-creates,
+ * once inside the sighash preimage. So a mint transaction is **48,438 bytes and
+ * costs ~5,329 satoshis** at the app's 110 sat/kB, against a first-unit price of
+ * 113. **The network fee is roughly 47x the token being bought**, and it does
+ * not shrink with the number of units taken.
+ *
+ * ⚠ SO THE CURVE IS FLAT WHERE IT LOOKS STEEPEST. Below about unit 47 the fee
+ * dominates so completely that the first unit and the fortieth cost a minter
+ * almost the same. The "cost price for the first, twice for the second" mechanic
+ * only starts to bite above that. Long-run appreciation is unaffected; the early
+ * slope is mostly theatre.
+ *
+ * ⚠ THE OWNER'S CALL (2026-08-20) IS TO LEAVE IT: *"leave it"* — in dollars the
+ * whole mint is under a tenth of a penny, and redesigning the economics around
+ * a sub-penny is not worth it. This is documented rather than fixed. Revisit if
+ * a word ever gets popular enough for the flat early range to matter, or if the
+ * covenant can be made smaller. Do NOT quietly raise this constant to "cover
+ * the fee" — the fee is not a mint price, and burying it here would make the
+ * number mean two things at once.
  */
 export const MINT_BASE_SATS = 113;
 
