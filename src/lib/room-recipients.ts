@@ -32,11 +32,26 @@ import { PublicKey } from "@bsv/sdk";
 /**
  * The platform's room-reading public key.
  *
- * `NEXT_PUBLIC_` because the SEAL happens in the author's browser, which
- * therefore needs this value. That is safe and is the whole point of it being a
- * public key.
+ * ⚠ DELIBERATELY NOT `NEXT_PUBLIC_`, AND THE FIRST VERSION OF THIS FILE HAD IT
+ * WRONG. The reasoning for the prefix was that sealing happens in the author's
+ * BROWSER, so the browser needs the value — true, but it does not need it from
+ * here. The browser asks `getRoomRecipients`, a SERVER action, which assembles
+ * the whole list. This constant is only ever read server-side.
+ *
+ * And the prefix would have broken it outright: Next inlines `NEXT_PUBLIC_*` at
+ * BUILD time, and this project builds inside a Dockerfile where the deployment's
+ * environment does not exist. The value would have been `undefined` in
+ * production, `roomRecipients` would have answered `no_platform_key`, and — with
+ * the fail-closed rule working exactly as designed — EVERY ROOM POST WOULD HAVE
+ * BEEN REFUSED, for a reason nothing on screen could explain. The same
+ * build-time-versus-runtime trap that made `ALLOW_INDEXING` unreachable in
+ * `robots.ts`; see DECISIONS.md.
+ *
+ * Read at runtime, on the server, it simply works — and it never enters a
+ * client bundle, which is tidier even though a public key would be harmless
+ * there.
  */
-export const PLATFORM_ROOM_PUBKEY = process.env.NEXT_PUBLIC_PLATFORM_ROOM_PUBKEY ?? "";
+export const PLATFORM_ROOM_PUBKEY = process.env.PLATFORM_ROOM_PUBKEY ?? "";
 
 export type RecipientResult =
   | { ok: true; pubkeys: string[] }

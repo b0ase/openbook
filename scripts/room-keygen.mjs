@@ -6,9 +6,10 @@
  * ⚠ THE TWO HALVES GO TO DIFFERENT PLACES, AND THAT SEPARATION IS THE WHOLE
  * SECURITY OF IT.
  *
- *   PUBLIC key  → `NEXT_PUBLIC_PLATFORM_ROOM_PUBKEY` in the deployment.
- *                 The seal happens in the author's BROWSER, so the browser
- *                 needs this. It is a public key; publishing it costs nothing.
+ *   PUBLIC key  → `PLATFORM_ROOM_PUBKEY` in the deployment. Read at RUNTIME
+ *                 on the server — NOT `NEXT_PUBLIC_`, which Next inlines at
+ *                 build time and would be empty here, because the build runs
+ *                 inside a Dockerfile with no deployment environment.
  *
  *   PRIVATE key → your own machine, offline, in a password manager. NOT in
  *                 Railway, NOT in .env, NOT in this repo.
@@ -38,7 +39,7 @@ console.log("  ─────────────────────�
 console.log("");
 console.log("  PUBLIC — put this in the deployment environment:");
 console.log("");
-console.log(`    NEXT_PUBLIC_PLATFORM_ROOM_PUBKEY=${key.toPublicKey().toString()}`);
+console.log(`    PLATFORM_ROOM_PUBKEY=${key.toPublicKey().toString()}`);
 console.log("");
 console.log("  PRIVATE — store OFFLINE. Never deploy it. Never commit it.");
 console.log("");
