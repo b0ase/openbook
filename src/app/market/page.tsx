@@ -3,7 +3,7 @@ import { AppProviders } from "@/components/AppProviders";
 import { BottomNav } from "@/components/BottomNav";
 import { SiteNav } from "@/components/SiteNav";
 import { mintPriceSats } from "@/lib/mint-price";
-import { siteOrigin } from "@/lib/site-origin";
+import { OG_IMAGE_PATH, siteOrigin } from "@/lib/site-origin";
 import { leaderboardHref, titleCaseTicker } from "@/lib/ticker";
 import { getServerAddress } from "@/services/bsv/wallet";
 import { listTickerBoards } from "../actions";
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Market — $OpenBooks",
     description: "Every token on $OpenBooks and who holds it.",
-    images: [`${siteOrigin()}/og-openbooks.jpg`],
+    images: [`${siteOrigin()}${OG_IMAGE_PATH}`],
   },
 };
 

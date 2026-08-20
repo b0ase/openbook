@@ -4,7 +4,7 @@ import { AppProviders } from "@/components/AppProviders";
 import { BottomNav } from "@/components/BottomNav";
 import { SiteNav } from "@/components/SiteNav";
 import { formatShare } from "@/lib/share";
-import { siteOrigin } from "@/lib/site-origin";
+import { OG_IMAGE_PATH, siteOrigin } from "@/lib/site-origin";
 import { parseTickerPath, tickerHref, titleCaseTicker } from "@/lib/ticker";
 import { getServerAddress } from "@/services/bsv/wallet";
 import { getTickerLeaderboard } from "../../actions";
@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     openGraph: {
       title: `${name} holders`,
       description: `Who holds ${name} on $OpenBooks.`,
-      images: [`${siteOrigin()}/og-openbooks.jpg`],
+      images: [`${siteOrigin()}${OG_IMAGE_PATH}`],
     },
   };
 }

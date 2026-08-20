@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Geist, Geist_Mono } from "next/font/google";
-import { siteOrigin } from "@/lib/site-origin";
+import { OG_IMAGE_PATH, siteOrigin } from "@/lib/site-origin";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -93,11 +93,37 @@ export const metadata: Metadata = {
      * checked, not assumed — so filling the frame costs nothing here. Re-crop
      * from the original if the image is ever replaced; do not scale this one up.
      */
+    /**
+     * ⚠ THE FILENAME CARRIES A DATE BECAUSE A SCRAPER CACHES PER IMAGE URL.
+     *
+     * While the quiet-launch `robots.txt` served `Disallow: /` it blocked this
+     * image as well as the page, so X cached a FETCH FAILURE against
+     * `/og-openbooks.jpg`. Fixing robots.txt did not clear that: adding a query
+     * to the PAGE url (`/?v=2`) earned a fresh page crawl — the card frame,
+     * title and description all came back — while `og:image` still pointed at
+     * the same unchanged image url, so the cached failure was reused and the
+     * card rendered with an EMPTY PLACEHOLDER. A working card around a missing
+     * picture is the signature of exactly that split.
+     *
+     * There is no way to purge it: X retired the Card Validator, so a url it
+     * has never failed on is the only lever left.
+     *
+     * ⚠ AND THE OLD FILE IS DELIBERATELY STILL THERE. Telegram had already
+     * cached a WORKING card against `/og-openbooks.jpg`; removing it would
+     * break every preview that is currently fine in order to fix one that is
+     * not. It costs 96KB. Leave it.
+     *
+     * If this ever needs redoing, bump the date — do not reuse a name a
+     * scraper may hold a verdict on.
+     */
     images: [
       {
-        url: "/og-openbooks.jpg",
+        url: OG_IMAGE_PATH,
         width: 1200,
         height: 630,
+        // Stated explicitly: a scraper that knows the type before fetching has
+        // one fewer reason to give up on it.
+        type: "image/jpeg",
         alt: "$OpenBooks",
       },
     ],
@@ -107,7 +133,7 @@ export const metadata: Metadata = {
     title: "$OpenBook — own what you post",
     description:
       "Every post anchored on-chain, and one token to whoever wrote it. Boosts split straight to contributors in a single transaction.",
-    images: ["/og-openbooks.jpg"],
+    images: [OG_IMAGE_PATH],
   },
   manifest: "/manifest.json",
   appleWebApp: {
