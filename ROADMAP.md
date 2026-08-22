@@ -84,17 +84,25 @@ chain enforces.
       unlocking script and the BIP143 preimage, both verified byte-for-byte against sCrypt in
       `contracts/tests/covenantMint.test.ts` (including across the `OP_N`/data push boundary, and
       a control proving the preimage tracks the transaction).
-- [ ] **Assembly and broadcast** — select the funder's UTXOs, compute change, order the four
-      outputs, sign the funding inputs. Ordinary transaction work now; every covenant-specific
-      part is built and verified.
+- [x] **Assembly** (`covenant-mint-tx.ts`, 2026-08-22) — the four outputs in the contract's order,
+      the change arithmetic including the no-change branch, the preimage and the unlocking script.
+      **Verified END TO END: a real script interpreter accepts a transaction sCrypt had no hand in
+      building** (`contracts/tests/covenantMintTx.test.ts`).
 - [x] **DECIDED (2026-08-20): minting is decoupled from posting.** The post is inscribed
       synchronously and unchanged (~113 sats, parallel); the mint is a separate transaction drained
       by a per-symbol single-flight sweep, so contention disappears by construction rather than
       being managed. The sweep mints to the AUTHOR'S address — courier, not custodian. See
       DECISIONS "Minting is DECOUPLED from posting".
-- [ ] **Build the sweep** — the queue is a QUERY (mentions with no on-chain mint), single-flight
-      per symbol, `server-spend-budget`-gated, and gating means DEFER not drop: the author has been
-      charged, so the unit is owed.
+- [x] **The sweep** (`mint-queue.ts` + `mint-sweep.ts`, 2026-08-22) — the queue as a QUERY, the
+      atomic record-and-advance that makes a double-mint impossible, backoff, and budget gating
+      that defers rather than drops. 15 integration tests.
+- [ ] **Wire the executor to the server wallet** — the sweep spends through an injected
+      `MintExecutor`; the wallet-backed one must go through `wallet.ts`'s existing mutex, which is
+      what stops a mint and a free boost spending the same UTXO. Deliberately left as the one
+      remaining seam rather than rushed: it is the money path.
+- [ ] ⚠ **DEPLOY-ON-FIRST-NAMING — the actual blocker.** `ticker_contracts` is EMPTY, so the queue
+      is empty and the sweep has nothing to do. Nothing mints until a word gets a covenant. Today
+      deploying is a manual `contracts/scripts/deploy.ts` run.
 - [ ] ~~⚠ **Mints of the same word SERIALIZE — nothing is built for this.**~~ (superseded by the
       decision above) A covenant is one UTXO,
       so two authors naming `$Occam` at the same moment build from the same outpoint and one is a

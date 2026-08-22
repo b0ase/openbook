@@ -1592,3 +1592,79 @@ size of the win is identified but not measured; and a covenant bug is not a thro
 a token's unissued supply forever. Recording the cause is the useful move here. Do not shrink the
 contract without redoing `contracts/tests/` in full, including the byte-equality suites, which is
 what makes such a change checkable at all.
+
+## The chain is the lock; the database only remembers (2026-08-22)
+
+How the mint sweep avoids issuing units twice, which is the failure that would matter most.
+
+**Broadcast FIRST, record after.** The two orderings fail differently and only one is survivable:
+
+- **Record first**, then broadcast: a crash in between marks a debt paid that may never have
+  reached a miner. The author is charged, the row looks minted, and nothing on chain exists. Silent
+  and unrecoverable without an audit.
+- **Broadcast first**, then record: a crash in between leaves the covenant advanced on chain but not
+  in our database. The next sweep rebuilds from the stale outpoint and the NETWORK refuses it as a
+  double-spend. Minting for that word halts until a chain read repairs it — visible, and repairable.
+
+⚠ **A covenant can only be spent once, so the chain itself makes a double-mint impossible.** That is
+why this ordering is safe, and it is the opposite of the boot path, where `boot-orchestrator.ts`
+consumes the free grant BEFORE paying — there, a crash after paying loses money with nothing
+preventing a repeat. Do not "make these consistent"; they are opposite for a reason.
+
+**`recordMint` writes both halves in ONE transaction, conditional on the row still being unminted.**
+Recording the mention without advancing the covenant halts the word; advancing without recording
+leaves a paid, issued naming looking unminted, so the next sweep mints it AGAIN. The conditional
+UPDATE is what makes two racing sweeps safe: the loser's `changes === 0` and it does not advance the
+covenant a second time.
+
+**The covenant's current script is STORED, not fetched.** A covenant transaction is ~48KB, and a
+mint already builds the next script — the continuation — so the sweep holds exactly what the next
+mint will spend. If it ever goes stale, minting **stalls rather than mismints**, for the same reason
+as above. That asymmetry is the whole justification.
+
+**The queue is a QUERY** (`ticker_mentions.mint_txid IS NULL` joined to `ticker_contracts`), like
+the un-anchored-post queue before it — durable across restarts for free, and unable to disagree with
+what it describes.
+
+⚠ **An unminted row is a DEBT, not a doubt.** The author was charged the mint price when they
+posted. Every gate in the sweep — dry wallet, daily ceiling, dead broadcaster, unparseable key —
+routes to *later*. There is no branch that abandons a row and there must never be one.
+
+⚠ **Words with NO deployed covenant are not in the queue and are not "behind".** Most words are in
+that state and `token-source.ts` labels them `database` honestly. Counting them as pending would
+report a permanent backlog for work that was never attempted.
+
+## The mint transaction's shape, and the two ways to get it wrong (2026-08-22)
+
+⚠ **ZERO CHANGE MEANS THREE OUTPUTS.** `buildChangeOutput` returns an empty ByteString when the
+change is zero, so the covenant hashes three outputs — and a transaction carrying a 0-satoshi
+fourth fails, as does a three-output one when change is due. A real branch, tested both ways.
+
+⚠ **THE ORDER OF OPERATIONS IS FORCED:** decide the change → build every output → take the preimage
+→ write the unlocking script → sign. The preimage commits to all the outputs and the change sits
+inside it, so anything adjusting the change afterwards silently invalidates it.
+
+⚠ **THE FEE IS OVER-ESTIMATED ON PURPOSE.** The usual `tx.fee()` lets change absorb the remainder,
+which is impossible when the change is committed before signing and DER signatures vary between 71
+and 72 bytes. Over-estimating costs a few satoshis; under-estimating gets a 48KB transaction
+rejected for a low fee after it has been broadcast.
+
+**Verified end to end.** `contracts/tests/covenantMintTx.test.ts` runs a real Bitcoin script
+interpreter over a transaction sCrypt had no hand in building. ⚠ **It must raise
+`MAX_SCRIPT_ELEMENT_SIZE` first** — bsv.js defaults to the legacy 520-byte stack-element cap and the
+preimage is ~24KB, so an unconfigured interpreter rejects every mint with `SCRIPT_ERR_PUSH_SIZE`,
+including the ones that should fail. That made each control test pass for the wrong reason until it
+was caught. **Third time this session a control turned out to be vacuous; the fix each time was to
+assert the failure's REASON, not just that there was one.**
+
+## `npm run test:contracts` exists so the byte-equality suites are findable (2026-08-22)
+
+The proofs for `covenant-script.ts`, `covenant-mint.ts` and `covenant-mint-tx.ts` all live in
+`contracts/`, because that is the only workspace with the sCrypt compiler. They therefore do NOT run
+under `npm run test`, and a regression in any of those three would pass the app's suite silently.
+
+The root script makes the second command discoverable instead of tribal knowledge. Also added:
+`tsconfig-paths` in `contracts/` (dev only) plus the `@/*` alias in its tsconfig, so app modules can
+keep the house import style — `src/services` uses `@/lib/...` in 14 files and has no relative
+cross-directory imports, and a single outlier written for the test harness's convenience is exactly
+the kind of thing a later reader trips over.

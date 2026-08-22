@@ -9,6 +9,11 @@
     "skipLibCheck": true,
     "experimentalDecorators": true,
     "outDir": "dist",
+    // The app's own path alias, so the boundary tests can import app modules
+    // written idiomatically. Nothing in src/ here uses it — the dependency runs
+    // ONE WAY, tests reaching into the app, never the app reaching in here.
+    "baseUrl": ".",
+    "paths": { "@/*": ["../src/*"] },
     "plugins": [{ "transform": "scrypt-ts-transpiler" }]
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"]

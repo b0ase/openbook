@@ -2,6 +2,51 @@
 
 > Short summaries of each working session. AI agents: add an entry before ending any significant session.
 
+## 2026-08-22 (a mint transaction a real interpreter accepts, and the queue that will drive it)
+
+**The covenant now accepts a transaction the app built end to end.** `covenant-mint-tx.ts` assembles
+all four outputs, the change, the preimage and the unlocking script, and
+`contracts/tests/covenantMintTx.test.ts` runs a real Bitcoin script interpreter over the result —
+sCrypt had no hand in building it. That is a stronger claim than the byte-equality suites beside it,
+and it means the only things left between here and a live mint are network facts.
+
+- `src/services/bsv/covenant-mint-tx.ts` — assembly. ⚠ **Zero change means THREE outputs**, not a
+  0-sat fourth (`buildChangeOutput` returns empty at zero), and both shapes are wrong in the
+  other's case. ⚠ The fee is **over-estimated on purpose**: `tx.fee()` is unusable when the change
+  is committed inside the preimage before signing.
+- `src/lib/mint-queue.ts` + `src/services/bsv/mint-sweep.ts` — the queue as a QUERY, the atomic
+  record-and-advance, backoff, budget gating. 15 integration tests.
+- `src/lib/db.ts` — `ticker_mentions.mint_txid`/`mint_vout`, `ticker_contracts.contract_script`.
+- Root `npm run test:contracts`, so the byte-equality suites are findable rather than tribal.
+
+### The safety property worth remembering
+
+**Broadcast FIRST, record after — the chain is the lock; the database only remembers.** A crash
+between them leaves the next attempt a double-spend the network refuses: a visible, repairable halt.
+The other order marks a debt paid that may never have reached a miner. ⚠ This is the OPPOSITE of the
+boot path, which consumes the free grant before paying, and the two must not be "made consistent".
+
+### A control was vacuous again — third time this session
+
+Every mint test passed the interpreter... by being rejected. bsv.js defaults to the legacy 520-byte
+stack-element cap and the preimage is ~24KB, so `SCRIPT_ERR_PUSH_SIZE` refused the honest
+transactions and the tampered one alike, and the underpayment control looked green. Fixed by raising
+`MAX_SCRIPT_ELEMENT_SIZE` (as scryptlib does) and asserting the failure's REASON. **The recurring
+lesson each time has been the same: assert WHY it failed, not that it did.**
+
+### Two mistakes
+
+Appended to `contracts/DECISIONS.md` again via a persisted `cd` — caught by `git status`. And I
+typo'd a stray CJK character into a `db.ts` comment; caught on re-read.
+
+### ⚠ What is NOT done, and it is the real blocker
+
+**`ticker_contracts` is EMPTY.** No word has a covenant, so the queue is empty and the sweep has
+nothing to do. **Deploy-on-first-naming is what unblocks everything**, and deploying is still a
+manual `contracts/scripts/deploy.ts` run. The sweep's `MintExecutor` is also still a seam — the
+wallet-backed one has to go through `wallet.ts`'s mutex, which is what stops a mint and a free boost
+spending the same UTXO, and that is the money path so it was left rather than rushed.
+
 ## 2026-08-20b (the mint spend, and the decision about where minting happens)
 
 **The whole covenant-specific half of minting is now built and verified**; what remains is ordinary

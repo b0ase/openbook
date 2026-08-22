@@ -544,6 +544,22 @@ export function applyTickerContractMigration(database: Db): void {
   database.exec(
     "CREATE INDEX IF NOT EXISTS idx_ticker_contracts_token ON ticker_contracts(token_id)"
   );
+
+  /**
+   * The covenant's CURRENT locking script, hex, as of `contract_outpoint`.
+   *
+   * ⚠ STORED RATHER THAN FETCHED, AND THAT IS A DELIBERATE TRADE. A covenant
+   * transaction is ~48KB, so reading the script back off the chain before every
+   * mint would download that every time and make minting depend on an explorer being
+   * up. We do not need to: a mint BUILDS the next script (the continuation), so
+   * the sweep already holds exactly what the next mint will spend.
+   *
+   * ⚠ IF IT EVER GOES STALE, MINTING STALLS — IT DOES NOT MISMINT. A wrong
+   * script produces a spend of an outpoint that is already spent, which the
+   * network refuses. The failure is a halt that a chain read can repair, never
+   * a unit issued twice. That asymmetry is why storing it is safe.
+   */
+  addColumnIfMissing(database, "ticker_contracts", "contract_script", "contract_script TEXT");
 }
 
 export function applySpentOutpointMigration(database: Db): void {
@@ -698,6 +714,31 @@ export function applyTickerMentionMigration(database: Db): void {
    * verified — and a position's cost is the sum of both.
    */
   addColumnIfMissing(database, "ticker_mentions", "paid_sats", "paid_sats INTEGER");
+
+  /**
+   * Where this naming's units were actually minted on chain. NULL = not yet.
+   *
+   * ⚠ THIS COLUMN IS THE MINT QUEUE. Like `posts.tx_id` before it, the queue is
+   * a QUERY rather than a table — rows with no txid, whose symbol has a
+   * deployed covenant — so it is durable across restarts for free and cannot
+   * drift from the thing it describes.
+   *
+   * ⚠ NULL DOES NOT MEAN "UNPAID". The author was charged the moment they
+   * posted; this records whether the NETWORK has issued the units yet. Reading
+   * it as an unpaid flag would let a sweep decide the debt is not owed. See
+   * DECISIONS "Minting is DECOUPLED from posting" — gating a mint means DEFER,
+   * never drop.
+   *
+   * `mint_vout` is stored rather than assumed to be 1. It IS 1 under the
+   * covenant's current output order, and an outpoint recorded from a shape
+   * convention is one that silently becomes wrong if the shape ever changes.
+   */
+  addColumnIfMissing(database, "ticker_mentions", "mint_txid", "mint_txid TEXT");
+  addColumnIfMissing(database, "ticker_mentions", "mint_vout", "mint_vout INTEGER");
+  database.exec(
+    `CREATE INDEX IF NOT EXISTS idx_mentions_unminted
+       ON ticker_mentions(symbol, id) WHERE mint_txid IS NULL`
+  );
 
   backfillTickerMentions(database);
 }

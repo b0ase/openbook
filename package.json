@@ -13,6 +13,7 @@
     "generate-icons": "node scripts/generate-icons.mjs",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:contracts": "npm --prefix contracts test",
     "test:watch": "vitest"
   },
   "dependencies": {
